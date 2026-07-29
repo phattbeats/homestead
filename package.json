@@ -1,0 +1,27 @@
+{
+  "name": "homestead",
+  "version": "0.0.1",
+  "description": "Shared life app: tasks with take-turns rotation, calendar, and a full-screen iframe app shell for self-hosted services.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "pwa",
+    "self-hosted",
+    "tasks",
+    "calendar",
+    "sqlite"
+  ],
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^13.0.1",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0"
+  }
+}
