@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Homestead</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#FFFBF5">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#8A8177;
+  --line:rgba(43,38,34,.07);
+  --brandon:#8a9ec4; --emily:#c48a9e; --both:#9eb48a;
+  --accent:#C4703C; --accent-soft:#F8E9DE;
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100dvh}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select,textarea{font:inherit;color:inherit}
+
+/* ---------- login ---------- */
+#login{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px}
+.login-card{width:100%;max-width:380px;background:var(--surface);border-radius:28px;padding:8px;
+  box-shadow:0 8px 40px rgba(196,112,60,.08),0 2px 8px rgba(0,0,0,.03)}
+.login-inner{border:1px solid var(--line);border-radius:22px;padding:40px 32px;text-align:center}
+.logo{font-size:44px;line-height:1}
+h1{font-weight:800;font-size:26px;letter-spacing:-.02em;margin:14px 0 4px}
+.sub{color:var(--muted);font-size:14px;margin-bottom:28px}
+.field{width:100%;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--bg);
+  margin-bottom:12px;outline:none;transition:border-color .3s var(--ease)}
+.field:focus{border-color:var(--accent)}
+.who{display:flex;gap:10px;margin-bottom:14px}
+.who button{flex:1;padding:12px;border-radius:14px;border:1px solid var(--line);font-weight:600;
+  transition:all .35s var(--ease)}
+.who button.sel{background:var(--ink);color:#fff;border-color:var(--ink)}
+.btn{width:100%;padding:15px;border-radius:16px;background:var(--accent);color:#fff;font-weight:700;
+  transition:transform .35s var(--ease),box-shadow .35s var(--ease)}
+.btn:active{transform:scale(.97)}
+.err{color:#b3453a;font-size:13px;min-height:18px;margin-top:10px}
+
+/* ---------- app shell ---------- */
+#app{display:none;min-height:100dvh;padding-bottom:96px}
+header{padding:calc(env(safe-area-inset-top) + 22px) 22px 6px;display:flex;justify-content:space-between;align-items:center}
+.greet{font-weight:800;font-size:24px;letter-spacing:-.02em}
+.greet small{display:block;font-size:13px;color:var(--muted);font-weight:500;letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px}
+.avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  color:#fff;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.12)}
+main{padding:14px 18px;max-width:680px;margin:0 auto}
+.page{display:none;animation:rise .5s var(--ease)}
+.page.on{display:block}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+.card{background:var(--surface);border-radius:22px;padding:6px;margin-bottom:14px;
+  box-shadow:0 6px 30px rgba(0,0,0,.035)}
+.card-in{border:1px solid var(--line);border-radius:17px;padding:18px}
+.sec{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:20px 4px 10px}
+
+/* tasks */
+.task{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--line)}
+.task:last-child{border-bottom:none}
+.chk{width:26px;height:26px;border-radius:9px;border:2px solid var(--line);flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;
+  transition:all .35s var(--ease)}
+.task.done .chk{background:var(--both);border-color:var(--both)}
+.task.done .t-title{text-decoration:line-through;color:var(--muted)}
+.t-body{flex:1;min-width:0}
+.t-title{font-weight:600;font-size:15px}
+.t-meta{font-size:12px;color:var(--muted);display:flex;gap:8px;align-items:center;margin-top:2px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.overdue{color:#b3453a;font-weight:600}
+.x{color:var(--muted);font-size:18px;padding:6px;opacity:.5}
+
+/* calendar */
+.cal-head{display:flex;justify-content:space-between;align-items:center;padding:4px 6px 12px}
+.cal-head b{font-size:17px;letter-spacing:-.01em}
+.cal-nav{width:36px;height:36px;border-radius:12px;border:1px solid var(--line);font-size:16px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.dow{text-align:center;font-size:10px;color:var(--muted);font-weight:700;padding:4px 0;text-transform:uppercase}
+.day{aspect-ratio:1;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  font-size:13px;font-weight:600;gap:3px;transition:background .3s var(--ease)}
+.day.dim{color:#cfc8bf}
+.day.today{background:var(--accent-soft);color:var(--accent)}
+.day.sel{background:var(--ink);color:#fff}
+.pips{display:flex;gap:2px;height:5px}
+.pip{width:5px;height:5px;border-radius:50%}
+.ev{display:flex;gap:12px;padding:12px 4px;border-bottom:1px solid var(--line);align-items:center}
+.ev:last-child{border-bottom:none}
+.ev-time{font-size:12px;font-weight:700;color:var(--muted);width:52px;flex-shrink:0}
+.ev-bar{width:4px;height:34px;border-radius:2px;flex-shrink:0}
+
+/* services */
+.svc-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.svc{background:var(--surface);border-radius:20px;padding:5px;box-shadow:0 6px 24px rgba(0,0,0,.035);
+  text-decoration:none;color:inherit;transition:transform .4s var(--ease)}
+.svc:active{transform:scale(.96)}
+.svc-in{border:1px solid var(--line);border-radius:16px;padding:18px 16px}
+.svc-icon{font-size:28px}
+.svc-name{font-weight:700;margin-top:10px;font-size:15px}
+.svc-desc{font-size:12px;color:var(--muted);margin-top:2px}
+
+/* fab + tabbar */
+#fab{position:fixed;right:20px;bottom:calc(env(safe-area-inset-bottom) + 88px);width:56px;height:56px;
+  border-radius:20px;background:var(--accent);color:#fff;font-size:26px;font-weight:400;
+  box-shadow:0 10px 30px rgba(196,112,60,.35);transition:transform .35s var(--ease);z-index:40}
+#fab:active{transform:scale(.92) rotate(90deg)}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:space-around;
+  padding:10px 16px calc(env(safe-area-inset-bottom) + 12px);
+  background:rgba(255,251,245,.85);backdrop-filter:blur(18px);border-top:1px solid var(--line);z-index:30}
+nav button{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:600;
+  color:var(--muted);padding:4px 14px;border-radius:14px;transition:color .3s var(--ease)}
+nav button.on{color:var(--accent)}
+nav .ico{font-size:20px}
+
+/* modal */
+#modal{position:fixed;inset:0;background:rgba(43,38,34,.4);display:none;align-items:flex-end;
+  justify-content:center;z-index:50;backdrop-filter:blur(4px)}
+#modal.on{display:flex}
+.sheet{background:var(--bg);border-radius:26px 26px 0 0;width:100%;max-width:680px;
+  padding:26px 22px calc(env(safe-area-inset-bottom) + 26px);animation:up .45s var(--ease)}
+@keyframes up{from{transform:translateY(60px);opacity:0}to{transform:none;opacity:1}}
+.sheet h2{font-size:19px;font-weight:800;letter-spacing:-.01em;margin-bottom:18px}
+.row{display:flex;gap:10px}.row>*{flex:1}
+label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12px 0 6px}
+.seg{display:flex;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:4px;gap:4px}
+.seg button{flex:1;padding:9px 4px;border-radius:10px;font-weight:600;font-size:13px;color:var(--muted);
+  transition:all .3s var(--ease)}
+.seg button.sel{background:var(--ink);color:#fff}
+.link{color:var(--accent);font-weight:700;font-size:14px}
+.empty{text-align:center;color:var(--muted);padding:28px 10px;font-size:14px}
+.empty span{font-size:30px;display:block;margin-bottom:8px}
+
+/* full-screen app shell */
+#shell{position:fixed;inset:0;z-index:100;background:#000;display:none}
+#shell.on{display:block}
+#shellFrame{width:100%;height:100dvh;border:none;background:#111}
+#dot{position:fixed;width:46px;height:46px;border-radius:50%;z-index:110;
+  background:rgba(43,38,34,.55);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.25);
+  display:none;align-items:center;justify-content:center;font-size:19px;color:#fff;
+  box-shadow:0 6px 20px rgba(0,0,0,.35);touch-action:none;user-select:none;
+  transition:opacity .3s var(--ease)}
+#dot.on{display:flex}
+#dot.idle{opacity:.45}
+.svc-owner{position:absolute;top:10px;right:10px;width:9px;height:9px;border-radius:50%}
+.svc{position:relative}
+.showall{font-size:12px;font-weight:600;color:var(--muted)}
+@media(min-width:768px){.svc-grid{grid-template-columns:repeat(3,1fr)}}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="login-card"><div class="login-inner">
+    <div class="logo">🏡</div>
+    <h1>Homestead</h1>
+    <div class="sub">The Kelly household, in one place</div>
+    <div class="who">
+      <button data-u="brandon">Brandon</button>
+      <button data-u="emily">Emily</button>
+    </div>
+    <input class="field" id="pw" type="password" placeholder="Password" autocomplete="current-password">
+    <button class="btn" id="loginBtn">Come on in</button>
+    <div class="err" id="loginErr"></div>
+  </div></div>
+</div>
+
+<div id="app">
+  <header>
+    <div class="greet"><small id="dateLine"></small><span id="greet"></span></div>
+    <button class="avatar" id="avatarBtn"></button>
+  </header>
+  <main>
+    <div class="page" id="page-home">
+      <div class="sec">Today</div>
+      <div class="card"><div class="card-in" id="todayEvents"></div></div>
+      <div class="sec">On the list</div>
+      <div class="card"><div class="card-in" id="todayTasks"></div></div>
+    </div>
+    <div class="page" id="page-tasks">
+      <div class="sec">To do</div>
+      <div class="card"><div class="card-in" id="openTasks"></div></div>
+      <div class="sec">Done</div>
+      <div class="card"><div class="card-in" id="doneTasks"></div></div>
+    </div>
+    <div class="page" id="page-cal">
+      <div class="card"><div class="card-in">
+        <div class="cal-head">
+          <button class="cal-nav" id="calPrev">‹</button><b id="calTitle"></b><button class="cal-nav" id="calNext">›</button>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+      </div></div>
+      <div class="sec" id="selDayLabel"></div>
+      <div class="card"><div class="card-in" id="dayEvents"></div></div>
+    </div>
+    <div class="page" id="page-svc">
+      <div class="sec" style="display:flex;justify-content:space-between;align-items:center">
+        <span>Apps <button class="showall" id="showAll">· showing mine</button></span>
+        <button class="link" id="addSvc">+ Add</button></div>
+      <div class="svc-grid" id="svcGrid"></div>
+    </div>
+  </main>
+  <button id="fab">+</button>
+  <nav>
+    <button data-p="home" class="on"><span class="ico">🏡</span>Home</button>
+    <button data-p="tasks"><span class="ico">✓</span>Tasks</button>
+    <button data-p="cal"><span class="ico">📅</span>Calendar</button>
+    <button data-p="svc"><span class="ico">🛰️</span>Apps</button>
+  </nav>
+</div>
+
+<div id="modal"><div class="sheet" id="sheet"></div></div>
+<div id="shell"><iframe id="shellFrame" src="about:blank" allow="fullscreen; autoplay; clipboard-write"></iframe></div>
+<div id="dot">🏡</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const api=async(m,u,b)=>{const r=await fetch(u,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});if(!r.ok)throw await r.json().catch(()=>({error:r.status}));return r.json()};
+const COLORS={brandon:'#8a9ec4',emily:'#c48a9e',both:'#9eb48a'};
+const NAME={brandon:'Brandon',emily:'Emily',both:'Both of us'};
+let ME=null,TASKS=[],EVENTS=[],SVCS=[];
+let calY,calM,selDate=today();
+function today(){const d=new Date();return d.toISOString().slice(0,10)}
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function fmtDate(s){const d=new Date(s+'T00:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}
+
+/* ---- login ---- */
+let pickedUser=null;
+document.querySelectorAll('.who button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.who button').forEach(x=>x.classList.remove('sel'));
+  b.classList.add('sel');pickedUser=b.dataset.u;$('#pw').focus();
+});
+$('#loginBtn').onclick=doLogin;
+$('#pw').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
+async function doLogin(){
+  try{const r=await api('POST','/api/login',{username:pickedUser,password:$('#pw').value});boot(r.user)}
+  catch(e){$('#loginErr').textContent=e.error||'Login failed'}
+}
+async function boot(user){
+  ME=user;$('#login').style.display='none';$('#app').style.display='block';
+  const h=new Date().getHours();
+  $('#greet').textContent=(h<12?'Morning':h<17?'Afternoon':'Evening')+', '+user.display;
+  $('#dateLine').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  const a=$('#avatarBtn');a.textContent=user.display[0];a.style.background=COLORS[user.username]||'#999';
+  const d=new Date();calY=d.getFullYear();calM=d.getMonth();
+  await refresh();
+}
+async function refresh(){
+  [TASKS,EVENTS,SVCS]=await Promise.all([api('GET','/api/tasks'),api('GET','/api/events'),api('GET','/api/services')]);
+  renderHome();renderTasks();renderCal();renderSvcs();
+}
+
+/* ---- rendering ---- */
+function taskRow(t){
+  const od=t.due_date&&!t.done&&t.due_date<today();
+  return `<div class="task ${t.done?'done':''}">
+    <button class="chk" onclick="toggleTask(${t.id})">${t.done?'✓':''}</button>
+    <div class="t-body" onclick="openTaskSheet(${t.id})">
+      <div class="t-title">${esc(t.title)}${t.recur?' 🔁':''}</div>
+      <div class="t-meta"><span class="dot" style="background:${COLORS[t.assignee]||'#999'}"></span>${NAME[t.assignee]||t.assignee}
+      ${t.due_date?`<span class="${od?'overdue':''}">${od?'⚠ ':''}${fmtDate(t.due_date)}</span>`:''}</div>
+    </div>
+    <button class="x" onclick="delTask(${t.id})">✕</button></div>`;
+}
+function renderHome(){
+  const evs=EVENTS.filter(e=>e.date===today());
+  $('#todayEvents').innerHTML=evs.length?evs.map(evRow).join(''):`<div class="empty"><span>☀️</span>Nothing on the calendar today</div>`;
+  const due=TASKS.filter(t=>!t.done&&(!t.due_date||t.due_date<=today()));
+  $('#todayTasks').innerHTML=due.length?due.map(taskRow).join(''):`<div class="empty"><span>🎉</span>All caught up</div>`;
+}
+function renderTasks(){
+  const open=TASKS.filter(t=>!t.done),done=TASKS.filter(t=>t.done);
+  $('#openTasks').innerHTML=open.length?open.map(taskRow).join(''):`<div class="empty"><span>🌿</span>Nothing to do. Suspicious.</div>`;
+  $('#doneTasks').innerHTML=done.length?done.map(taskRow).join(''):`<div class="empty">Nothing done yet</div>`;
+}
+function evRow(e){
+  return `<div class="ev" onclick="openEventSheet(${e.id})">
+    <div class="ev-time">${e.time||'all day'}</div>
+    <div class="ev-bar" style="background:${COLORS[e.owner]||'#999'}"></div>
+    <div class="t-body"><div class="t-title">${esc(e.title)}</div>
+    ${e.notes?`<div class="t-meta">${esc(e.notes)}</div>`:''}</div>
+    <button class="x" onclick="event.stopPropagation();delEvent(${e.id})">✕</button></div>`;
+}
+function renderCal(){
+  const first=new Date(calY,calM,1),start=first.getDay(),dim=new Date(calY,calM+1,0).getDate();
+  $('#calTitle').textContent=first.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  let html=['S','M','T','W','T','F','S'].map(d=>`<div class="dow">${d}</div>`).join('');
+  for(let i=0;i<start;i++)html+=`<div class="day dim"></div>`;
+  for(let d=1;d<=dim;d++){
+    const ds=`${calY}-${String(calM+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const evs=EVENTS.filter(e=>e.date===ds);
+    const cls=ds===selDate?'sel':ds===today()?'today':'';
+    html+=`<div class="day ${cls}" onclick="pickDay('${ds}')">${d}
+      <div class="pips">${evs.slice(0,3).map(e=>`<span class="pip" style="background:${COLORS[e.owner]||'#999'}"></span>`).join('')}</div></div>`;
+  }
+  $('#calGrid').innerHTML=html;
+  $('#selDayLabel').textContent=fmtDate(selDate);
+  const evs=EVENTS.filter(e=>e.date===selDate);
+  $('#dayEvents').innerHTML=evs.length?evs.map(evRow).join(''):`<div class="empty">Free day</div>`;
+}
+function pickDay(ds){selDate=ds;renderCal()}
+$('#calPrev').onclick=()=>{calM--;if(calM<0){calM=11;calY--}renderCal()};
+$('#calNext').onclick=()=>{calM++;if(calM>11){calM=0;calY++}renderCal()};
+let showAll=false;
+function renderSvcs(){
+  const mine=SVCS.filter(s=>showAll||!s.owner||s.owner==='both'||s.owner===ME.username);
+  $('#showAll').textContent=showAll?'· showing all':'· showing mine';
+  $('#svcGrid').innerHTML=mine.map(s=>`
+    <a class="svc" href="${esc(s.url)}" onclick="return launchSvc(event,${s.id})"
+       oncontextmenu="event.preventDefault();openSvcSheet(${s.id})">
+      <span class="svc-owner" style="background:${COLORS[s.owner]||COLORS.both}"></span>
+      <div class="svc-in"><div class="svc-icon">${s.icon}</div>
+      <div class="svc-name">${esc(s.name)}</div><div class="svc-desc">${esc(s.descr)}&nbsp;</div></div></a>`).join('');
+}
+function launchSvc(ev,id){
+  const s=SVCS.find(x=>x.id===id);
+  if(!s)return false;
+  if(s.open_mode==='tab'){ev.preventDefault();window.open(s.url,'_blank');return false}
+  ev.preventDefault();openShell(s.url);return false;
+}
+
+/* ---- full-screen app shell + escape dot ---- */
+const dot=$('#dot');
+let dotIdleTimer;
+function openShell(url){
+  $('#shellFrame').src=url;
+  $('#shell').classList.add('on');dot.classList.add('on');dot.classList.remove('idle');
+  dot.style.left='';dot.style.top='';dot.style.right='14px';dot.style.bottom='calc(env(safe-area-inset-bottom) + 24px)';
+  clearTimeout(dotIdleTimer);dotIdleTimer=setTimeout(()=>dot.classList.add('idle'),2500);
+}
+function closeShell(){
+  $('#shell').classList.remove('on');dot.classList.remove('on');
+  $('#shellFrame').src='about:blank';
+}
+let drag=null;
+dot.addEventListener('pointerdown',e=>{
+  dot.setPointerCapture(e.pointerId);dot.classList.remove('idle');clearTimeout(dotIdleTimer);
+  drag={x:e.clientX,y:e.clientY,ox:dot.offsetLeft,oy:dot.offsetTop,moved:false};
+});
+dot.addEventListener('pointermove',e=>{
+  if(!drag)return;
+  const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+  if(Math.abs(dx)+Math.abs(dy)>6)drag.moved=true;
+  dot.style.right='auto';dot.style.bottom='auto';
+  dot.style.left=Math.max(4,Math.min(innerWidth-50,drag.ox+dx))+'px';
+  dot.style.top=Math.max(4,Math.min(innerHeight-50,drag.oy+dy))+'px';
+});
+dot.addEventListener('pointerup',e=>{
+  const wasTap=drag&&!drag.moved;drag=null;
+  if(wasTap){closeShell();return}
+  // snap to nearest horizontal edge
+  const snapLeft=dot.offsetLeft+23<innerWidth/2;
+  dot.style.left=snapLeft?'8px':(innerWidth-54)+'px';
+  dotIdleTimer=setTimeout(()=>dot.classList.add('idle'),2500);
+});
+$('#showAll').onclick=()=>{showAll=!showAll;renderSvcs()};
+
+/* ---- actions ---- */
+async function toggleTask(id){await api('POST',`/api/tasks/${id}/toggle`);await refresh()}
+async function delTask(id){if(confirm('Delete this task?')){await api('DELETE',`/api/tasks/${id}`);await refresh()}}
+async function delEvent(id){if(confirm('Delete this event?')){await api('DELETE',`/api/events/${id}`);await refresh()}}
+
+/* ---- navigation ---- */
+let curPage='home';
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
+  curPage=b.dataset.p;$('#page-'+curPage).classList.add('on');
+});
+$('#page-home').classList.add('on');
+
+/* ---- sheets ---- */
+function openSheet(html){$('#sheet').innerHTML=html;$('#modal').classList.add('on')}
+function closeSheet(){$('#modal').classList.remove('on')}
+$('#modal').onclick=e=>{if(e.target.id==='modal')closeSheet()};
+function segHtml(id,opts,sel){return `<div class="seg" id="${id}">${opts.map(o=>`<button data-v="${o[0]}" class="${o[0]===sel?'sel':''}">${o[1]}</button>`).join('')}</div>`}
+function segWire(id){document.querySelectorAll('#'+id+' button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#'+id+' button').forEach(x=>x.classList.remove('sel'));b.classList.add('sel')})}
+function segVal(id){return document.querySelector('#'+id+' .sel')?.dataset.v}
+
+$('#fab').onclick=()=>{
+  if(curPage==='svc')return openSvcSheet();
+  if(curPage==='cal')return openEventSheet(null,selDate);
+  if(curPage==='home')return openPicker();
+  openTaskSheet();
+};
+function openPicker(){
+  openSheet(`<h2>Add something</h2>
+  <div class="row"><button class="btn" onclick="openTaskSheet()">✓ Task</button>
+  <button class="btn" style="background:var(--ink)" onclick="openEventSheet()">📅 Event</button></div>`);
+}
+function openTaskSheet(id){
+  const t=TASKS.find(x=>x.id===id)||{title:'',notes:'',assignee:'both',due_date:'',recur:'',rotate:0};
+  openSheet(`<h2>${id?'Edit task':'New task'}</h2>
+    <input class="field" id="f-title" placeholder="What needs doing?" value="${esc(t.title)}">
+    <label>Whose is it?</label>${segHtml('f-who',[['brandon','Brandon'],['emily','Emily'],['both','Both']],t.assignee)}
+    <div class="row"><div><label>Due</label><input class="field" type="date" id="f-due" value="${t.due_date||''}"></div>
+    <div><label>Repeats</label>${segHtml('f-recur',[['','No'],['daily','Day'],['weekly','Wk'],['monthly','Mo']],t.recur)}</div></div>
+    <label><input type="checkbox" id="f-rotate" ${t.rotate?'checked':''}> Take turns (swap between us each time)</label>
+    <input class="field" id="f-notes" placeholder="Notes (optional)" value="${esc(t.notes)}" style="margin-top:12px">
+    <button class="btn" style="margin-top:16px" id="f-save">${id?'Save':'Add it'}</button>`);
+  segWire('f-who');segWire('f-recur');
+  $('#f-save').onclick=async()=>{
+    const body={title:$('#f-title').value.trim(),notes:$('#f-notes').value,assignee:segVal('f-who'),
+      due_date:$('#f-due').value||null,recur:segVal('f-recur'),rotate:$('#f-rotate').checked?1:0};
+    if(!body.title)return;
+    if(id)await api('PUT',`/api/tasks/${id}`,body);else await api('POST','/api/tasks',body);
+    closeSheet();await refresh();
+  };
+}
+function openEventSheet(id,date){
+  const e=EVENTS.find(x=>x.id===id)||{title:'',date:date||today(),time:'',notes:'',owner:'both'};
+  openSheet(`<h2>${id?'Edit event':'New event'}</h2>
+    <input class="field" id="f-title" placeholder="What's happening?" value="${esc(e.title)}">
+    <div class="row"><div><label>Date</label><input class="field" type="date" id="f-date" value="${e.date}"></div>
+    <div><label>Time</label><input class="field" type="time" id="f-time" value="${e.time}"></div></div>
+    <label>Whose?</label>${segHtml('f-own',[['brandon','Brandon'],['emily','Emily'],['both','Both']],e.owner)}
+    <input class="field" id="f-notes" placeholder="Notes (optional)" value="${esc(e.notes)}" style="margin-top:12px">
+    <button class="btn" style="margin-top:16px" id="f-save">${id?'Save':'Add it'}</button>`);
+  segWire('f-own');
+  $('#f-save').onclick=async()=>{
+    const body={title:$('#f-title').value.trim(),date:$('#f-date').value,time:$('#f-time').value,
+      notes:$('#f-notes').value,owner:segVal('f-own')};
+    if(!body.title||!body.date)return;
+    if(id)await api('PUT',`/api/events/${id}`,body);else await api('POST','/api/events',body);
+    closeSheet();await refresh();
+  };
+}
+function openSvcSheet(id){
+  const s=SVCS.find(x=>x.id===id)||{name:'',url:'',icon:'🔗',descr:'',owner:'both',open_mode:'frame'};
+  openSheet(`<h2>${id?'Edit app':'Add an app'}</h2>
+    <div class="row"><input class="field" id="f-icon" placeholder="🔗" value="${esc(s.icon)}" style="flex:0 0 70px;text-align:center">
+    <input class="field" id="f-name" placeholder="Name" value="${esc(s.name)}"></div>
+    <input class="field" id="f-url" placeholder="https://…" value="${esc(s.url)}">
+    <input class="field" id="f-descr" placeholder="Short description" value="${esc(s.descr)}">
+    <label>Whose app?</label>${segHtml('f-owner',[['brandon','Brandon'],['emily','Emily'],['both','Both']],s.owner||'both')}
+    <label>Opens</label>${segHtml('f-mode',[['frame','Full screen'],['tab','New tab']],s.open_mode||'frame')}
+    <button class="btn" style="margin-top:16px" id="f-save">${id?'Save':'Add it'}</button>
+    ${id?`<button class="link" style="margin-top:14px;width:100%" onclick="delSvc(${id})">Remove app</button>`:''}`);
+  segWire('f-owner');segWire('f-mode');
+  $('#f-save').onclick=async()=>{
+    const body={name:$('#f-name').value.trim(),url:$('#f-url').value.trim(),icon:$('#f-icon').value||'🔗',descr:$('#f-descr').value,
+      owner:segVal('f-owner'),open_mode:segVal('f-mode')};
+    if(!body.name||!body.url)return;
+    if(id)await api('PUT',`/api/services/${id}`,body);else await api('POST','/api/services',body);
+    closeSheet();await refresh();
+  };
+}
+async function delSvc(id){if(confirm('Remove this service?')){await api('DELETE',`/api/services/${id}`);closeSheet();await refresh()}}
+$('#addSvc').onclick=()=>openSvcSheet();
+
+$('#avatarBtn').onclick=()=>{
+  openSheet(`<h2>${ME.display}</h2>
+    <label>Change password</label>
+    <input class="field" type="password" id="f-cur" placeholder="Current password">
+    <input class="field" type="password" id="f-new" placeholder="New password">
+    <button class="btn" id="f-pw">Update password</button>
+    <button class="link" style="margin-top:16px;width:100%" id="f-out">Log out</button>
+    <div class="err" id="f-err"></div>`);
+  $('#f-pw').onclick=async()=>{
+    try{await api('POST','/api/password',{current:$('#f-cur').value,next:$('#f-new').value});closeSheet()}
+    catch(e){$('#f-err').textContent=e.error||'Failed'}
+  };
+  $('#f-out').onclick=async()=>{await api('POST','/api/logout');location.reload()};
+};
+
+/* ---- init ---- */
+api('GET','/api/me').then(r=>{if(r.user)boot(r.user)});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+services:
+  homestead:
+    image: ghcr.io/phattbeats/homestead:latest
+    container_name: homestead
+    restart: unless-stopped
+    # Adjust the network name to match your environment. On Unraid the
+    # `phattvip` network is whatever you've named the bridge your other
+    # self-hosted services share.
+    networks:
+      - phattvip
+    ports:
+      - "3081:3080"   # host:container — change the host side as you like
+    volumes:
+      # SQLite lives here. Mount a host path so the DB survives image upgrades.
+      - /mnt/user/appdata/homestead:/data
+    environment:
+      # Long random string — used to sign session cookies. Generate one with
+      # `openssl rand -hex 32` and replace before first run.
+      - SESSION_SECRET=change-this-to-something-long-and-random
+      # Seed passwords used ONLY on the very first run (when /data/life.db
+      # does not exist yet). Each user should log in and change their
+      # password in-app afterwards; later env changes have no effect.
+      - BRANDON_PASSWORD=changeme
+      - EMILY_PASSWORD=changeme
+
+networks:
+  phattvip:
+    external: true

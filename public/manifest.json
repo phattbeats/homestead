@@ -1,0 +1,11 @@
+{
+  "name": "Homestead",
+  "short_name": "Homestead",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFBF5",
+  "theme_color": "#FFFBF5",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
