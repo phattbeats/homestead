@@ -12,7 +12,7 @@
 :root{
   --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#8A8177;
   --line:rgba(43,38,34,.07);
-  --brandon:#8a9ec4; --emily:#c48a9e; --both:#9eb48a;
+  --u-all:#9eb48a;
   --accent:#C4703C; --accent-soft:#F8E9DE;
   --ease:cubic-bezier(.22,1,.36,1);
 }
@@ -33,13 +33,18 @@ h1{font-weight:800;font-size:26px;letter-spacing:-.02em;margin:14px 0 4px}
 .field{width:100%;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--bg);
   margin-bottom:12px;outline:none;transition:border-color .3s var(--ease)}
 .field:focus{border-color:var(--accent)}
-.who{display:flex;gap:10px;margin-bottom:14px}
-.who button{flex:1;padding:12px;border-radius:14px;border:1px solid var(--line);font-weight:600;
-  transition:all .35s var(--ease)}
-.who button.sel{background:var(--ink);color:#fff;border-color:var(--ink)}
+.chips{display:none;gap:8px;margin-bottom:14px;flex-wrap:wrap;justify-content:center}
+.chips.on{display:flex}
+.chip{padding:8px 14px;border-radius:99px;border:1px solid var(--line);font-weight:600;font-size:13px;
+  display:flex;align-items:center;gap:7px;transition:all .25s var(--ease)}
+.chip:active{transform:scale(.95)}
+.chip .dot{width:8px;height:8px;border-radius:50%;background:var(--chip-c,#999)}
+.chip-label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  font-weight:700;width:100%;text-align:center;margin-bottom:-2px}
 .btn{width:100%;padding:15px;border-radius:16px;background:var(--accent);color:#fff;font-weight:700;
   transition:transform .35s var(--ease),box-shadow .35s var(--ease)}
 .btn:active{transform:scale(.97)}
+.btn-secondary{background:var(--ink);color:#fff}
 .err{color:#b3453a;font-size:13px;min-height:18px;margin-top:10px}
 
 /* ---------- app shell ---------- */
@@ -65,11 +70,11 @@ main{padding:14px 18px;max-width:680px;margin:0 auto}
 .chk{width:26px;height:26px;border-radius:9px;border:2px solid var(--line);flex-shrink:0;
   display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;
   transition:all .35s var(--ease)}
-.task.done .chk{background:var(--both);border-color:var(--both)}
+.task.done .chk{background:var(--u-all);border-color:var(--u-all)}
 .task.done .t-title{text-decoration:line-through;color:var(--muted)}
 .t-body{flex:1;min-width:0}
 .t-title{font-weight:600;font-size:15px}
-.t-meta{font-size:12px;color:var(--muted);display:flex;gap:8px;align-items:center;margin-top:2px}
+.t-meta{font-size:12px;color:var(--muted);display:flex;gap:8px;align-items:center;margin-top:2px;flex-wrap:wrap}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
 .overdue{color:#b3453a;font-weight:600}
 .x{color:var(--muted);font-size:18px;padding:6px;opacity:.5}
@@ -95,7 +100,7 @@ main{padding:14px 18px;max-width:680px;margin:0 auto}
 /* services */
 .svc-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
 .svc{background:var(--surface);border-radius:20px;padding:5px;box-shadow:0 6px 24px rgba(0,0,0,.035);
-  text-decoration:none;color:inherit;transition:transform .4s var(--ease)}
+  text-decoration:none;color:inherit;transition:transform .4s var(--ease);position:relative}
 .svc:active{transform:scale(.96)}
 .svc-in{border:1px solid var(--line);border-radius:16px;padding:18px 16px}
 .svc-icon{font-size:28px}
@@ -120,18 +125,43 @@ nav .ico{font-size:20px}
   justify-content:center;z-index:50;backdrop-filter:blur(4px)}
 #modal.on{display:flex}
 .sheet{background:var(--bg);border-radius:26px 26px 0 0;width:100%;max-width:680px;
-  padding:26px 22px calc(env(safe-area-inset-bottom) + 26px);animation:up .45s var(--ease)}
+  padding:26px 22px calc(env(safe-area-inset-bottom) + 26px);animation:up .45s var(--ease);max-height:90dvh;overflow-y:auto}
 @keyframes up{from{transform:translateY(60px);opacity:0}to{transform:none;opacity:1}}
 .sheet h2{font-size:19px;font-weight:800;letter-spacing:-.01em;margin-bottom:18px}
+.sheet h3{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+  margin:18px 0 8px}
 .row{display:flex;gap:10px}.row>*{flex:1}
 label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12px 0 6px}
-.seg{display:flex;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:4px;gap:4px}
-.seg button{flex:1;padding:9px 4px;border-radius:10px;font-weight:600;font-size:13px;color:var(--muted);
-  transition:all .3s var(--ease)}
-.seg button.sel{background:var(--ink);color:#fff}
+.checkbox{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink);font-weight:500;cursor:pointer}
+.checkbox input{width:18px;height:18px;accent-color:var(--accent)}
+
+/* segmented control with color dot per option */
+.seg{display:flex;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:4px;gap:4px;flex-wrap:wrap}
+.seg button{flex:1;min-width:0;padding:9px 6px;border-radius:10px;font-weight:600;font-size:13px;color:var(--muted);
+  display:flex;align-items:center;justify-content:center;gap:6px;transition:all .3s var(--ease);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.seg button .pd{width:8px;height:8px;border-radius:50%;background:var(--pd,#999);flex-shrink:0}
+.seg button.sel{background:var(--pd,var(--ink));color:#fff}
+.seg button.sel .pd{box-shadow:0 0 0 1.5px rgba(255,255,255,.85)}
+
 .link{color:var(--accent);font-weight:700;font-size:14px}
+.link.danger{color:#b3453a}
 .empty{text-align:center;color:var(--muted);padding:28px 10px;font-size:14px}
 .empty span{font-size:30px;display:block;margin-bottom:8px}
+
+/* settings sheet: user list */
+.user-list{display:flex;flex-direction:column;gap:10px}
+.user-row{display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface);
+  border:1px solid var(--line);border-radius:14px}
+.user-row .ucolor{width:36px;height:36px;border-radius:50%;background:var(--uc,#999);flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
+.user-row .uinfo{flex:1;min-width:0}
+.user-row .udisp{font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px}
+.user-row .uuname{font-size:12px;color:var(--muted);margin-top:1px}
+.user-row .uactions{display:flex;gap:8px;flex-shrink:0}
+.user-row .uactions button{font-size:13px;padding:6px 10px}
+.badge{display:inline-block;font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  background:var(--accent-soft);color:var(--accent);padding:2px 6px;border-radius:6px;font-weight:700}
 
 /* full-screen app shell */
 #shell{position:fixed;inset:0;z-index:100;background:#000;display:none}
@@ -145,7 +175,6 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 #dot.on{display:flex}
 #dot.idle{opacity:.45}
 .svc-owner{position:absolute;top:10px;right:10px;width:9px;height:9px;border-radius:50%}
-.svc{position:relative}
 .showall{font-size:12px;font-weight:600;color:var(--muted)}
 @media(min-width:768px){.svc-grid{grid-template-columns:repeat(3,1fr)}}
 </style>
@@ -156,11 +185,9 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
   <div class="login-card"><div class="login-inner">
     <div class="logo">🏡</div>
     <h1>Homestead</h1>
-    <div class="sub">The Kelly household, in one place</div>
-    <div class="who">
-      <button data-u="brandon">Brandon</button>
-      <button data-u="emily">Emily</button>
-    </div>
+    <div class="sub">The household, in one place</div>
+    <div class="chips" id="chipRow"></div>
+    <input class="field" id="username" type="text" placeholder="Username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
     <input class="field" id="pw" type="password" placeholder="Password" autocomplete="current-password">
     <button class="btn" id="loginBtn">Come on in</button>
     <div class="err" id="loginErr"></div>
@@ -217,34 +244,108 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 
 <script>
 const $=s=>document.querySelector(s);
-const api=async(m,u,b)=>{const r=await fetch(u,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});if(!r.ok)throw await r.json().catch(()=>({error:r.status}));return r.json()};
-const COLORS={brandon:'#8a9ec4',emily:'#c48a9e',both:'#9eb48a'};
-const NAME={brandon:'Brandon',emily:'Emily',both:'Both of us'};
-let ME=null,TASKS=[],EVENTS=[],SVCS=[];
+const api=async(m,u,b)=>{const r=await fetch(u,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined,sameSite:'lax'});if(!r.ok){let e;try{e=await r.json()}catch{failed:e=await r.text().catch(()=>r.status+'');throw{error:failed||('HTTP '+r.status)}}throw e}return r.json()};
+
+/* ---- state ---- */
+let ME=null, USERS={};
+let TASKS=[],EVENTS=[],SVCS=[];
 let calY,calM,selDate=today();
+
 function today(){const d=new Date();return d.toISOString().slice(0,10)}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function fmtDate(s){const d=new Date(s+'T00:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}
 
+/* ---- user helpers (generic N-user) ---- */
+function userName(u){
+  if(u==='all'||!u)return 'Everyone';
+  return (USERS[u]&&USERS[u].display)||u;
+}
+function userColorVar(u){
+  if(u==='all'||!u)return 'var(--u-all)';
+  return `var(--u-${u})`;
+}
+function userColorRaw(u){
+  if(u==='all'||!u)return '#9eb48a';
+  return (USERS[u]&&USERS[u].color)||'#999';
+}
+function userInitials(u){
+  const d=USERS[u]&&USERS[u].display||u;
+  return d.trim()[0].toUpperCase();
+}
+function buildUserCssVars(){
+  const r=document.documentElement;
+  r.style.setProperty('--u-all','#9eb48a');
+  Object.values(USERS).forEach(u=>{
+    r.style.setProperty(`--u-${u.username}`, u.color);
+  });
+}
+
+const LS_KEY='homestead_users_v1';
+function loadUsersFromCache(){
+  try{
+    const raw=localStorage.getItem(LS_KEY);
+    if(!raw)return;
+    const list=JSON.parse(raw);
+    USERS={};
+    list.forEach(u=>{USERS[u.username]={username:u.username,display:u.display,color:u.color,isAdmin:!!u.isAdmin}});
+    buildUserCssVars();
+  }catch{}
+}
+function saveUsersToCache(){
+  try{
+    const list=Object.values(USERS).map(u=>({username:u.username,display:u.display,color:u.color,isAdmin:u.isAdmin}));
+    localStorage.setItem(LS_KEY, JSON.stringify(list));
+  }catch{}
+}
+async function refreshUsersFromServer(){
+  try{
+    const list=await api('GET','/api/users');
+    USERS={};
+    list.forEach(u=>{USERS[u.username]={username:u.username,display:u.display,color:u.color,isAdmin:!!u.is_admin}});
+    buildUserCssVars();
+    saveUsersToCache();
+  }catch(e){
+    // 401 on /api/users before login is fine; just keep cache
+  }
+}
+
 /* ---- login ---- */
-let pickedUser=null;
-document.querySelectorAll('.who button').forEach(b=>b.onclick=()=>{
-  document.querySelectorAll('.who button').forEach(x=>x.classList.remove('sel'));
-  b.classList.add('sel');pickedUser=b.dataset.u;$('#pw').focus();
-});
+loadUsersFromCache();
+renderLoginChips();
 $('#loginBtn').onclick=doLogin;
 $('#pw').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
+$('#username').addEventListener('keydown',e=>{if(e.key==='Enter'){$('#pw').focus();}});
 async function doLogin(){
-  try{const r=await api('POST','/api/login',{username:pickedUser,password:$('#pw').value});boot(r.user)}
-  catch(e){$('#loginErr').textContent=e.error||'Login failed'}
+  const u=$('#username').value.trim();
+  const p=$('#pw').value;
+  if(!u){$('#loginErr').textContent='Username required';return}
+  try{const r=await api('POST','/api/login',{username:u,password:p});boot(r.user)}
+  catch(e){$('#loginErr').textContent=(e&&e.error)||'Login failed'}
 }
+function renderLoginChips(){
+  const row=$('#chipRow');
+  const users=Object.values(USERS).sort((a,b)=>a.username.localeCompare(b.username));
+  if(!users.length){row.classList.remove('on');row.innerHTML='';return}
+  row.classList.add('on');
+  row.innerHTML='<div class="chip-label">Quick pick</div>'+users.map(u=>
+    `<button type="button" class="chip" data-u="${esc(u.username)}" style="--chip-c:${esc(u.color)}">
+       <span class="dot"></span>${esc(u.display)}
+     </button>`).join('');
+  row.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{
+    $('#username').value=b.dataset.u;
+    $('#pw').focus();
+  });
+}
+
+/* ---- boot ---- */
 async function boot(user){
   ME=user;$('#login').style.display='none';$('#app').style.display='block';
   const h=new Date().getHours();
   $('#greet').textContent=(h<12?'Morning':h<17?'Afternoon':'Evening')+', '+user.display;
   $('#dateLine').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-  const a=$('#avatarBtn');a.textContent=user.display[0];a.style.background=COLORS[user.username]||'#999';
+  const a=$('#avatarBtn');a.textContent=userInitials(user.username);a.style.background=userColorRaw(user.username);
   const d=new Date();calY=d.getFullYear();calM=d.getMonth();
+  await refreshUsersFromServer();
   await refresh();
 }
 async function refresh(){
@@ -259,8 +360,11 @@ function taskRow(t){
     <button class="chk" onclick="toggleTask(${t.id})">${t.done?'✓':''}</button>
     <div class="t-body" onclick="openTaskSheet(${t.id})">
       <div class="t-title">${esc(t.title)}${t.recur?' 🔁':''}</div>
-      <div class="t-meta"><span class="dot" style="background:${COLORS[t.assignee]||'#999'}"></span>${NAME[t.assignee]||t.assignee}
-      ${t.due_date?`<span class="${od?'overdue':''}">${od?'⚠ ':''}${fmtDate(t.due_date)}</span>`:''}</div>
+      <div class="t-meta">
+        <span class="dot" style="background:${userColorVar(t.assignee)}"></span>${esc(userName(t.assignee))}
+        ${t.alt_assignee?`<span class="dot" style="background:${userColorVar(t.alt_assignee)};opacity:.55"></span><span>↔ ${esc(userName(t.alt_assignee))}</span>`:''}
+        ${t.due_date?`<span class="${od?'overdue':''}">${od?'⚠ ':''}${fmtDate(t.due_date)}</span>`:''}
+      </div>
     </div>
     <button class="x" onclick="delTask(${t.id})">✕</button></div>`;
 }
@@ -278,7 +382,7 @@ function renderTasks(){
 function evRow(e){
   return `<div class="ev" onclick="openEventSheet(${e.id})">
     <div class="ev-time">${e.time||'all day'}</div>
-    <div class="ev-bar" style="background:${COLORS[e.owner]||'#999'}"></div>
+    <div class="ev-bar" style="background:${userColorVar(e.owner)}"></div>
     <div class="t-body"><div class="t-title">${esc(e.title)}</div>
     ${e.notes?`<div class="t-meta">${esc(e.notes)}</div>`:''}</div>
     <button class="x" onclick="event.stopPropagation();delEvent(${e.id})">✕</button></div>`;
@@ -293,7 +397,7 @@ function renderCal(){
     const evs=EVENTS.filter(e=>e.date===ds);
     const cls=ds===selDate?'sel':ds===today()?'today':'';
     html+=`<div class="day ${cls}" onclick="pickDay('${ds}')">${d}
-      <div class="pips">${evs.slice(0,3).map(e=>`<span class="pip" style="background:${COLORS[e.owner]||'#999'}"></span>`).join('')}</div></div>`;
+      <div class="pips">${evs.slice(0,3).map(e=>`<span class="pip" style="background:${userColorVar(e.owner)}"></span>`).join('')}</div></div>`;
   }
   $('#calGrid').innerHTML=html;
   $('#selDayLabel').textContent=fmtDate(selDate);
@@ -305,13 +409,13 @@ $('#calPrev').onclick=()=>{calM--;if(calM<0){calM=11;calY--}renderCal()};
 $('#calNext').onclick=()=>{calM++;if(calM>11){calM=0;calY++}renderCal()};
 let showAll=false;
 function renderSvcs(){
-  const mine=SVCS.filter(s=>showAll||!s.owner||s.owner==='both'||s.owner===ME.username);
+  const mine=SVCS.filter(s=>showAll||!s.owner||s.owner==='all'||s.owner===ME.username);
   $('#showAll').textContent=showAll?'· showing all':'· showing mine';
   $('#svcGrid').innerHTML=mine.map(s=>`
     <a class="svc" href="${esc(s.url)}" onclick="return launchSvc(event,${s.id})"
        oncontextmenu="event.preventDefault();openSvcSheet(${s.id})">
-      <span class="svc-owner" style="background:${COLORS[s.owner]||COLORS.both}"></span>
-      <div class="svc-in"><div class="svc-icon">${s.icon}</div>
+      <span class="svc-owner" style="background:${userColorVar(s.owner)}"></span>
+      <div class="svc-in"><div class="svc-icon">${s.icon||'🔗'}</div>
       <div class="svc-name">${esc(s.name)}</div><div class="svc-desc">${esc(s.descr)}&nbsp;</div></div></a>`).join('');
 }
 function launchSvc(ev,id){
@@ -350,7 +454,6 @@ dot.addEventListener('pointermove',e=>{
 dot.addEventListener('pointerup',e=>{
   const wasTap=drag&&!drag.moved;drag=null;
   if(wasTap){closeShell();return}
-  // snap to nearest horizontal edge
   const snapLeft=dot.offsetLeft+23<innerWidth/2;
   dot.style.left=snapLeft?'8px':(innerWidth-54)+'px';
   dotIdleTimer=setTimeout(()=>dot.classList.add('idle'),2500);
@@ -375,9 +478,38 @@ $('#page-home').classList.add('on');
 function openSheet(html){$('#sheet').innerHTML=html;$('#modal').classList.add('on')}
 function closeSheet(){$('#modal').classList.remove('on')}
 $('#modal').onclick=e=>{if(e.target.id==='modal')closeSheet()};
-function segHtml(id,opts,sel){return `<div class="seg" id="${id}">${opts.map(o=>`<button data-v="${o[0]}" class="${o[0]===sel?'sel':''}">${o[1]}</button>`).join('')}</div>`}
-function segWire(id){document.querySelectorAll('#'+id+' button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#'+id+' button').forEach(x=>x.classList.remove('sel'));b.classList.add('sel')})}
+
+/* Generic user picker: Everyone + every USERS entry, with color dot per option.
+   Selection: the picked button's background becomes the user's color. */
+function userPickerHtml(id, sel){
+  const opts=[['all','Everyone','#9eb48a']];
+  Object.values(USERS).sort((a,b)=>a.username.localeCompare(b.username))
+    .forEach(u=>opts.push([u.username, u.display, u.color]));
+  return `<div class="seg" id="${id}">${opts.map(([v,label,color])=>
+    `<button type="button" data-v="${esc(v)}" class="${v===sel?'sel':''}" style="--pd:${esc(color)}"><span class="pd"></span>${esc(label)}</button>`
+  ).join('')}</div>`;
+}
+function segWire(id){
+  document.querySelectorAll('#'+id+' button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#'+id+' button').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');
+  });
+}
 function segVal(id){return document.querySelector('#'+id+' .sel')?.dataset.v}
+
+/* Repeats picker (reused, no per-user colors). */
+function recurPickerHtml(id, sel){
+  const opts=[['','No'],['daily','Daily'],['weekly','Weekly'],['monthly','Monthly']];
+  return `<div class="seg" id="${id}">${opts.map(([v,label])=>
+    `<button type="button" data-v="${esc(v)}" class="${v===(sel||'')?'sel':''}">${label}</button>`
+  ).join('')}</div>`;
+}
+/* Open-mode picker (reused). */
+function modePickerHtml(id, sel){
+  const opts=[['frame','Full screen'],['tab','New tab']];
+  return `<div class="seg" id="${id}">${opts.map(([v,label])=>
+    `<button type="button" data-v="${esc(v)}" class="${v===(sel||'frame')?'sel':''}">${label}</button>`
+  ).join('')}</div>`;
+}
 
 $('#fab').onclick=()=>{
   if(curPage==='svc')return openSvcSheet();
@@ -387,83 +519,219 @@ $('#fab').onclick=()=>{
 };
 function openPicker(){
   openSheet(`<h2>Add something</h2>
-  <div class="row"><button class="btn" onclick="openTaskSheet()">✓ Task</button>
-  <button class="btn" style="background:var(--ink)" onclick="openEventSheet()">📅 Event</button></div>`);
+  <div class="row"><button class="btn" onclick="closeSheet();openTaskSheet()">✓ Task</button>
+  <button class="btn btn-secondary" onclick="closeSheet();openEventSheet()">📅 Event</button></div>`);
 }
 function openTaskSheet(id){
-  const t=TASKS.find(x=>x.id===id)||{title:'',notes:'',assignee:'both',due_date:'',recur:'',rotate:0};
+  const t=TASKS.find(x=>x.id===id)||{title:'',notes:'',assignee:'all',alt_assignee:null,due_date:'',recur:'',rotate:0};
+  const altSel=t.rotate?(t.alt_assignee||'all'):null;
   openSheet(`<h2>${id?'Edit task':'New task'}</h2>
     <input class="field" id="f-title" placeholder="What needs doing?" value="${esc(t.title)}">
-    <label>Whose is it?</label>${segHtml('f-who',[['brandon','Brandon'],['emily','Emily'],['both','Both']],t.assignee)}
+    <label>Whose is it?</label>${userPickerHtml('f-who', t.assignee||'all')}
+    <div id="f-alt-wrap" style="display:${t.rotate?'block':'none'}">
+      <label>Then swaps to</label>${userPickerHtml('f-alt', altSel||'all')}
+    </div>
     <div class="row"><div><label>Due</label><input class="field" type="date" id="f-due" value="${t.due_date||''}"></div>
-    <div><label>Repeats</label>${segHtml('f-recur',[['','No'],['daily','Day'],['weekly','Wk'],['monthly','Mo']],t.recur)}</div></div>
-    <label><input type="checkbox" id="f-rotate" ${t.rotate?'checked':''}> Take turns (swap between us each time)</label>
+    <div><label>Repeats</label>${recurPickerHtml('f-recur', t.recur||'')}</div></div>
+    <label class="checkbox"><input type="checkbox" id="f-rotate" ${t.rotate?'checked':''}> Take turns (swap each time it comes up)</label>
     <input class="field" id="f-notes" placeholder="Notes (optional)" value="${esc(t.notes)}" style="margin-top:12px">
     <button class="btn" style="margin-top:16px" id="f-save">${id?'Save':'Add it'}</button>`);
-  segWire('f-who');segWire('f-recur');
+  segWire('f-who');segWire('f-alt');segWire('f-recur');
+  const updateAlt=()=>{
+    $('#f-alt-wrap').style.display=$('#f-rotate').checked?'block':'none';
+  };
+  $('#f-rotate').addEventListener('change',updateAlt);
   $('#f-save').onclick=async()=>{
     const body={title:$('#f-title').value.trim(),notes:$('#f-notes').value,assignee:segVal('f-who'),
-      due_date:$('#f-due').value||null,recur:segVal('f-recur'),rotate:$('#f-rotate').checked?1:0};
+      alt_assignee:$('#f-rotate').checked?(segVal('f-alt')||null):null,
+      due_date:$('#f-due').value||null,recur:segVal('f-recur')||null,rotate:$('#f-rotate').checked?1:0};
     if(!body.title)return;
-    if(id)await api('PUT',`/api/tasks/${id}`,body);else await api('POST','/api/tasks',body);
-    closeSheet();await refresh();
+    try{
+      if(id)await api('PUT',`/api/tasks/${id}`,body);else await api('POST','/api/tasks',body);
+      closeSheet();await refresh();
+    }catch(e){$('#f-save').textContent=(e&&e.error)||'Failed';setTimeout(()=>{$('#f-save').textContent=id?'Save':'Add it'},1500)}
   };
 }
 function openEventSheet(id,date){
-  const e=EVENTS.find(x=>x.id===id)||{title:'',date:date||today(),time:'',notes:'',owner:'both'};
+  const e=EVENTS.find(x=>x.id===id)||{title:'',date:date||today(),time:'',notes:'',owner:'all'};
   openSheet(`<h2>${id?'Edit event':'New event'}</h2>
     <input class="field" id="f-title" placeholder="What's happening?" value="${esc(e.title)}">
     <div class="row"><div><label>Date</label><input class="field" type="date" id="f-date" value="${e.date}"></div>
-    <div><label>Time</label><input class="field" type="time" id="f-time" value="${e.time}"></div></div>
-    <label>Whose?</label>${segHtml('f-own',[['brandon','Brandon'],['emily','Emily'],['both','Both']],e.owner)}
+    <div><label>Time</label><input class="field" type="time" id="f-time" value="${e.time||''}"></div></div>
+    <label>Whose?</label>${userPickerHtml('f-own', e.owner||'all')}
     <input class="field" id="f-notes" placeholder="Notes (optional)" value="${esc(e.notes)}" style="margin-top:12px">
     <button class="btn" style="margin-top:16px" id="f-save">${id?'Save':'Add it'}</button>`);
   segWire('f-own');
   $('#f-save').onclick=async()=>{
     const body={title:$('#f-title').value.trim(),date:$('#f-date').value,time:$('#f-time').value,
-      notes:$('#f-notes').value,owner:segVal('f-own')};
+      notes:$('#f-notes').value,owner:segVal('f-own')||'all'};
     if(!body.title||!body.date)return;
-    if(id)await api('PUT',`/api/events/${id}`,body);else await api('POST','/api/events',body);
-    closeSheet();await refresh();
+    try{
+      if(id)await api('PUT',`/api/events/${id}`,body);else await api('POST','/api/events',body);
+      closeSheet();await refresh();
+    }catch(e){$('#f-save').textContent=(e&&e.error)||'Failed';setTimeout(()=>{$('#f-save').textContent=id?'Save':'Add it'},1500)}
   };
 }
 function openSvcSheet(id){
-  const s=SVCS.find(x=>x.id===id)||{name:'',url:'',icon:'🔗',descr:'',owner:'both',open_mode:'frame'};
+  const s=SVCS.find(x=>x.id===id)||{name:'',url:'',icon:'🔗',descr:'',owner:'all',open_mode:'frame'};
   openSheet(`<h2>${id?'Edit app':'Add an app'}</h2>
-    <div class="row"><input class="field" id="f-icon" placeholder="🔗" value="${esc(s.icon)}" style="flex:0 0 70px;text-align:center">
+    <div class="row"><input class="field" id="f-icon" placeholder="🔗" value="${esc(s.icon||'🔗')}" style="flex:0 0 70px;text-align:center">
     <input class="field" id="f-name" placeholder="Name" value="${esc(s.name)}"></div>
     <input class="field" id="f-url" placeholder="https://…" value="${esc(s.url)}">
-    <input class="field" id="f-descr" placeholder="Short description" value="${esc(s.descr)}">
-    <label>Whose app?</label>${segHtml('f-owner',[['brandon','Brandon'],['emily','Emily'],['both','Both']],s.owner||'both')}
-    <label>Opens</label>${segHtml('f-mode',[['frame','Full screen'],['tab','New tab']],s.open_mode||'frame')}
+    <input class="field" id="f-descr" placeholder="Short description" value="${esc(s.descr||'')}">
+    <label>Whose app?</label>${userPickerHtml('f-owner', s.owner||'all')}
+    <label>Opens</label>${modePickerHtml('f-mode', s.open_mode||'frame')}
     <button class="btn" style="margin-top:16px" id="f-save">${id?'Save':'Add it'}</button>
-    ${id?`<button class="link" style="margin-top:14px;width:100%" onclick="delSvc(${id})">Remove app</button>`:''}`);
+    ${id?`<button class="link danger" style="margin-top:14px;width:100%" onclick="delSvc(${id})">Remove app</button>`:''}`);
   segWire('f-owner');segWire('f-mode');
   $('#f-save').onclick=async()=>{
     const body={name:$('#f-name').value.trim(),url:$('#f-url').value.trim(),icon:$('#f-icon').value||'🔗',descr:$('#f-descr').value,
-      owner:segVal('f-owner'),open_mode:segVal('f-mode')};
+      owner:segVal('f-owner')||'all',open_mode:segVal('f-mode')||'frame'};
     if(!body.name||!body.url)return;
-    if(id)await api('PUT',`/api/services/${id}`,body);else await api('POST','/api/services',body);
-    closeSheet();await refresh();
+    try{
+      if(id)await api('PUT',`/api/services/${id}`,body);else await api('POST','/api/services',body);
+      closeSheet();await refresh();
+    }catch(e){$('#f-save').textContent=(e&&e.error)||'Failed';setTimeout(()=>{$('#f-save').textContent=id?'Save':'Add it'},1500)}
   };
 }
 async function delSvc(id){if(confirm('Remove this service?')){await api('DELETE',`/api/services/${id}`);closeSheet();await refresh()}}
 $('#addSvc').onclick=()=>openSvcSheet();
 
+/* ---- avatar menu / settings ---- */
 $('#avatarBtn').onclick=()=>{
-  openSheet(`<h2>${ME.display}</h2>
-    <label>Change password</label>
-    <input class="field" type="password" id="f-cur" placeholder="Current password">
-    <input class="field" type="password" id="f-new" placeholder="New password">
+  const isAdmin=!!(ME&&ME.isAdmin);
+  openSheet(`<h2>${esc(ME.display)}</h2>
+    ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-settings">⚙️ Settings · manage household</button>`:''}
+    <h3>Change your password</h3>
+    <input class="field" type="password" id="f-cur" placeholder="Current password" autocomplete="current-password">
+    <input class="field" type="password" id="f-new" placeholder="New password" autocomplete="new-password">
     <button class="btn" id="f-pw">Update password</button>
-    <button class="link" style="margin-top:16px;width:100%" id="f-out">Log out</button>
+    <button class="link" style="margin-top:16px;width:100%;text-align:center" id="f-out">Log out</button>
     <div class="err" id="f-err"></div>`);
+  if(isAdmin){
+    $('#f-settings').onclick=()=>openSettingsSheet();
+  }
   $('#f-pw').onclick=async()=>{
     try{await api('POST','/api/password',{current:$('#f-cur').value,next:$('#f-new').value});closeSheet()}
-    catch(e){$('#f-err').textContent=e.error||'Failed'}
+    catch(e){$('#f-err').textContent=(e&&e.error)||'Failed'}
   };
   $('#f-out').onclick=async()=>{await api('POST','/api/logout');location.reload()};
 };
+
+/* ---- settings sheet (admin) ---- */
+function openSettingsSheet(){
+  if(!ME||!ME.isAdmin){
+    // Non-admin: only password change (already on avatar sheet)
+    return;
+  }
+  const users=Object.values(USERS).sort((a,b)=>{
+    if((b.isAdmin?1:0)!==(a.isAdmin?1:0))return(b.isAdmin?1:0)-(a.isAdmin?1:0);
+    return a.username.localeCompare(b.username);
+  });
+  const listHtml=users.map(u=>`
+    <div class="user-row" data-u="${esc(u.username)}" style="--uc:${esc(u.color)}">
+      <div class="ucolor">${esc((u.display||u.username)[0].toUpperCase())}</div>
+      <div class="uinfo">
+        <div class="udisp">${esc(u.display)}${u.isAdmin?' <span class="badge">admin</span>':''}</div>
+        <div class="uuname">@${esc(u.username)}</div>
+      </div>
+      <div class="uactions">
+        <button class="link" data-act="edit">Edit</button>
+        ${u.username===ME.username?'':`<button class="link danger" data-act="del">Delete</button>`}
+      </div>
+    </div>`).join('');
+
+  openSheet(`<h2>Settings</h2>
+    <h3>Household members</h3>
+    <div class="user-list">${listHtml||'<div class="empty">No users yet</div>'}</div>
+    <h3>Add user</h3>
+    <input class="field" id="f-newuser" placeholder="Username (a-z, 0-9, _, -)" autocapitalize="none" autocorrect="off" spellcheck="false">
+    <input class="field" id="f-newdisplay" placeholder="Display name">
+    <div class="row"><input class="field" type="password" id="f-newpass" placeholder="Password (4+ chars)" style="flex:2">
+    <input class="field" type="color" id="f-newcolor" value="#7c9a72" style="flex:1;padding:6px"></div>
+    <button class="btn" id="f-add">+ Add user</button>
+    <div class="err" id="f-err"></div>
+    <button class="link" style="margin-top:18px;width:100%;text-align:center" onclick="closeSheet()">Done</button>`);
+
+  document.querySelectorAll('.user-row').forEach(row=>{
+    const username=row.dataset.u;
+    const editBtn=row.querySelector('[data-act="edit"]');
+    if(editBtn)editBtn.onclick=()=>openUserEditSheet(username);
+    const delBtn=row.querySelector('[data-act="del"]');
+    if(delBtn)delBtn.onclick=async()=>{
+      if(!confirm(`Delete @${username}? Tasks and events assigned to them will be reassigned to Everyone.`))return;
+      try{
+        await api('DELETE',`/api/users/${username}`);
+        await refreshUsersFromServer();
+        await refresh();
+        openSettingsSheet();
+      }catch(e){alert((e&&e.error)||'Failed')}
+    };
+  });
+
+  $('#f-add').onclick=async()=>{
+    const body={
+      username:$('#f-newuser').value,
+      display:$('#f-newdisplay').value,
+      password:$('#f-newpass').value,
+      color:$('#f-newcolor').value
+    };
+    try{
+      await api('POST','/api/users',body);
+      await refreshUsersFromServer();
+      await refresh();
+      renderLoginChips();
+      openSettingsSheet();
+    }catch(e){$('#f-err').textContent=(e&&e.error)||'Failed'}
+  };
+}
+
+function openUserEditSheet(username){
+  const u=USERS[username];
+  if(!u)return;
+  const isSelf=ME&&ME.username===username;
+  openSheet(`<h2>${isSelf?'Your account':'Edit @'+esc(username)}</h2>
+    <h3>Display</h3>
+    <input class="field" id="f-display" placeholder="Display name" value="${esc(u.display)}">
+    <div class="row"><div><label>Color</label><input class="field" type="color" id="f-color" value="${esc(u.color)}"></div></div>
+    <button class="btn" id="f-save" style="margin-top:6px">Save changes</button>
+    <h3>Password</h3>
+    ${isSelf?`<input class="field" type="password" id="f-curpw" placeholder="Current password" autocomplete="current-password">`:''}
+    <input class="field" type="password" id="f-newp" placeholder="New password" autocomplete="new-password">
+    <button class="link" id="f-resetpw" style="margin-top:10px;width:100%;text-align:center">
+      ${isSelf?'Change my password':'Reset password (admin override)'}
+    </button>
+    <div class="err" id="f-err"></div>
+    <button class="link" style="margin-top:14px;width:100%;text-align:center" onclick="openSettingsSheet()">← Back to settings</button>`);
+
+  $('#f-save').onclick=async()=>{
+    try{
+      await api('PUT',`/api/users/${username}`,{display:$('#f-display').value,color:$('#f-color').value});
+      await refreshUsersFromServer();
+      await refresh();
+      renderLoginChips();
+      openUserEditSheet(username);
+    }catch(e){$('#f-err').textContent=(e&&e.error)||'Failed'}
+  };
+  $('#f-resetpw').onclick=async()=>{
+    const next=$('#f-newp').value;
+    if(!next||next.length<4){$('#f-err').textContent='Password must be 4+ characters';return}
+    try{
+      const body={next};
+      if(isSelf){
+        const cur=$('#f-curpw')?.value||'';
+        if(!cur){$('#f-err').textContent='Current password required';return}
+        body.current=cur;
+      }
+      await api('POST',`/api/users/${username}/password`,body);
+      $('#f-newp').value='';
+      if(isSelf)$('#f-curpw').value='';
+      $('#f-err').style.color='#2B2622';
+      $('#f-err').textContent='Password updated';
+      setTimeout(()=>{$('#f-err').textContent='';$('#f-err').style.color=''},1500);
+    }catch(e){$('#f-err').textContent=(e&&e.error)||'Failed'}
+  };
+}
 
 /* ---- init ---- */
 api('GET','/api/me').then(r=>{if(r.user)boot(r.user)});
