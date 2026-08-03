@@ -14,12 +14,15 @@ RUN npm ci --omit=dev --no-audit --no-fund \
 
 FROM node:22-bookworm-slim
 WORKDIR /app
-# Run as the unprivileged "node" user that ships with the official image.
-COPY --chown=node:node --from=deps /app/node_modules ./node_modules
-COPY --chown=node:node server.js ./
-COPY --chown=node:node public ./public
+# Run as root. The bind-mounted /data volume on Unraid (and most hosts) is
+# owned by UID 99 ("nobody") with mode 0775, so the official image's
+# unprivileged "node" user (UID 1000) cannot create life.db inside it and
+# the container fails with SQLITE_CANTOPEN on boot. Root inside a single-
+# purpose app container with no exposed shell is fine for this use case.
+COPY --from=deps /app/node_modules ./node_modules
+COPY server.js ./
+COPY public ./public
 ENV DATA_DIR=/data PORT=3080 NODE_ENV=production
 VOLUME /data
 EXPOSE 3080
-USER node
 CMD ["node", "server.js"]
