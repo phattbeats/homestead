@@ -17,11 +17,12 @@ services:
       # Long random string — used to sign session cookies. Generate one with
       # `openssl rand -hex 32` and replace before first run.
       - SESSION_SECRET=change-this-to-something-long-and-random
-      # Seed passwords used ONLY on the very first run (when /data/life.db
-      # does not exist yet). Each user should log in and change their
-      # password in-app afterwards; later env changes have no effect.
-      - BRANDON_PASSWORD=changeme
-      - EMILY_PASSWORD=changeme
+      # Seed password used ONLY on the very first run (when /data/life.db
+      # does not exist yet). It bootstraps the `admin` user; log in as admin
+      # and create real household users via Settings → Users. Later env
+      # changes have no effect — use the in-app password change to rotate
+      # for real.
+      - ADMIN_PASSWORD=changeme
 
 networks:
   phattvip:

@@ -6,16 +6,16 @@
   <Network>phattvip</Network>
   <Icon>https://raw.githubusercontent.com/phattbeats/homestead/main/public/icon.svg</Icon>
   <Overview>Shared life app: tasks with take-turns rotation, calendar, and a full-screen iframe app shell for self-hosted services.</Overview>
-  <Description>Homestead is a single-container PWA for two-person households. It runs Node 22 + Express + SQLite with no external runtime dependencies.
+  <Description>Homestead is a single-container PWA for self-hosted households. It runs Node 22 + Express + SQLite with no external runtime dependencies.
 
 Features:
-- Tasks: assign to user A, user B, or both. Recurring chores with an optional take-turns rotation that swaps the assignee every check-off.
+- Tasks: assign to any user or to Everyone. Recurring chores with an optional take-turns rotation that swaps the assignee every check-off.
 - Calendar: month grid with per-person colour pips.
 - Services launcher: editable tile grid that opens your self-hosted services in a full-screen iframe shell inside Homestead, with a draggable escape dot. Each tile can be flipped to "New tab" if a service refuses to iframe cleanly.
 
 Storage: a single SQLite file at /data/life.db. Mount /mnt/user/appdata/homestead from the host to keep data across image upgrades.
 
-Seed passwords (BRANDON_PASSWORD / EMILY_PASSWORD) are only read the very first time the DB is created. After first login each user should change their password in-app; later env changes have no effect.
+Seed password (ADMIN_PASSWORD) bootstraps the admin account; admin then creates household users via Settings → Users.
 
 If you serve Homestead through SWAG (or any TLS-terminating reverse proxy) and want services launched from inside the iframe to work, strip their X-Frame-Options / Content-Security-Policy headers and add `frame-ancestors 'self' https://&lt;your-hostname&gt;`. See the README for the nginx snippet.
 
@@ -32,7 +32,6 @@ Image:  ghcr.io/phattbeats/homestead</Description>
   <Config Name="WebUI Port" Target="3081" Default="3081" Mode="tcp" Description="Host port mapped to the container's internal 3080." Type="Port" Display="always" Required="true" Mask="false">3081</Config>
   <Config Name="Data Path" Target="/data" Default="/mnt/user/appdata/homestead" Mode="rw" Description="Host path that persists the SQLite database and any future uploads." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/homestead</Config>
   <Config Name="SESSION_SECRET" Target="SESSION_SECRET" Default="" Mode="" Description="Long random string used to sign session cookies. Generate one with `openssl rand -hex 32` BEFORE first run; the value is only used to sign cookies and can be set anytime, but rotating it will log everyone out." Type="Variable" Display="always" Required="true" Mask="true"></Config>
-  <Config Name="BRANDON_PASSWORD" Target="BRANDON_PASSWORD" Default="changeme" Mode="" Description="Seed password for the `brandon` user — only used on first DB creation. Change in-app afterwards." Type="Variable" Display="always" Required="true" Mask="true">changeme</Config>
-  <Config Name="EMILY_PASSWORD" Target="EMILY_PASSWORD" Default="changeme" Mode="" Description="Seed password for the `emily` user — only used on first DB creation. Change in-app afterwards." Type="Variable" Display="always" Required="true" Mask="true">changeme</Config>
+  <Config Name="ADMIN_PASSWORD" Target="ADMIN_PASSWORD" Default="changeme" Mode="" Description="Seed password for the `admin` user — only used on first DB creation. After first login, create real household users via Settings → Users and rotate their passwords in-app." Type="Variable" Display="always" Required="true" Mask="true">changeme</Config>
   <Config Name="Extra Arguments" Target="extra_args" Default="" Mode="" Description="Optional: extra docker run flags (e.g. --memory, --shm-size)." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
 </Container>
