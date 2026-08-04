@@ -378,6 +378,18 @@ app.delete('/api/services/:id', auth, (req, res) => {
 app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 
 app.use(express.static(path.join(__dirname, 'public')));
+// /robots.txt must be served as a real robots.txt from public/, not fall
+// through to the SPA shell. Without a physical file at public/robots.txt,
+// express.static passes the request to the SPA catch-all below, which
+// returns the 39KB index.html — Cloudflare then wraps that HTML in its
+// content-signal boilerplate and serves it as a 39KB "text/plain"
+// response. Real crawlers (Googlebot, Bingbot, AhrefsBot, ...) parse
+// robots.txt for User-Agent / Disallow / Allow directives; they either
+// ignore the CF boilerplate or treat the file as "no rules = allow
+// everything". For a login-gated household dashboard there is no public
+// content worth indexing, so the file declares a blanket disallow. If
+// you ever want a different policy, just edit public/robots.txt — no
+// code change required (PHA-1708).
 // /favicon.ico serves the same SVG that /icon.svg serves. Browsers
 // auto-request /favicon.ico for every tab; without this handler the SPA
 // catch-all below serves the 39KB index.html as the favicon response —
