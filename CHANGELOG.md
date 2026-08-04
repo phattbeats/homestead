@@ -37,6 +37,15 @@
   layer; this handler makes the intent explicit at the route definition
   site and returns the semantically correct status code (the resource
   exists, just not via GET).
+- **`/favicon.ico` serves the SVG icon (PHA-1707):** browsers auto-request
+  `/favicon.ico` for every tab; without an explicit handler the SPA
+  catch-all served the 39 KB `index.html` as the favicon response, pure
+  waste on every tab load. The handler serves the existing `public/icon.svg`
+  (191 bytes) with the correct `image/svg+xml` content-type. The manifest
+  already points at `/icon.svg` as the icon source of truth, and modern
+  browsers accept SVG favicons. Legacy browsers fall through to the
+  manifest. Same bytes, same ETag, no redirect overhead — 0.5% of the
+  bandwidth.
 
 ## v0.0.2 (2026-08-03)
 
