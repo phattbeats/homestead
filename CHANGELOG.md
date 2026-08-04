@@ -46,6 +46,20 @@
   browsers accept SVG favicons. Legacy browsers fall through to the
   manifest. Same bytes, same ETag, no redirect overhead — 0.5% of the
   bandwidth.
+- **`/robots.txt` (PHA-1708):** added `public/robots.txt` with
+  `User-agent: *` / `Disallow: /`. Without this file, `express.static`
+  had nothing to serve for `/robots.txt` and fell through to the SPA
+  catch-all, which returned the 39 KB `index.html`. Cloudflare then
+  wrapped that HTML in its auto-injected content-signal boilerplate
+  and served it as a ~39 KB `text/plain` response — real crawlers
+  (Googlebot, Bingbot, AhrefsBot, ...) parse robots.txt for
+  `User-Agent:` / `Disallow:` / `Allow:` directives and either ignored
+  the boilerplate or treated it as "no rules = allow everything". A
+  blanket disallow is the right policy for a login-gated household
+  dashboard: the SPA shell, manifest, and login UI have no SEO value,
+  and per-user content (tasks / events / services) is behind auth
+  anyway. Edit `public/robots.txt` directly if a different policy is
+  ever needed — no code change required.
 
 ## v0.0.2 (2026-08-03)
 
