@@ -173,6 +173,16 @@ app.post('/api/login', (req, res) => {
   res.json({ user: req.session.user });
 });
 app.post('/api/logout', (req, res) => req.session.destroy(() => res.json({ ok: true })));
+// GET /api/logout is intentionally rejected with 405 Method Not Allowed.
+// Logout mutates server state (destroys the session) so it must not be
+// reachable via a safe method — RFC 9110 §9.2.1. Without this guard, the
+// request would otherwise fall through to the /api/* catch-all and (in
+// the v0.0.1 deployment that lacked PHA-1704's catch-all) serve the SPA
+// HTML shell as a 200 OK. That "safe by accident" path becomes a CSRF
+// vector the moment anyone adds a fallback handler that respects the
+// GET verb. Explicit 405 keeps the contract honest regardless of how
+// the surrounding routing layer evolves (PHA-1705).
+app.get('/api/logout', (req, res) => res.status(405).json({ error: 'method_not_allowed', allow: 'POST' }));
 app.get('/api/me', (req, res) => res.json({ user: req.session.user || null }));
 app.post('/api/password', auth, (req, res) => {
   const { current, next } = req.body || {};
