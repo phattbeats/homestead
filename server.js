@@ -121,6 +121,46 @@ function validateUsername(u) {
   return clean;
 }
 
+// Process start time — used for the uptime field on /api/health. Reading
+// process.uptime() would also work but is reset on every restart and is
+// noisier than a single monotonic start timestamp. Kept in module scope
+// so the value is stable for the lifetime of the process.
+const PROCESS_STARTED_AT_MS = Date.now();
+const PKG_VERSION = require('./package.json').version;
+// COMMIT_SHA is injected at build time by the release workflow
+// (`docker build --build-arg COMMIT_SHA=$(git rev-parse --short HEAD)`).
+// Falls back to `null` in dev runs where no SHA has been baked in.
+const COMMIT_SHA = process.env.COMMIT_SHA || null;
+
+// ---- public probes (no auth) ----
+//
+// /api/health and /api/version are intentionally registered BEFORE every
+// authenticated route and BEFORE the /api/* 404 catch-all below. They
+// return JSON, are unauthenticated by design (container orchestrators,
+// SWAG upstream health checks, and Uptime Kuma must not need a session),
+// and exist so monitoring can distinguish a live Homestead from the SPA
+// HTML shell that an SPA fallback would otherwise serve (PHA-1706).
+app.get('/api/health', (req, res) => {
+  let dbStatus = 'ok';
+  try {
+    db.prepare('SELECT 1 AS one').get();
+  } catch (err) {
+    dbStatus = 'error';
+  }
+  res.json({
+    ok: dbStatus === 'ok',
+    service: 'homestead',
+    version: PKG_VERSION,
+    commit: COMMIT_SHA,
+    uptime: Math.round((Date.now() - PROCESS_STARTED_AT_MS) / 1000),
+    db: dbStatus,
+  });
+});
+
+app.get('/api/version', (req, res) => {
+  res.json({ version: PKG_VERSION, commit: COMMIT_SHA });
+});
+
 // ---- auth ----
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body || {};
