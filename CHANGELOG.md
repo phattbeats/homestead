@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **API 404 JSON (PHA-1704):** unknown `/api/*` paths now return
+  `HTTP 404` + `{"error":"not_found"}` instead of the SPA HTML shell.
+  Previously the Express catch-all wildcard served the 39KB `index.html`
+  for every unmatched `/api/*` path, breaking health checks, masking
+  "feature missing" from JS clients, and wasting bandwidth. The SPA
+  fallback now excludes `/api/*` so even a regression in the 404 handler
+  can't re-introduce the bug.
+
 ## v0.0.2 (2026-08-03)
 
 - Generic N-user model: replaced hardcoded `brandon` / `emily` users with a
