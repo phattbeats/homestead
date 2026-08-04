@@ -378,6 +378,19 @@ app.delete('/api/services/:id', auth, (req, res) => {
 app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 
 app.use(express.static(path.join(__dirname, 'public')));
+// /favicon.ico serves the same SVG that /icon.svg serves. Browsers
+// auto-request /favicon.ico for every tab; without this handler the SPA
+// catch-all below serves the 39KB index.html as the favicon response —
+// pure waste on every tab load (PHA-1707). The manifest already points
+// at /icon.svg as the icon source of truth, so we reuse the same file
+// with the correct image/svg+xml content-type. Modern browsers accept
+// SVG favicons; legacy browsers fall through to the manifest. Same
+// bytes, same ETag, no redirect overhead.
+app.get('/favicon.ico', (req, res) => {
+  res.set('Content-Type', 'image/svg+xml');
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.sendFile(path.join(__dirname, 'public', 'icon.svg'));
+});
 // SPA fallback: only non-/api paths reach here now. Anything under /api
 // without a matching route handler returns 404 JSON above.
 app.get(/^(?!\/api).*/, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
