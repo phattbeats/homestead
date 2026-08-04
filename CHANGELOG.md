@@ -26,6 +26,17 @@
   "feature missing" from JS clients, and wasting bandwidth. The SPA
   fallback now excludes `/api/*` so even a regression in the 404 handler
   can't re-introduce the bug.
+- **`GET /api/logout` → 405 (PHA-1705):** logout now rejects GET with
+  `405 Method Not Allowed` + `{"error":"method_not_allowed","allow":"POST"}`
+  instead of falling through to the SPA fallback. Logout mutates server
+  state (destroys the session), so per RFC 9110 §9.2.1 it must not be
+  reachable via a safe method — otherwise `<img src="/api/logout">`
+  becomes a CSRF logout vector the moment any future fallback handler
+  respects the verb. Defense in depth on top of the PHA-1704 catch-all:
+  PHA-1704 already prevents the SPA-HTML-200 behavior at the routing
+  layer; this handler makes the intent explicit at the route definition
+  site and returns the semantically correct status code (the resource
+  exists, just not via GET).
 
 ## v0.0.2 (2026-08-03)
 
