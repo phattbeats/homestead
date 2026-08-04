@@ -321,8 +321,16 @@ app.delete('/api/services/:id', auth, (req, res) => {
   res.json({ ok: true });
 });
 
+// 404 JSON for unknown /api/* paths.
+// Without this, the SPA catch-all below returns the 39KB index.html shell
+// for every unmatched /api/* request — breaking health checks, masking
+// "feature missing" from JS clients, and wasting bandwidth (PHA-1704).
+app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
+
 app.use(express.static(path.join(__dirname, 'public')));
-app.get(/.*/, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+// SPA fallback: only non-/api paths reach here now. Anything under /api
+// without a matching route handler returns 404 JSON above.
+app.get(/^(?!\/api).*/, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 const PORT = process.env.PORT || 3080;
 app.listen(PORT, () => console.log(`Homestead on :${PORT}`));
