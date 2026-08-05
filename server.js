@@ -121,6 +121,46 @@ function validateUsername(u) {
   return clean;
 }
 
+// Process start time — used for the uptime field on /api/health. Reading
+// process.uptime() would also work but is reset on every restart and is
+// noisier than a single monotonic start timestamp. Kept in module scope
+// so the value is stable for the lifetime of the process.
+const PROCESS_STARTED_AT_MS = Date.now();
+const PKG_VERSION = require('./package.json').version;
+// COMMIT_SHA is injected at build time by the release workflow
+// (`docker build --build-arg COMMIT_SHA=$(git rev-parse --short HEAD)`).
+// Falls back to `null` in dev runs where no SHA has been baked in.
+const COMMIT_SHA = process.env.COMMIT_SHA || null;
+
+// ---- public probes (no auth) ----
+//
+// /api/health and /api/version are intentionally registered BEFORE every
+// authenticated route and BEFORE the /api/* 404 catch-all below. They
+// return JSON, are unauthenticated by design (container orchestrators,
+// SWAG upstream health checks, and Uptime Kuma must not need a session),
+// and exist so monitoring can distinguish a live Homestead from the SPA
+// HTML shell that an SPA fallback would otherwise serve (PHA-1706).
+app.get('/api/health', (req, res) => {
+  let dbStatus = 'ok';
+  try {
+    db.prepare('SELECT 1 AS one').get();
+  } catch (err) {
+    dbStatus = 'error';
+  }
+  res.json({
+    ok: dbStatus === 'ok',
+    service: 'homestead',
+    version: PKG_VERSION,
+    commit: COMMIT_SHA,
+    uptime: Math.round((Date.now() - PROCESS_STARTED_AT_MS) / 1000),
+    db: dbStatus,
+  });
+});
+
+app.get('/api/version', (req, res) => {
+  res.json({ version: PKG_VERSION, commit: COMMIT_SHA });
+});
+
 // ---- auth ----
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body || {};
@@ -133,6 +173,16 @@ app.post('/api/login', (req, res) => {
   res.json({ user: req.session.user });
 });
 app.post('/api/logout', (req, res) => req.session.destroy(() => res.json({ ok: true })));
+// GET /api/logout is intentionally rejected with 405 Method Not Allowed.
+// Logout mutates server state (destroys the session) so it must not be
+// reachable via a safe method — RFC 9110 §9.2.1. Without this guard, the
+// request would otherwise fall through to the /api/* catch-all and (in
+// the v0.0.1 deployment that lacked PHA-1704's catch-all) serve the SPA
+// HTML shell as a 200 OK. That "safe by accident" path becomes a CSRF
+// vector the moment anyone adds a fallback handler that respects the
+// GET verb. Explicit 405 keeps the contract honest regardless of how
+// the surrounding routing layer evolves (PHA-1705).
+app.get('/api/logout', (req, res) => res.status(405).json({ error: 'method_not_allowed', allow: 'POST' }));
 app.get('/api/me', (req, res) => res.json({ user: req.session.user || null }));
 app.post('/api/password', auth, (req, res) => {
   const { current, next } = req.body || {};
@@ -321,8 +371,41 @@ app.delete('/api/services/:id', auth, (req, res) => {
   res.json({ ok: true });
 });
 
+// 404 JSON for unknown /api/* paths.
+// Without this, the SPA catch-all below returns the 39KB index.html shell
+// for every unmatched /api/* request — breaking health checks, masking
+// "feature missing" from JS clients, and wasting bandwidth (PHA-1704).
+app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
+
 app.use(express.static(path.join(__dirname, 'public')));
-app.get(/.*/, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+// /robots.txt must be served as a real robots.txt from public/, not fall
+// through to the SPA shell. Without a physical file at public/robots.txt,
+// express.static passes the request to the SPA catch-all below, which
+// returns the 39KB index.html — Cloudflare then wraps that HTML in its
+// content-signal boilerplate and serves it as a 39KB "text/plain"
+// response. Real crawlers (Googlebot, Bingbot, AhrefsBot, ...) parse
+// robots.txt for User-Agent / Disallow / Allow directives; they either
+// ignore the CF boilerplate or treat the file as "no rules = allow
+// everything". For a login-gated household dashboard there is no public
+// content worth indexing, so the file declares a blanket disallow. If
+// you ever want a different policy, just edit public/robots.txt — no
+// code change required (PHA-1708).
+// /favicon.ico serves the same SVG that /icon.svg serves. Browsers
+// auto-request /favicon.ico for every tab; without this handler the SPA
+// catch-all below serves the 39KB index.html as the favicon response —
+// pure waste on every tab load (PHA-1707). The manifest already points
+// at /icon.svg as the icon source of truth, so we reuse the same file
+// with the correct image/svg+xml content-type. Modern browsers accept
+// SVG favicons; legacy browsers fall through to the manifest. Same
+// bytes, same ETag, no redirect overhead.
+app.get('/favicon.ico', (req, res) => {
+  res.set('Content-Type', 'image/svg+xml');
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.sendFile(path.join(__dirname, 'public', 'icon.svg'));
+});
+// SPA fallback: only non-/api paths reach here now. Anything under /api
+// without a matching route handler returns 404 JSON above.
+app.get(/^(?!\/api).*/, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 const PORT = process.env.PORT || 3080;
 app.listen(PORT, () => console.log(`Homestead on :${PORT}`));
