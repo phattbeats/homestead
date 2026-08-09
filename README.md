@@ -25,6 +25,70 @@ dependencies.
   "showing mine / all" toggle.
 - **Session auth** — `bcrypt`-hashed passwords, signed session cookies,
   90-day rolling expiry.
+- **Push notifications** — web-push reminders for chores due today,
+  overdue chores, and rotating "your turn" handoffs. Per-user quiet hours
+  and per-category on/off toggles. No Firebase — standard VAPID keys
+  generated once and stored in `/data/vapid.json`. Requires the PWA to
+  be installed to a phone home screen (iOS 16.4+ / Android Chrome).
+
+## Push notifications
+
+Homestead sends reminders via the [Web Push protocol](https://www.w3.org/TR/push-api/)
+so you don't need a phone-number-bound service like Firebase. The flow:
+
+1. On first boot the server generates a VAPID keypair (stored at
+   `DATA_DIR/vapid.json`, mode 0600) and exposes the **public** key via
+   `GET /api/push/vapid-public-key` (no auth).
+2. After logging in, tap your avatar → **Enable push notifications**.
+   The browser registers a `PushSubscription` with the push service and
+   posts it to `POST /api/push/subscribe` (auth).
+3. The server schedules a daily digest on a 30-minute tick:
+   - **Chore due today / overdue** — categories: `chore_due`.
+   - **Take-turns handoff** — categories: `take_turns` (only fires on
+     the day the rotating chore's due date lands).
+4. Each notification respects the user's quiet hours window (default
+   21:00–08:00 local) and per-category toggle. Both are editable from
+   the avatar menu.
+5. Subscriptions that return 404 or 410 from the push service are
+   pruned automatically; other failures increment a `failure_count` so
+   a flapping endpoint can be investigated via `/data/life.db` directly.
+6. Agents / automation can drive the same primitive via
+   `POST /api/notify` with `{ userId | username, payload: { title, body,
+   url, tag, category }, force }` — `force: true` bypasses quiet hours
+   (use sparingly).
+
+### iOS requirements
+
+**iOS 16.4 or newer is required** for web push to a PWA. The PWA must
+be installed to the Home Screen via **Safari → Share → Add to Home
+Screen** before push permission is offered — push will silently no-op
+when the app is opened in a regular Safari tab. After the install,
+re-open Homestead from the Home Screen icon (not from Safari) and the
+"Enable push notifications" button in the avatar menu will request
+permission normally.
+
+### Testing without a real device
+
+```bash
+# Get the VAPID public key (browser does this implicitly)
+curl -s http://localhost:3080/api/push/vapid-public-key | jq
+
+# After subscribing in the browser, you can fire a test push at any user
+# from any authenticated session:
+curl -s -c /tmp/c.txt -b /tmp/c.txt \
+  -X POST http://localhost:3080/api/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"***"}'
+
+curl -s -b /tmp/c.txt \
+  -X POST http://localhost:3080/api/notify \
+  -H 'Content-Type: application/json' \
+  -d '{"payload":{"title":"Test","body":"hello from curl","tag":"manual-test"}}'
+```
+
+The endpoint returns `{ userId, username, delivered, skipped, errors }`
+so a CI smoke test can assert on `delivered > 0` once the test client
+has a real subscription.
 
 ## Stack
 

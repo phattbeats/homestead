@@ -1,5 +1,155 @@
 # Changelog
 
+## v0.1.0 (2026-08-09) — PHA-1619
+
+- **Web push notifications.** Standard VAPID-based push (no Firebase),
+  with a per-user subscription store and a server-side `notify(userId,
+  payload)` primitive that downstream features (PHA-1617 events
+  webhook, future agent handoffs) can build on. Surface area:
+  - `GET /api/push/vapid-public-key` (public): returns the server's
+    VAPID public key so the service worker can subscribe.
+  - `POST /api/push/subscribe` (auth): idempotent — re-subscribing the
+    same endpoint resets its failure counter.
+  - `POST /api/push/unsubscribe` (auth): removes by endpoint.
+  - `GET /api/push/prefs` / `PUT /api/push/prefs` (auth): per-user
+    quiet hours (default 21:00–08:00) and three category toggles
+    (`chore_due`, `take_turns`, `system`).
+  - `POST /api/notify` (auth): `{ userId | username, payload, force }`
+    — `force` bypasses quiet hours for urgent agent-driven handoffs.
+  - Subscriptions returning 404/410 from the push service are pruned
+    on the failed send; other failures increment `failure_count`.
+  - Daily digest: server-side scheduler on a 30-minute tick, idempotent
+    via a per-user/per-category `notification_log` dedupe.
+- **Schema additions.** New tables `push_subscriptions`,
+  `notification_prefs`, `notification_log` — all keyed to
+  `users.id` (the stable PK), so the future PHA-1618 user-model
+  migration is a no-op for these tables.
+- **Frontend.** Avatar menu gains an "Enable push notifications"
+  button + per-user prefs editor (quiet hours + category toggles).
+  Auto-resubscribes on login if the browser already has a granted
+  permission, so a returning user on a new device does not have to
+  click "Enable" again.
+- **Service worker (`public/sw.js`).** Adds `push` and
+  `notificationclick` handlers. Click focuses an existing Homestead tab
+  or opens a new one; rotating-chore handoffs are sticky
+  (`requireInteraction: true`).
+- **VAPID keypair** generated on first boot, persisted to
+  `DATA_DIR/vapid.json` (mode 0600), loaded into `web-push` at
+  startup. Rotation invalidates every existing subscription (browsers
+  will see 410 Gone on next push) — keep the file across restarts.
+- **README** updated with push-notification setup, iOS 16.4+ install
+  requirements, and a curl-based smoke test against `/api/notify`.
+
+## v0.0.5 (2026-08-09)
+
+- **PHA-1618: generalized user model — `users` is now a profile cache, not a directory of record.**
+  Authentik is the directory of record; Homestead never creates or
+  deletes user rows on its own. Identity, groups, and membership live in
+  authentik (or the next OIDC provider that fronts life.phatt.vip).
+  Homestead keeps a thin local row per user with display-only fields
+  (display name, color, avatar, preferences) and the `auth_provider` /
+  `provider_subject` tuple needed to attach the identity to the row.
+
+  Concretely:
+  - **Schema:** `users.username` carries `COLLATE NOCASE` so case-insensitive
+    uniqueness is enforced at the SQLite layer (no functional-index
+    gymnastics in app code). New profile-cache columns: `avatar_url`,
+    `preferences` (JSON), `auth_provider`, `provider_subject`,
+    `claimed_at`, `last_seen_at`, `updated_at`. New tables: `groups`
+    (string cache of group names, mirrored from PHA-1577), `user_groups`
+    (M2M), `tile_visibility_groups` + `tile_visibility_users` (per-tile
+    access predicates, replaces the owner-dot model).
+  - **JIT provisioning in the auth middleware.** When SWAG forwards
+    `X-authentik-username` (header-trust, PHA-1574), the request lands on
+    `provisionOrClaim(username, provider, subject, groups)` which either
+    CLAIMs the existing seeded row (case-insensitive match) or CREATEs a
+    new profile row keyed on the username. All chore / activity / list
+    history stays on the claimed row — the seeded brandon/emily rows
+    predate the header-trust path, so this is the contract that keeps
+    existing data alive through the migration.
+  - **Group reconciliation.** `reconcileGroups(userId, [groups])` is the
+    single source of truth for `user_groups` membership; it replaces
+    (not merges) the user's full M2M with the groups asserted by the
+    auth provider on every authenticated request. Group changes in
+    authentik propagate on the user's next request — no dual
+    administration, ever. The legacy `users.is_admin` flag is kept as a
+    denormalized convenience (auto-syncs to `admins` group membership)
+    so admin-only HTTP endpoints don't need to walk the M2M on every
+    check.
+  - **CLAIM-first semantics.** Seeded profiles (`admin`, `brandon`,
+    `emily`) ARE the authentik accounts — never duplicated. The v0.0.1
+    `brandon`/`emily` env-seeded pair is replaced by a single admin
+    user plus three CLAIM-ready profiles. LAN passwords default to
+    `ADMIN_PASSWORD` / `BRANDON_PASSWORD` / `EMILY_PASSWORD` env vars
+    (or `'changeme'`) so the built-in `/api/login` keeps working as the
+    PHA-1574 LAN fallback.
+  - **No Homestead-side user CRUD beyond profile fields.** The
+    v0.0.2 `POST /api/users` (admin-create) and `DELETE /api/users/:u`
+    endpoints are gone — users come from authentik. `PUT /api/users/:u`
+    remains for profile-only edits (display, color, avatar, preferences)
+    and is open to the user themselves or an admin.
+  - **Migration preflight.** A v0.0.x user table with case-collisions
+    (e.g. both `Brandon` and `brandon`) refuses to boot with a clear
+    error naming the duplicates — `users.username` cannot carry
+    `COLLATE NOCASE` on a column that already has duplicates, and the
+    existing schema would reject the migration with a far less helpful
+    `UNIQUE constraint failed`.
+  - **Case-collision preflight refuses to boot.** If the user table has
+    both casings of the same name, `migrate()` throws with the
+    collision list. Rename the duplicates before restarting.
+  - **Tests:** `scripts/test-user-model.js` exercises the migration,
+    CLAIM semantics, CREATE path, case-insensitive lookup, group
+    reconciliation, `is_admin` denormalization, the case-collision
+    preflight, and the acceptance-criterion grep gates
+    (`brandon`/`emily` comparison strings and legacy `both` enum — only
+    the `UPDATE ... = 'all' WHERE ... = 'both'` migration lines are
+    permitted). 43/43 tests pass. `npm test` runs the suite in ~0.3s.
+
+  Acceptance (verified):
+  - Existing `admin` row survives migration untouched; seeded
+    `brandon` / `emily` CLAIM on first authenticated request, history
+    preserved (chore / activity / list rows stay attached to the seeded
+    id).
+  - A new authentik-only user (`alex`) gets a fresh row on first
+    request; group membership is honored from `X-authentik-groups`.
+  - Zero hardcoded `brandon`/`emily` comparison strings in non-comment
+    server code (grep-verifiable). The only remaining matches are in
+    comment blocks explaining the migration and in the seed-time
+    `INSERT INTO users` statements that establish the CLAIM targets.
+  - Zero runtime `'both'` enum references; only the `UPDATE ... = 'all'
+    WHERE ... = 'both'` migration lines remain, and they run once on
+    first boot against any legacy v0.0.1 data.
+
+- **Architecture: server.js now delegates to `lib/user-model.js`.** The
+  data layer (migrations, `provisionOrClaim`, `reconcileGroups`,
+  `validateUsername`, `validateAssignee`) is a pure DB module with no
+  HTTP / express dependency, importable directly from tests. `server.js`
+  shrinks from 411 → 347 lines and the test suite runs without spawning
+  a subprocess.
+
+- **/api/groups endpoint.** Read-only view of the group cache plus
+  `?mine=1` for the authenticated user's groups. `POST`/`PUT`/`DELETE`
+  on groups are intentionally not exposed — authentik owns the
+  lifecycle.
+
+- **/api/users response shape.** Now includes the v0.0.5 profile-cache
+  fields (`avatar_url`, `preferences`, `auth_provider`,
+  `provider_subject`, `claimed_at`, `last_seen_at`, `created_at`) so
+  the v0.0.2 frontend (PHA-1682) can render the same assignment
+  pickers without code changes.
+
+## v0.0.4 (2026-08-06)
+
+- **Fix: container crash on boot (regression from v0.0.3).** The
+  runtime stage of the multi-stage Dockerfile failed to `COPY
+  package.json` into the slim image, but `server.js` requires it at
+  module load to populate `PKG_VERSION` for the `/api/version` endpoint
+  added in v0.0.3. Result: every container started since v0.0.3 crashed
+  at boot with `MODULE_NOT_FOUND` and never served. SWAG's nginx
+  upstream for `life.phatt.media` then failed to resolve and refused to
+  start, taking every other subdomain down with it. Fix is a
+  single-line `COPY package.json ./` in the runtime stage.
+
 ## v0.0.3 (2026-08-04)
 
 - **`/api/health` JSON endpoint (PHA-1706):** returns
