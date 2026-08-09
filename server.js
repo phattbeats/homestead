@@ -32,6 +32,8 @@ const webpush = require('web-push');
 
 const userModel = require('./lib/user-model');
 
+const healthChecker = require('./lib/health-checker');
+
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const db = new Database(path.join(DATA_DIR, 'life.db'));
@@ -484,29 +486,59 @@ app.delete('/api/events/:id', auth, (req, res) => {
 });
 
 // ---- services ----
+// PHA-1623: every /api/services response now inlines the latest health
+// snapshot so the UI doesn't need a second round-trip to render the
+// red-dot indicator. Health state lives in service_health_state; the
+// tile config stays in services.
+function withHealth(rows) {
+  return rows.map(s => ({
+    ...s,
+    health: healthChecker.getState(db, s.id) || {
+      service_id: s.id, status: 'unknown',
+      last_status_code: null, last_checked_at: null,
+      last_ok_at: null, down_since: null,
+      consecutive_fails: 0, last_error: null,
+    },
+  }));
+}
 app.get('/api/services', auth, (req, res) => {
-  res.json(db.prepare('SELECT * FROM services ORDER BY sort, id').all());
+  res.json(withHealth(db.prepare('SELECT * FROM services ORDER BY sort, id').all()));
 });
 app.post('/api/services', auth, (req, res) => {
-  const { name, url, icon = '🔗', descr = '', owner = 'all', open_mode = 'frame' } = req.body || {};
+  const { name, url, icon = '🔗', descr = '', owner = 'all', open_mode = 'frame',
+          health_url = null, health_interval_sec = 60 } = req.body || {};
   if (!name || !url) return res.status(400).json({ error: 'name and url required' });
   if (!userModel.validateAssignee(db, owner)) return res.status(400).json({ error: 'unknown owner' });
   const max = db.prepare('SELECT COALESCE(MAX(sort),0) m FROM services').get().m;
-  const r = db.prepare('INSERT INTO services (name,url,icon,descr,sort,owner,open_mode) VALUES (?,?,?,?,?,?,?)')
-    .run(name, url, icon, descr, max + 1, owner, open_mode);
-  res.json(db.prepare('SELECT * FROM services WHERE id = ?').get(r.lastInsertRowid));
+  const r = db.prepare(`INSERT INTO services
+    (name,url,icon,descr,sort,owner,open_mode,health_url,health_interval_sec)
+    VALUES (?,?,?,?,?,?,?,?,?)`)
+    .run(name, url, icon, descr, max + 1, owner, open_mode,
+         health_url || null, health_interval_sec);
+  const row = db.prepare('SELECT * FROM services WHERE id = ?').get(r.lastInsertRowid);
+  // Start a checker immediately so the new tile's status isn't stuck
+  // on "unknown" until the next refresh tick.
+  if (healthCheckerHandle) healthCheckerHandle.refresh();
+  res.json(withHealth([row])[0]);
 });
 app.put('/api/services/:id', auth, (req, res) => {
   const s = db.prepare('SELECT * FROM services WHERE id = ?').get(req.params.id);
   if (!s) return res.status(404).json({ error: 'not found' });
   const b = { ...s, ...req.body };
   if (!userModel.validateAssignee(db, b.owner)) return res.status(400).json({ error: 'unknown owner' });
-  db.prepare('UPDATE services SET name=?,url=?,icon=?,descr=?,sort=?,owner=?,open_mode=? WHERE id=?')
-    .run(b.name, b.url, b.icon, b.descr, b.sort, b.owner, b.open_mode, s.id);
-  res.json(db.prepare('SELECT * FROM services WHERE id = ?').get(s.id));
+  db.prepare(`UPDATE services SET
+    name=?,url=?,icon=?,descr=?,sort=?,owner=?,open_mode=?,
+    health_url=?,health_interval_sec=? WHERE id=?`)
+    .run(b.name, b.url, b.icon, b.descr, b.sort, b.owner, b.open_mode,
+         b.health_url ?? null, b.health_interval_sec ?? 60, s.id);
+  if (healthCheckerHandle) healthCheckerHandle.refresh();
+  const row = db.prepare('SELECT * FROM services WHERE id = ?').get(s.id);
+  res.json(withHealth([row])[0]);
 });
 app.delete('/api/services/:id', auth, (req, res) => {
   db.prepare('DELETE FROM services WHERE id = ?').run(req.params.id);
+  // FK ON DELETE CASCADE on service_health_state handles the cleanup.
+  if (healthCheckerHandle) healthCheckerHandle.refresh();
   res.json({ ok: true });
 });
 
@@ -598,6 +630,25 @@ app.post('/api/notify', auth, async (req, res) => {
   res.json({ userId: target.id, username: target.username, ...result });
 });
 
+// ---- /api/services/health (PHA-1623) ----
+// Unauthenticated by design. Agents, container orchestrators, and
+// future push-notification integrations use this to learn which tiles
+// are down. Per-tile UI state stays on /api/services (auth-gated).
+app.get('/api/services/health', (req, res) => {
+  const rows = healthChecker.listAll(db);
+  const counts = { up: 0, down: 0, unknown: 0 };
+  for (const r of rows) counts[r.status] = (counts[r.status] || 0) + 1;
+  res.json({
+    ok: true,
+    service: 'homestead',
+    version: PKG_VERSION,
+    commit: COMMIT_SHA,
+    generated_at: new Date().toISOString(),
+    counts,
+    services: rows,
+  });
+});
+
 // 404 JSON for unknown /api/* paths.
 app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 
@@ -610,6 +661,41 @@ app.get('/favicon.ico', (req, res) => {
 app.get(/^(?!\/api).*/, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 const PORT = process.env.PORT || 3080;
+// ---- v0.0.6 health checker boot (PHA-1623) ----
+// One independent setInterval per service. At ~20 services (Brandon's
+// "the launcher fronts ~20 services"), this is exactly the scale
+// where setInterval is fine — the work order calls this out
+// explicitly. The checker is unref'd so it never keeps the event
+// loop alive on its own (matters for tests that import this module
+// without calling app.listen).
+let healthCheckerHandle = null;
+function startHealthChecker() {
+  if (healthCheckerHandle) return;
+  healthCheckerHandle = healthChecker.start(db, {
+    log: (...args) => console.log('[health]', ...args),
+    onDownTransition: async ({ service, state }) => {
+      // PHA-1623 step 5: notify admins when a tile flips to DOWN.
+      // Admins only — a downstream service being sick is an operator
+      // problem, not something Emily needs a 3am push about. force=true
+      // bypasses quiet hours: an outage is worth waking up for.
+      console.log(`[health] ${service.name} (id=${service.id}) DOWN since ${state.down_since}`);
+      const admins = db.prepare('SELECT id FROM users WHERE is_admin = 1').all();
+      for (const a of admins) {
+        try {
+          await notify(a.id, {
+            title: `${service.name} is down`,
+            body: `${service.name} has failed 2 health checks in a row. Down since ${state.down_since}.`,
+            url: '/',
+            tag: `service-down-${service.id}`,
+            category: 'service_down',
+          }, { force: true });
+        } catch (e) {
+          console.error('[health] notify admin failed:', e.message);
+        }
+      }
+    },
+  });
+}
 if (require.main === module) {
   // ---- daily digest scheduler (PHA-1619) ----
   // Runs once on boot and again every 30 minutes. The scheduler is
@@ -677,6 +763,7 @@ if (require.main === module) {
     console.log('[scheduler] daily digest started; tick=30min');
   }
   startScheduler();
+  startHealthChecker();
   app.listen(PORT, () => console.log(`Homestead on :${PORT}`));
 }
 module.exports = app;
