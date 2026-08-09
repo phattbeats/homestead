@@ -347,6 +347,22 @@ async function boot(user){
   const d=new Date();calY=d.getFullYear();calM=d.getMonth();
   await refreshUsersFromServer();
   await refresh();
+  // PHA-1619: if the browser already has permission + a subscription,
+  // re-register it against this session so a returning user on a fresh
+  // device doesn't have to click "Enable" again. Best-effort: any error
+  // is swallowed because the user can always re-enable from the avatar menu.
+  try{
+    if('serviceWorker'in navigator&&'PushManager'in window&&'Notification'in window&&Notification.permission==='granted'){
+      const reg=await navigator.serviceWorker.ready;
+      let sub=await reg.pushManager.getSubscription();
+      if(!sub){
+        const {publicKey}=await api('GET','/api/push/vapid-public-key');
+        sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(publicKey)});
+      }
+      const json=sub.toJSON();
+      await api('POST','/api/push/subscribe',{endpoint:json.endpoint,keys:json.keys});
+    }
+  }catch(_){}
 }
 async function refresh(){
   [TASKS,EVENTS,SVCS]=await Promise.all([api('GET','/api/tasks'),api('GET','/api/events'),api('GET','/api/services')]);
@@ -602,6 +618,10 @@ $('#avatarBtn').onclick=()=>{
   const isAdmin=!!(ME&&ME.isAdmin);
   openSheet(`<h2>${esc(ME.display)}</h2>
     ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-settings">⚙️ Settings · manage household</button>`:''}
+    <h3>Push notifications</h3>
+    <p style="font-size:13px;color:var(--muted);margin:-4px 0 10px">Get reminders for chores due today and your turn to take a rotating chore. iPhone users: add Homestead to your Home Screen first (iOS 16.4+ required for push).</p>
+    <button class="btn btn-secondary" id="f-push">…</button>
+    <div id="push-prefs"></div>
     <h3>Change your password</h3>
     <input class="field" type="password" id="f-cur" placeholder="Current password" autocomplete="current-password">
     <input class="field" type="password" id="f-new" placeholder="New password" autocomplete="new-password">
@@ -611,6 +631,8 @@ $('#avatarBtn').onclick=()=>{
   if(isAdmin){
     $('#f-settings').onclick=()=>openSettingsSheet();
   }
+  pushRenderButton('#f-push');
+  renderPushPrefs();
   $('#f-pw').onclick=async()=>{
     try{await api('POST','/api/password',{current:$('#f-cur').value,next:$('#f-new').value});closeSheet()}
     catch(e){$('#f-err').textContent=(e&&e.error)||'Failed'}
@@ -736,6 +758,113 @@ function openUserEditSheet(username){
 /* ---- init ---- */
 api('GET','/api/me').then(r=>{if(r.user)boot(r.user)});
 if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
+
+/* ---- push notifications (PHA-1619) ---- */
+function urlBase64ToUint8Array(b64){
+  const pad='='.repeat((4-b64.length%4)%4);
+  const b=(atob(b64+pad).split('')).map(c=>c.charCodeAt(0));
+  return new Uint8Array(b);
+}
+async function pushSubscribe(){
+  if(!('serviceWorker'in navigator)||!('PushManager'in window)||!('Notification'in window)){
+    return{ok:false,error:'unsupported'};
+  }
+  if(Notification.permission==='denied')return{ok:false,error:'denied'};
+  if(Notification.permission==='default'){
+    const p=await Notification.requestPermission();
+    if(p!=='granted')return{ok:false,error:p};
+  }
+  const reg=await navigator.serviceWorker.ready;
+  let sub=await reg.pushManager.getSubscription();
+  if(!sub){
+    const {publicKey}=await api('GET','/api/push/vapid-public-key');
+    sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(publicKey)});
+  }
+  const json=sub.toJSON();
+  await api('POST','/api/push/subscribe',{endpoint:json.endpoint,keys:json.keys});
+  return{ok:true};
+}
+async function pushUnsubscribe(){
+  if(!('serviceWorker'in navigator)||!('PushManager'in window))return{ok:false,error:'unsupported'};
+  const reg=await navigator.serviceWorker.ready;
+  const sub=await reg.pushManager.getSubscription();
+  if(sub){
+    const ep=sub.endpoint;
+    await sub.unsubscribe();
+    try{await api('POST','/api/push/unsubscribe',{endpoint:ep})}catch(_){}
+  }
+  return{ok:true};
+}
+async function pushState(){
+  if(!('serviceWorker'in navigator)||!('PushManager'in window)||!('Notification'in window))return'unsupported';
+  if(Notification.permission==='denied')return'denied';
+  if(Notification.permission==='default')return'prompt';
+  const reg=await navigator.serviceWorker.ready;
+  const sub=await reg.pushManager.getSubscription();
+  return sub?'granted':'default';
+}
+async function pushRenderButton(targetId){
+  const btn=$(targetId);if(!btn)return;
+  const st=await pushState();
+  if(st==='unsupported'){
+    btn.textContent='🔕 Push not supported in this browser';
+    btn.disabled=true;btn.classList.add('btn-secondary');return;
+  }
+  if(st==='denied'){
+    btn.textContent='🔕 Notifications blocked — enable in browser settings';
+    btn.disabled=true;btn.classList.add('btn-secondary');return;
+  }
+  if(st==='granted'){
+    btn.textContent='🔔 Disable push notifications';
+    btn.onclick=async()=>{const r=await pushUnsubscribe();if(r.ok){pushRenderButton(targetId);if(typeof renderPushPrefs==='function')renderPushPrefs()}};
+    return;
+  }
+  btn.textContent='🔔 Enable push notifications';
+  btn.onclick=async()=>{
+    const r=await pushSubscribe();
+    if(r.ok){pushRenderButton(targetId);if(typeof renderPushPrefs==='function')renderPushPrefs()}
+    else{alert('Could not enable notifications: '+(r.error||'unknown'))}
+  };
+}
+async function renderPushPrefs(){
+  const host=$('#push-prefs');if(!host)return;
+  const p=(await api('GET','/api/push/prefs')).prefs;
+  host.innerHTML=`
+    <div class="row" style="gap:12px;align-items:center;margin:8px 0 6px">
+      <label style="flex:1"><input type="checkbox" id="np-chore" ${p.chore_due?'checked':''}> Chore due / overdue</label>
+    </div>
+    <div class="row" style="gap:12px;align-items:center;margin:6px 0">
+      <label style="flex:1"><input type="checkbox" id="np-turns" ${p.take_turns?'checked':''}> Take-turns handoff</label>
+    </div>
+    <div class="row" style="gap:12px;align-items:center;margin:6px 0">
+      <label style="flex:1"><input type="checkbox" id="np-system" ${p.system?'checked':''}> System & agent messages</label>
+    </div>
+    <h3 style="margin-top:14px">Quiet hours</h3>
+    <div class="row" style="gap:12px;align-items:center">
+      <label>From
+        <select id="np-qs">${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===p.quiet_start_hour?'selected':''}>${String(h).padStart(2,'0')}:00</option>`).join('')}</select>
+      </label>
+      <label>To
+        <select id="np-qe">${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===p.quiet_end_hour?'selected':''}>${String(h).padStart(2,'0')}:00</option>`).join('')}</select>
+      </label>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-top:8px">Default 21:00–08:00. Set both to the same hour to disable quiet hours.</p>
+    <button class="btn" id="np-save" style="margin-top:10px">Save notification preferences</button>
+    <div class="err" id="np-err"></div>`;
+  $('#np-save').onclick=async()=>{
+    try{
+      await api('PUT','/api/push/prefs',{
+        chore_due:$('#np-chore').checked,
+        take_turns:$('#np-turns').checked,
+        system:$('#np-system').checked,
+        quiet_start_hour:Number($('#np-qs').value),
+        quiet_end_hour:Number($('#np-qe').value),
+      });
+      $('#np-err').textContent='Saved';$('#np-err').style.color='green';
+      setTimeout(()=>{$('#np-err').textContent='';$('#np-err').style.color=''},1500);
+    }catch(e){$('#np-err').textContent=(e&&e.error)||'Failed';$('#np-err').style.color=''}
+  };
+}
 </script>
 </body>
 </html>

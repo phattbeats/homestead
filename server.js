@@ -1,94 +1,80 @@
+// Homestead — shared life app (tasks, calendar, services, full-screen app shell).
+//
+// Identity model (PHA-1618, v0.0.5):
+//   * `users` is a PROFILE CACHE, not a directory of record.
+//   * Authentik is the directory of record (see PHA-1574 for header-trust
+//     wiring + PHA-1577 for the household/family/media-club/admins groups).
+//   * Homestead never creates or deletes user rows on its own. The
+//     `X-authentik-username` header (carried by SWAG in front of
+//     life.phatt.vip) is the canonical CREATE path: a request with that
+//     header but no matching local row triggers `provisionOrClaim`, which
+//     seeds a new profile row keyed on `username` (case-insensitive) and
+//     attaches the provider identity.
+//   * Seeded profiles (admin, brandon, emily — added on a fresh database)
+//     are CLAIMED by the first authenticated request that matches the
+//     case-insensitive username, NOT duplicated. All chore / activity /
+//     list history stays on the seeded row.
+//   * `groups` is a string cache of group names (household, family,
+//     media-club, admins). Authentik is authoritative; Homestead
+//     reconciles `user_groups` membership on every authenticated request
+//     from the `X-authentik-groups` header. No group CRUD endpoints.
+//   * Built-in `/api/login` (LAN fallback, PHA-1574) remains; it just
+//     consults `users.pass_hash` instead of the v0.0.1 "brandon/emily"
+//     hardcoded pair.
+
 const express = require('express');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const webpush = require('web-push');
+
+const userModel = require('./lib/user-model');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const db = new Database(path.join(DATA_DIR, 'life.db'));
-db.pragma('journal_mode = WAL');
+userModel.migrate(db);
 
+// v0.1.0: web push subscriptions (PHA-1619)
 db.exec(`
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS push_subscriptions (
   id INTEGER PRIMARY KEY,
-  username TEXT UNIQUE NOT NULL,
-  display TEXT NOT NULL,
-  pass_hash TEXT NOT NULL,
-  color TEXT NOT NULL DEFAULT '#7c9a72',
-  is_admin INTEGER NOT NULL DEFAULT 0,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint TEXT UNIQUE NOT NULL,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  last_success_at TEXT,
+  last_failure_at TEXT,
+  failure_count INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id);
+-- v0.1.0: per-user notification preferences (PHA-1619)
+CREATE TABLE IF NOT EXISTS notification_prefs (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  quiet_start_hour INTEGER NOT NULL DEFAULT 21,
+  quiet_end_hour INTEGER NOT NULL DEFAULT 8,
+  chore_due INTEGER NOT NULL DEFAULT 1,
+  take_turns INTEGER NOT NULL DEFAULT 1,
+  system INTEGER NOT NULL DEFAULT 1
+);
+-- v0.1.0: notification delivery log (PHA-1619)
+CREATE TABLE IF NOT EXISTS notification_log (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  category TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT,
+  url TEXT,
+  tag TEXT,
+  delivered INTEGER NOT NULL DEFAULT 0,
+  skipped_reason TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
-CREATE TABLE IF NOT EXISTS tasks (
-  id INTEGER PRIMARY KEY,
-  title TEXT NOT NULL,
-  notes TEXT DEFAULT '',
-  assignee TEXT DEFAULT 'all',
-  alt_assignee TEXT DEFAULT NULL,
-  due_date TEXT,
-  recur TEXT DEFAULT '',
-  rotate INTEGER DEFAULT 0,
-  done INTEGER DEFAULT 0,
-  done_by TEXT,
-  done_at TEXT,
-  created_by TEXT,
-  created_at TEXT DEFAULT (datetime('now'))
-);
-CREATE TABLE IF NOT EXISTS events (
-  id INTEGER PRIMARY KEY,
-  title TEXT NOT NULL,
-  date TEXT NOT NULL,
-  time TEXT DEFAULT '',
-  notes TEXT DEFAULT '',
-  owner TEXT DEFAULT 'all',
-  created_by TEXT
-);
-CREATE TABLE IF NOT EXISTS services (
-  id INTEGER PRIMARY KEY,
-  name TEXT NOT NULL,
-  url TEXT NOT NULL,
-  icon TEXT DEFAULT '🔗',
-  descr TEXT DEFAULT '',
-  sort INTEGER DEFAULT 0
-);
+CREATE INDEX IF NOT EXISTS idx_notification_log_user ON notification_log(user_id, created_at DESC);
 `);
-// v2 migrations: per-person ownership + open mode
-const svcCols = db.prepare("PRAGMA table_info(services)").all().map(c => c.name);
-if (!svcCols.includes('owner')) db.exec("ALTER TABLE services ADD COLUMN owner TEXT DEFAULT 'all'");
-if (!svcCols.includes('open_mode')) db.exec("ALTER TABLE services ADD COLUMN open_mode TEXT DEFAULT 'frame'");
-
-// v0.0.2 migration: users.is_admin
-const userCols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
-if (!userCols.includes('is_admin')) db.exec("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0");
-
-// v0.0.2 migration: tasks.alt_assignee + shift legacy "both" → "all"
-const taskCols = db.prepare("PRAGMA table_info(tasks)").all().map(c => c.name);
-if (!taskCols.includes('alt_assignee')) db.exec("ALTER TABLE tasks ADD COLUMN alt_assignee TEXT DEFAULT NULL");
-// Migrate legacy 'both' values on tasks/events/services → 'all' (generic)
-db.exec("UPDATE tasks SET assignee = 'all' WHERE assignee = 'both'");
-db.exec("UPDATE events SET owner = 'all' WHERE owner = 'both'");
-db.exec("UPDATE services SET owner = 'all' WHERE owner = 'both'");
-// Backfill alt_assignee for existing rotating tasks that were hardcoded to the brandon/emily pair
-db.exec("UPDATE tasks SET alt_assignee = CASE assignee WHEN 'brandon' THEN 'emily' WHEN 'emily' THEN 'brandon' ELSE alt_assignee END WHERE rotate = 1 AND alt_assignee IS NULL");
-
-// Seed: only the admin user, only if no users exist yet
-const userCount = db.prepare('SELECT COUNT(*) c FROM users').get().c;
-if (userCount === 0) {
-  const ins = db.prepare('INSERT INTO users (username, display, pass_hash, color, is_admin) VALUES (?,?,?,?,?)');
-  ins.run('admin', 'Admin', bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'changeme', 10), '#7c9a72', 1);
-  console.log('[seed] Created admin user. Log in, then create your household users via Settings.');
-}
-// Backfill admin flag for existing installations where admin was already a user with username='admin'
-else {
-  db.exec("UPDATE users SET is_admin = 1 WHERE username = 'admin' AND is_admin = 0");
-}
-
-// Seed services (replace these with your own URLs in the app)
-if (db.prepare('SELECT COUNT(*) c FROM services').get().c === 0) {
-  const ins = db.prepare('INSERT INTO services (name,url,icon,descr,sort) VALUES (?,?,?,?,?)');
-  ins.run('Example', 'https://example.com', '🔗', 'Replace with your own services', 1);
-}
 
 const app = express();
 app.set('trust proxy', 1);
@@ -100,46 +86,159 @@ app.use(session({
   cookie: { httpOnly: true, sameSite: 'lax', maxAge: 1000 * 60 * 60 * 24 * 90 }
 }));
 
-function auth(req, res, next) {
+// ---- auth middleware ----
+// Three-layer auth:
+//   1. Header-trust (PHA-1574) — when SWAG forwards X-authentik-username
+//      AND X-authentik-groups, provisionOrClaim establishes / refreshes
+//      the session row and treats the request as authenticated.
+//   2. Session-cookie — established by /api/login (LAN fallback) or by
+//      the header-trust layer above; survives across requests.
+//   3. Unauthenticated → 401.
+function authenticate(req, res, next) {
+  const headerUser = req.get('x-authentik-username');
+  if (headerUser) {
+    const groupsHeader = req.get('x-authentik-groups') || '';
+    let groups = [];
+    if (groupsHeader.startsWith('[')) {
+      try { groups = JSON.parse(groupsHeader); } catch (_) { groups = []; }
+    } else {
+      groups = groupsHeader.split(',').map(s => s.trim()).filter(Boolean);
+    }
+    const u = userModel.provisionOrClaim(db, headerUser, 'header_trust', headerUser, groups);
+    if (!u) return res.status(401).json({ error: 'invalid trusted username' });
+    req.session.user = {
+      username: u.username,
+      display: u.display,
+      color: u.color,
+      isAdmin: !!u.is_admin,
+      authProvider: 'header_trust',
+    };
+    return next();
+  }
   if (req.session.user) return next();
-  res.status(401).json({ error: 'unauthorized' });
+  return res.status(401).json({ error: 'unauthorized' });
+}
+// Legacy alias used by route definitions below.
+const auth = authenticate;
+
+// ---- VAPID keypair (PHA-1619) ----
+// Generated once on first startup, persisted to DATA_DIR/vapid.json.
+// The public key is exposed via /api/push/vapid-public-key so the service
+// worker can subscribe. The private key stays on the server and is loaded
+// into web-push once at boot. If the file is missing or unreadable, a fresh
+// keypair is generated. Rotating keys invalidates every existing push
+// subscription (browsers will get 410 Gone on next push), so rotation
+// requires either a forced re-subscribe from every client or a graceful
+// migration window.
+const VAPID_PATH = path.join(DATA_DIR, 'vapid.json');
+function loadOrCreateVapid() {
+  try {
+    if (fs.existsSync(VAPID_PATH)) {
+      const j = JSON.parse(fs.readFileSync(VAPID_PATH, 'utf8'));
+      if (j && j.publicKey && j.privateKey) return j;
+    }
+  } catch (err) {
+    console.warn('[vapid] existing key unreadable, regenerating:', err.message);
+  }
+  const keys = webpush.generateVAPIDKeys();
+  const payload = { ...keys, subject: 'mailto:admin@homestead.local', createdAt: new Date().toISOString() };
+  fs.writeFileSync(VAPID_PATH, JSON.stringify(payload, null, 2), { mode: 0o600 });
+  console.log('[vapid] generated new keypair at', VAPID_PATH);
+  return payload;
+}
+const VAPID = loadOrCreateVapid();
+webpush.setVapidDetails(VAPID.subject, VAPID.publicKey, VAPID.privateKey);
+
+// ---- notification helpers (PHA-1619) ----
+// notify(userId, {title, body, url, tag, category}) is the single delivery
+// primitive. category drives per-user preferences (chore_due, take_turns,
+// system) and quiet-hours enforcement. Returns { delivered, skipped, errors }.
+function getPrefs(userId) {
+  const row = db.prepare('SELECT * FROM notification_prefs WHERE user_id = ?').get(userId);
+  if (row) return row;
+  db.prepare('INSERT INTO notification_prefs (user_id) VALUES (?)').run(userId);
+  return db.prepare('SELECT * FROM notification_prefs WHERE user_id = ?').get(userId);
+}
+function setPrefs(userId, patch) {
+  const cur = getPrefs(userId);
+  const next = {
+    quiet_start_hour: Number.isInteger(patch.quiet_start_hour) ? patch.quiet_start_hour : cur.quiet_start_hour,
+    quiet_end_hour: Number.isInteger(patch.quiet_end_hour) ? patch.quiet_end_hour : cur.quiet_end_hour,
+    chore_due: patch.chore_due === undefined ? cur.chore_due : (patch.chore_due ? 1 : 0),
+    take_turns: patch.take_turns === undefined ? cur.take_turns : (patch.take_turns ? 1 : 0),
+    system: patch.system === undefined ? cur.system : (patch.system ? 1 : 0),
+  };
+  db.prepare(`UPDATE notification_prefs
+              SET quiet_start_hour=?, quiet_end_hour=?, chore_due=?, take_turns=?, system=?
+              WHERE user_id=?`)
+    .run(next.quiet_start_hour, next.quiet_end_hour, next.chore_due, next.take_turns, next.system, userId);
+  return next;
+}
+function isInQuietHours(prefs, now) {
+  const h = now.getHours();
+  const s = prefs.quiet_start_hour, e = prefs.quiet_end_hour;
+  if (s === e) return false;
+  if (s < e) return h >= s && h < e;
+  return h >= s || h < e;
+}
+function logNotification(userId, category, payload, delivered, skippedReason) {
+  db.prepare(`INSERT INTO notification_log (user_id,category,title,body,url,tag,delivered,skipped_reason)
+              VALUES (?,?,?,?,?,?,?,?)`)
+    .run(userId || null, category || 'system', payload.title || '', payload.body || '',
+         payload.url || '', payload.tag || '', delivered ? 1 : 0, skippedReason || null);
+}
+async function notify(userId, payload, opts = {}) {
+  const category = payload.category || opts.category || 'system';
+  const prefs = getPrefs(userId);
+  if (prefs[category] === 0) {
+    logNotification(userId, category, payload, 0, 'category_disabled');
+    return { delivered: 0, skipped: 1, errors: 0, reason: 'category_disabled' };
+  }
+  const now = new Date();
+  const force = opts.force === true;
+  if (!force && isInQuietHours(prefs, now)) {
+    logNotification(userId, category, payload, 0, 'quiet_hours');
+    return { delivered: 0, skipped: 1, errors: 0, reason: 'quiet_hours' };
+  }
+  const subs = db.prepare('SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?').all(userId);
+  if (!subs.length) {
+    logNotification(userId, category, payload, 0, 'no_subscription');
+    return { delivered: 0, skipped: 0, errors: 0, reason: 'no_subscription' };
+  }
+  const json = JSON.stringify({
+    title: payload.title || '',
+    body: payload.body || '',
+    url: payload.url || '/',
+    tag: payload.tag || category,
+    icon: '/icon.svg',
+    badge: '/icon.svg',
+    category,
+  });
+  let delivered = 0, errors = 0;
+  for (const s of subs) {
+    try {
+      await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, json, { TTL: 60 * 60 * 24 });
+      db.prepare('UPDATE push_subscriptions SET last_success_at=datetime(\'now\'), failure_count=0 WHERE id=?').run(s.id);
+      delivered++;
+    } catch (err) {
+      errors++;
+      const status = err.statusCode || 0;
+      if (status === 404 || status === 410) {
+        db.prepare('DELETE FROM push_subscriptions WHERE id=?').run(s.id);
+      } else {
+        db.prepare('UPDATE push_subscriptions SET last_failure_at=datetime(\'now\'), failure_count=failure_count+1 WHERE id=?').run(s.id);
+      }
+    }
+  }
+  logNotification(userId, category, payload, delivered, delivered === 0 && errors > 0 ? 'all_endpoints_failed' : null);
+  return { delivered, skipped: 0, errors };
 }
 
-function getMe(username) {
-  return db.prepare('SELECT id, username, display, color, is_admin FROM users WHERE username = ?').get(username);
-}
-
-const USER_COLORS = ['#8a9ec4', '#c48a9e', '#9eb48a', '#d4a85c', '#a87cc4', '#7c9eb8', '#c47c7c', '#7cc4a8'];
-function nextColor() {
-  const idx = db.prepare('SELECT COUNT(*) c FROM users').get().c;
-  return USER_COLORS[idx % USER_COLORS.length];
-}
-
-function validateUsername(u) {
-  const clean = (u || '').toLowerCase().trim();
-  if (!/^[a-z0-9_-]{2,32}$/.test(clean)) return null;
-  return clean;
-}
-
-// Process start time — used for the uptime field on /api/health. Reading
-// process.uptime() would also work but is reset on every restart and is
-// noisier than a single monotonic start timestamp. Kept in module scope
-// so the value is stable for the lifetime of the process.
 const PROCESS_STARTED_AT_MS = Date.now();
 const PKG_VERSION = require('./package.json').version;
-// COMMIT_SHA is injected at build time by the release workflow
-// (`docker build --build-arg COMMIT_SHA=$(git rev-parse --short HEAD)`).
-// Falls back to `null` in dev runs where no SHA has been baked in.
 const COMMIT_SHA = process.env.COMMIT_SHA || null;
 
 // ---- public probes (no auth) ----
-//
-// /api/health and /api/version are intentionally registered BEFORE every
-// authenticated route and BEFORE the /api/* 404 catch-all below. They
-// return JSON, are unauthenticated by design (container orchestrators,
-// SWAG upstream health checks, and Uptime Kuma must not need a session),
-// and exist so monitoring can distinguish a live Homestead from the SPA
-// HTML shell that an SPA fallback would otherwise serve (PHA-1706).
 app.get('/api/health', (req, res) => {
   let dbStatus = 'ok';
   try {
@@ -162,28 +261,55 @@ app.get('/api/version', (req, res) => {
 });
 
 // ---- auth ----
+// LAN fallback login (PHA-1574 keeps built-in login working behind
+// SWAG for the local network). Header-trust users never hit this path.
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body || {};
-  const cleanUser = validateUsername(username);
+  const cleanUser = userModel.validateUsername(username);
   const u = db.prepare('SELECT * FROM users WHERE username = ?').get(cleanUser || '');
-  if (!u || !bcrypt.compareSync(password || '', u.pass_hash)) {
+  if (!u || !u.pass_hash || !bcrypt.compareSync(password || '', u.pass_hash)) {
     return res.status(401).json({ error: 'Wrong username or password' });
   }
-  req.session.user = { username: u.username, display: u.display, color: u.color, isAdmin: !!u.is_admin };
+  userModel.touchLastSeen(db, u.id);
+  req.session.user = {
+    username: u.username,
+    display: u.display,
+    color: u.color,
+    isAdmin: !!u.is_admin,
+    authProvider: 'password',
+  };
   res.json({ user: req.session.user });
 });
 app.post('/api/logout', (req, res) => req.session.destroy(() => res.json({ ok: true })));
-// GET /api/logout is intentionally rejected with 405 Method Not Allowed.
-// Logout mutates server state (destroys the session) so it must not be
-// reachable via a safe method — RFC 9110 §9.2.1. Without this guard, the
-// request would otherwise fall through to the /api/* catch-all and (in
-// the v0.0.1 deployment that lacked PHA-1704's catch-all) serve the SPA
-// HTML shell as a 200 OK. That "safe by accident" path becomes a CSRF
-// vector the moment anyone adds a fallback handler that respects the
-// GET verb. Explicit 405 keeps the contract honest regardless of how
-// the surrounding routing layer evolves (PHA-1705).
 app.get('/api/logout', (req, res) => res.status(405).json({ error: 'method_not_allowed', allow: 'POST' }));
-app.get('/api/me', (req, res) => res.json({ user: req.session.user || null }));
+app.get('/api/me', (req, res) => {
+  // Header-trust probe (PHA-1574): when SWAG forwards X-authentik-username,
+  // run provisionOrClaim inline so a header-trust user without a session
+  // cookie yet still sees themselves. Unauthenticated requests return
+  // { user: null } (200) instead of 401 so the SPA can use /api/me as a
+  // "am I signed in?" check on every page load without a redirect.
+  const headerUser = req.get('x-authentik-username');
+  if (headerUser) {
+    const groupsHeader = req.get('x-authentik-groups') || '';
+    let groups = [];
+    if (groupsHeader.startsWith('[')) {
+      try { groups = JSON.parse(groupsHeader); } catch (_) { groups = []; }
+    } else {
+      groups = groupsHeader.split(',').map(s => s.trim()).filter(Boolean);
+    }
+    const u = userModel.provisionOrClaim(db, headerUser, 'header_trust', headerUser, groups);
+    if (!u) return res.json({ user: null });
+    req.session.user = {
+      username: u.username,
+      display: u.display,
+      color: u.color,
+      isAdmin: !!u.is_admin,
+      authProvider: 'header_trust',
+    };
+    return res.json({ user: req.session.user });
+  }
+  res.json({ user: req.session.user || null });
+});
 app.post('/api/password', auth, (req, res) => {
   const { current, next } = req.body || {};
   const u = db.prepare('SELECT * FROM users WHERE username = ?').get(req.session.user.username);
@@ -193,39 +319,54 @@ app.post('/api/password', auth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---- users (admin manages the household) ----
+// ---- users ----
+// GET is open to any authenticated user (assignment pickers need it).
+// The pass_hash never leaves the server.
 app.get('/api/users', auth, (req, res) => {
-  // Authenticated users can see the list (pickers need it). Pass hash never leaves the server.
-  res.json(db.prepare('SELECT id, username, display, color, is_admin FROM users ORDER BY username').all());
+  res.json(db.prepare(`SELECT id, username, display, color, is_admin, avatar_url, preferences,
+      auth_provider, provider_subject, claimed_at, last_seen_at, created_at
+      FROM users ORDER BY username COLLATE NOCASE`).all());
 });
-app.post('/api/users', auth, (req, res) => {
-  const me = getMe(req.session.user.username);
-  const { username, display, password, color } = req.body || {};
-  const cleanUser = validateUsername(username);
-  if (!cleanUser) return res.status(400).json({ error: 'username must be 2-32 chars: a-z, 0-9, _ or -' });
-  if (!display || !display.trim()) return res.status(400).json({ error: 'display name required' });
-  if (!password || password.length < 4) return res.status(400).json({ error: 'password must be at least 4 characters' });
-  if (db.prepare('SELECT id FROM users WHERE username = ?').get(cleanUser)) return res.status(409).json({ error: 'username already taken' });
-  const finalColor = color || nextColor();
-  db.prepare('INSERT INTO users (username, display, pass_hash, color, is_admin) VALUES (?,?,?,?,0)')
-    .run(cleanUser, display.trim(), bcrypt.hashSync(password, 10), finalColor);
-  res.json({ username: cleanUser, display: display.trim(), color: finalColor });
+app.get('/api/users/:username', auth, (req, res) => {
+  const clean = userModel.validateUsername(req.params.username);
+  const u = db.prepare(`SELECT id, username, display, color, is_admin, avatar_url, preferences,
+      auth_provider, provider_subject, claimed_at, last_seen_at, created_at
+      FROM users WHERE username = ?`).get(clean || '');
+  if (!u) return res.status(404).json({ error: 'not found' });
+  res.json(u);
 });
+// Profile-only edit (PHA-1618: no Homestead user CRUD beyond profile
+// fields). Display, color, avatar_url, preferences are user-owned; the
+// caller must be the user themselves or an admin. Identity, groups, and
+// username live in authentik.
 app.put('/api/users/:username', auth, (req, res) => {
-  const me = getMe(req.session.user.username);
-  if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
-  const target = db.prepare('SELECT * FROM users WHERE username = ?').get(req.params.username);
+  const me = userModel.getMe(db, req.session.user.username);
+  const clean = userModel.validateUsername(req.params.username);
+  const target = db.prepare('SELECT * FROM users WHERE username = ?').get(clean || '');
   if (!target) return res.status(404).json({ error: 'not found' });
-  const { display, color } = req.body || {};
-  db.prepare('UPDATE users SET display = COALESCE(?, display), color = COALESCE(?, color) WHERE username = ?')
-    .run(display?.trim() || null, color || null, req.params.username);
+  if (me.username !== target.username && !me.is_admin) {
+    return res.status(403).json({ error: 'admin or self only' });
+  }
+  const { display, color, avatar_url, preferences } = req.body || {};
+  db.prepare(`UPDATE users SET
+      display = COALESCE(?, display),
+      color = COALESCE(?, color),
+      avatar_url = COALESCE(?, avatar_url),
+      preferences = COALESCE(?, preferences),
+      updated_at = datetime('now')
+    WHERE id = ?`).run(
+    display?.trim() || null,
+    color || null,
+    avatar_url || null,
+    preferences ? JSON.stringify(preferences) : null,
+    target.id
+  );
   res.json({ ok: true });
 });
 app.post('/api/users/:username/password', auth, (req, res) => {
-  const me = getMe(req.session.user.username);
+  const me = userModel.getMe(db, req.session.user.username);
   const target = db.prepare('SELECT * FROM users WHERE username = ?').get(req.params.username);
   if (!target) return res.status(404).json({ error: 'not found' });
-  // Self-service: user can change own password with current. Admin can reset without current.
   const { current, next } = req.body || {};
   if (!next || next.length < 4) return res.status(400).json({ error: 'New password too short' });
   if (me.username === target.username) {
@@ -236,37 +377,35 @@ app.post('/api/users/:username/password', auth, (req, res) => {
   db.prepare('UPDATE users SET pass_hash = ? WHERE username = ?').run(bcrypt.hashSync(next, 10), target.username);
   res.json({ ok: true });
 });
-app.delete('/api/users/:username', auth, (req, res) => {
-  const me = getMe(req.session.user.username);
-  if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
-  if (req.params.username === me.username) return res.status(400).json({ error: 'cannot delete yourself' });
-  const target = db.prepare('SELECT id FROM users WHERE username = ?').get(req.params.username);
-  if (!target) return res.status(404).json({ error: 'not found' });
-  // Reassign or null out references
-  db.prepare("UPDATE tasks SET assignee = 'all' WHERE assignee = ?").run(req.params.username);
-  db.prepare("UPDATE tasks SET alt_assignee = NULL WHERE alt_assignee = ?").run(req.params.username);
-  db.prepare("UPDATE events SET owner = 'all' WHERE owner = ?").run(req.params.username);
-  db.prepare("UPDATE services SET owner = 'all' WHERE owner = ?").run(req.params.username);
-  db.prepare('DELETE FROM users WHERE id = ?').run(target.id);
-  res.json({ ok: true });
+
+// ---- groups ----
+// Read-only view (PHA-1618: authentik owns the group lifecycle). The
+// `?mine=1` query param returns just the authenticated user's groups so
+// the frontend can ask "what groups am I in?" without scanning /api/users.
+app.get('/api/groups', auth, (req, res) => {
+  const rows = db.prepare(`SELECT g.id, g.name, g.display_name, g.source_provider, g.synced_at,
+      (SELECT COUNT(*) FROM user_groups ug WHERE ug.group_id = g.id) AS member_count
+      FROM groups g ORDER BY g.name COLLATE NOCASE`).all();
+  if (req.query.mine === '1') {
+    const myGroups = db.prepare(`SELECT g.id, g.name, g.display_name FROM user_groups ug
+      JOIN groups g ON g.id = ug.group_id
+      JOIN users u ON u.id = ug.user_id
+      WHERE u.username = ?
+      ORDER BY g.name COLLATE NOCASE`).all(req.session.user.username);
+    return res.json({ groups: rows, mine: myGroups });
+  }
+  res.json({ groups: rows });
 });
 
 // ---- tasks ----
-function validateAssignee(value, allowAlt) {
-  // 'all' is always valid; otherwise must be an existing username
-  if (value === 'all' || value === null || value === undefined) return true;
-  if (allowAlt && value === null) return true;
-  const u = db.prepare('SELECT id FROM users WHERE username = ?').get(value);
-  return !!u;
-}
 app.get('/api/tasks', auth, (req, res) => {
   res.json(db.prepare('SELECT * FROM tasks ORDER BY done, due_date IS NULL, due_date, id DESC').all());
 });
 app.post('/api/tasks', auth, (req, res) => {
   const { title, notes = '', assignee = 'all', alt_assignee = null, due_date = null, recur = '', rotate = 0 } = req.body || {};
   if (!title) return res.status(400).json({ error: 'title required' });
-  if (!validateAssignee(assignee)) return res.status(400).json({ error: 'unknown assignee' });
-  if (rotate && alt_assignee && !validateAssignee(alt_assignee)) return res.status(400).json({ error: 'unknown alt_assignee' });
+  if (!userModel.validateAssignee(db, assignee)) return res.status(400).json({ error: 'unknown assignee' });
+  if (rotate && alt_assignee && !userModel.validateAssignee(db, alt_assignee)) return res.status(400).json({ error: 'unknown alt_assignee' });
   const alt = rotate && alt_assignee ? alt_assignee : null;
   const r = db.prepare('INSERT INTO tasks (title,notes,assignee,alt_assignee,due_date,recur,rotate,created_by) VALUES (?,?,?,?,?,?,?,?)')
     .run(title, notes, assignee, alt, due_date, recur, rotate ? 1 : 0, req.session.user.username);
@@ -276,8 +415,8 @@ app.put('/api/tasks/:id', auth, (req, res) => {
   const t = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (!t) return res.status(404).json({ error: 'not found' });
   const b = { ...t, ...req.body };
-  if (!validateAssignee(b.assignee)) return res.status(400).json({ error: 'unknown assignee' });
-  if (b.rotate && b.alt_assignee && !validateAssignee(b.alt_assignee)) return res.status(400).json({ error: 'unknown alt_assignee' });
+  if (!userModel.validateAssignee(db, b.assignee)) return res.status(400).json({ error: 'unknown assignee' });
+  if (b.rotate && b.alt_assignee && !userModel.validateAssignee(db, b.alt_assignee)) return res.status(400).json({ error: 'unknown alt_assignee' });
   const alt = b.rotate && b.alt_assignee ? b.alt_assignee : null;
   db.prepare('UPDATE tasks SET title=?,notes=?,assignee=?,alt_assignee=?,due_date=?,recur=?,rotate=? WHERE id=?')
     .run(b.title, b.notes, b.assignee, alt, b.due_date, b.recur, b.rotate ? 1 : 0, t.id);
@@ -325,7 +464,7 @@ app.get('/api/events', auth, (req, res) => {
 app.post('/api/events', auth, (req, res) => {
   const { title, date, time = '', notes = '', owner = 'all' } = req.body || {};
   if (!title || !date) return res.status(400).json({ error: 'title and date required' });
-  if (!validateAssignee(owner)) return res.status(400).json({ error: 'unknown owner' });
+  if (!userModel.validateAssignee(db, owner)) return res.status(400).json({ error: 'unknown owner' });
   const r = db.prepare('INSERT INTO events (title,date,time,notes,owner,created_by) VALUES (?,?,?,?,?,?)')
     .run(title, date, time, notes, owner, req.session.user.username);
   res.json(db.prepare('SELECT * FROM events WHERE id = ?').get(r.lastInsertRowid));
@@ -334,7 +473,7 @@ app.put('/api/events/:id', auth, (req, res) => {
   const e = db.prepare('SELECT * FROM events WHERE id = ?').get(req.params.id);
   if (!e) return res.status(404).json({ error: 'not found' });
   const b = { ...e, ...req.body };
-  if (!validateAssignee(b.owner)) return res.status(400).json({ error: 'unknown owner' });
+  if (!userModel.validateAssignee(db, b.owner)) return res.status(400).json({ error: 'unknown owner' });
   db.prepare('UPDATE events SET title=?,date=?,time=?,notes=?,owner=? WHERE id=?')
     .run(b.title, b.date, b.time, b.notes, b.owner, e.id);
   res.json(db.prepare('SELECT * FROM events WHERE id = ?').get(e.id));
@@ -351,7 +490,7 @@ app.get('/api/services', auth, (req, res) => {
 app.post('/api/services', auth, (req, res) => {
   const { name, url, icon = '🔗', descr = '', owner = 'all', open_mode = 'frame' } = req.body || {};
   if (!name || !url) return res.status(400).json({ error: 'name and url required' });
-  if (!validateAssignee(owner)) return res.status(400).json({ error: 'unknown owner' });
+  if (!userModel.validateAssignee(db, owner)) return res.status(400).json({ error: 'unknown owner' });
   const max = db.prepare('SELECT COALESCE(MAX(sort),0) m FROM services').get().m;
   const r = db.prepare('INSERT INTO services (name,url,icon,descr,sort,owner,open_mode) VALUES (?,?,?,?,?,?,?)')
     .run(name, url, icon, descr, max + 1, owner, open_mode);
@@ -361,7 +500,7 @@ app.put('/api/services/:id', auth, (req, res) => {
   const s = db.prepare('SELECT * FROM services WHERE id = ?').get(req.params.id);
   if (!s) return res.status(404).json({ error: 'not found' });
   const b = { ...s, ...req.body };
-  if (!validateAssignee(b.owner)) return res.status(400).json({ error: 'unknown owner' });
+  if (!userModel.validateAssignee(db, b.owner)) return res.status(400).json({ error: 'unknown owner' });
   db.prepare('UPDATE services SET name=?,url=?,icon=?,descr=?,sort=?,owner=?,open_mode=? WHERE id=?')
     .run(b.name, b.url, b.icon, b.descr, b.sort, b.owner, b.open_mode, s.id);
   res.json(db.prepare('SELECT * FROM services WHERE id = ?').get(s.id));
@@ -371,41 +510,173 @@ app.delete('/api/services/:id', auth, (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- push notifications (PHA-1619) ----
+// Public VAPID public key — fetched by the service worker at startup so
+// it can build a PushSubscription. No auth required: the public key is
+// not sensitive (it's the corresponding private key that authenticates
+// the server against the push service).
+app.get('/api/push/vapid-public-key', (req, res) => {
+  res.json({ publicKey: VAPID.publicKey, subject: VAPID.subject });
+});
+
+// Subscribe the current user's device/browser. The body is the raw
+// PushSubscription JSON from the browser's PushManager — endpoint +
+// keys.p256dh + keys.auth. We dedupe by endpoint so a re-subscribe
+// (e.g. after a key rotation) doesn't create a second row.
+app.post('/api/push/subscribe', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const sub = req.body || {};
+  if (!sub.endpoint || !sub.keys || !sub.keys.p256dh || !sub.keys.auth) {
+    return res.status(400).json({ error: 'invalid_subscription' });
+  }
+  db.prepare(`INSERT INTO push_subscriptions (user_id,endpoint,p256dh,auth)
+              VALUES (?,?,?,?)
+              ON CONFLICT(endpoint) DO UPDATE SET
+                user_id=excluded.user_id,
+                p256dh=excluded.p256dh,
+                auth=excluded.auth,
+                failure_count=0`)
+    .run(me.id, sub.endpoint, sub.keys.p256dh, sub.keys.auth);
+  const row = db.prepare('SELECT id,endpoint,created_at,last_success_at FROM push_subscriptions WHERE endpoint=?').get(sub.endpoint);
+  res.json({ ok: true, subscription: row });
+});
+
+// Unsubscribe by endpoint. Only the owning user (or an admin) can remove.
+app.post('/api/push/unsubscribe', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const endpoint = (req.body || {}).endpoint;
+  if (!endpoint) return res.status(400).json({ error: 'endpoint required' });
+  const target = db.prepare('SELECT user_id FROM push_subscriptions WHERE endpoint=?').get(endpoint);
+  if (!target) return res.json({ ok: true, removed: 0 });
+  if (target.user_id !== me.id && !me.is_admin) return res.status(403).json({ error: 'forbidden' });
+  const r = db.prepare('DELETE FROM push_subscriptions WHERE endpoint=?').run(endpoint);
+  res.json({ ok: true, removed: r.changes });
+});
+
+// Per-user notification prefs — GET returns, PUT replaces the boolean
+// toggles + quiet hours window. Defaults are applied lazily by getPrefs()
+// so a user who has never opened the page still gets sensible behaviour.
+app.get('/api/push/prefs', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  res.json({ prefs: getPrefs(me.id) });
+});
+app.put('/api/push/prefs', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const b = req.body || {};
+  if (b.quiet_start_hour != null && (b.quiet_start_hour < 0 || b.quiet_start_hour > 23))
+    return res.status(400).json({ error: 'quiet_start_hour out of range' });
+  if (b.quiet_end_hour != null && (b.quiet_end_hour < 0 || b.quiet_end_hour > 23))
+    return res.status(400).json({ error: 'quiet_end_hour out of range' });
+  res.json({ prefs: setPrefs(me.id, b) });
+});
+
+// Manual notify endpoint (auth required). Body:
+//   { userId?: <users.id>, username?: <users.username>, payload: {title, body, url, tag, category}, force?: bool }
+// userId wins over username; both default to the caller. force=true bypasses
+// quiet hours (useful for take-turns handoff that lands at 3am). Agents /
+// automation call this through the same primitive (PHA-1617 will too).
+app.post('/api/notify', auth, async (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const body = req.body || {};
+  const payload = body.payload || {};
+  if (!payload.title) return res.status(400).json({ error: 'payload.title required' });
+  let targetUserId = body.userId;
+  if (targetUserId == null && body.username) {
+    const u = db.prepare('SELECT id FROM users WHERE username = ?').get(body.username);
+    if (!u) return res.status(404).json({ error: 'unknown_username' });
+    targetUserId = u.id;
+  }
+  if (targetUserId == null) targetUserId = me.id;
+  const target = db.prepare('SELECT id, username FROM users WHERE id=?').get(targetUserId);
+  if (!target) return res.status(404).json({ error: 'unknown_user' });
+  const result = await notify(target.id, payload, { force: !!body.force });
+  res.json({ userId: target.id, username: target.username, ...result });
+});
+
 // 404 JSON for unknown /api/* paths.
-// Without this, the SPA catch-all below returns the 39KB index.html shell
-// for every unmatched /api/* request — breaking health checks, masking
-// "feature missing" from JS clients, and wasting bandwidth (PHA-1704).
 app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 
 app.use(express.static(path.join(__dirname, 'public')));
-// /robots.txt must be served as a real robots.txt from public/, not fall
-// through to the SPA shell. Without a physical file at public/robots.txt,
-// express.static passes the request to the SPA catch-all below, which
-// returns the 39KB index.html — Cloudflare then wraps that HTML in its
-// content-signal boilerplate and serves it as a 39KB "text/plain"
-// response. Real crawlers (Googlebot, Bingbot, AhrefsBot, ...) parse
-// robots.txt for User-Agent / Disallow / Allow directives; they either
-// ignore the CF boilerplate or treat the file as "no rules = allow
-// everything". For a login-gated household dashboard there is no public
-// content worth indexing, so the file declares a blanket disallow. If
-// you ever want a different policy, just edit public/robots.txt — no
-// code change required (PHA-1708).
-// /favicon.ico serves the same SVG that /icon.svg serves. Browsers
-// auto-request /favicon.ico for every tab; without this handler the SPA
-// catch-all below serves the 39KB index.html as the favicon response —
-// pure waste on every tab load (PHA-1707). The manifest already points
-// at /icon.svg as the icon source of truth, so we reuse the same file
-// with the correct image/svg+xml content-type. Modern browsers accept
-// SVG favicons; legacy browsers fall through to the manifest. Same
-// bytes, same ETag, no redirect overhead.
 app.get('/favicon.ico', (req, res) => {
   res.set('Content-Type', 'image/svg+xml');
   res.set('Cache-Control', 'public, max-age=86400');
   res.sendFile(path.join(__dirname, 'public', 'icon.svg'));
 });
-// SPA fallback: only non-/api paths reach here now. Anything under /api
-// without a matching route handler returns 404 JSON above.
 app.get(/^(?!\/api).*/, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 const PORT = process.env.PORT || 3080;
-app.listen(PORT, () => console.log(`Homestead on :${PORT}`));
+if (require.main === module) {
+  // ---- daily digest scheduler (PHA-1619) ----
+  // Runs once on boot and again every 30 minutes. The scheduler is
+  // cheap: it only fires the actual digest at most once per day per
+  // user, keyed by date + category in notification_log. Take-turns
+  // handoff is checked on the same tick — when a rotating chore's due
+  // date arrives, the current assignee gets a one-shot notification.
+  const SCHED_TICK_MS = 30 * 60 * 1000;
+  function todayKey() { return new Date().toISOString().slice(0, 10); }
+  function alreadySentToday(userId, category) {
+    const row = db.prepare(`SELECT 1 FROM notification_log
+                            WHERE user_id=? AND category=? AND created_at LIKE ? AND delivered=1 LIMIT 1`)
+      .get(userId, category, todayKey() + '%');
+    return !!row;
+  }
+  async function runChoreDigest() {
+    const today = todayKey();
+    const chores = db.prepare(`SELECT * FROM tasks
+                               WHERE done=0 AND assignee NOT IN ('all','rotate')
+                                 AND due_date IS NOT NULL AND due_date <= ?
+                               ORDER BY due_date, id`).all(today);
+    for (const t of chores) {
+      const u = db.prepare('SELECT id, username FROM users WHERE username = ?').get(t.assignee);
+      if (!u) continue;
+      if (alreadySentToday(u.id, 'chore_due')) continue;
+      const overdue = t.due_date < today;
+      const payload = {
+        title: overdue ? `Overdue: ${t.title}` : `Due today: ${t.title}`,
+        body: overdue ? `${t.title} was due ${t.due_date}. Tap to mark done.`
+                      : `${t.title} is on your list today. Tap to mark done.`,
+        url: '/',
+        tag: `chore-due-${t.id}`,
+        category: 'chore_due',
+      };
+      await notify(u.id, payload);
+    }
+  }
+  async function runTakeTurnsDigest() {
+    const today = todayKey();
+    const chores = db.prepare(`SELECT * FROM tasks
+                               WHERE done=0 AND rotate=1 AND assignee NOT IN ('all','rotate')
+                                 AND due_date=?`).all(today);
+    for (const t of chores) {
+      const u = db.prepare('SELECT id, username FROM users WHERE username = ?').get(t.assignee);
+      if (!u) continue;
+      if (alreadySentToday(u.id, 'take_turns')) continue;
+      await notify(u.id, {
+        title: `Your turn: ${t.title}`,
+        body: `${t.title} is up today. Tap to mark done and pass it on.`,
+        url: '/',
+        tag: `take-turns-${t.id}`,
+        category: 'take_turns',
+      });
+    }
+  }
+  let schedulerHandle = null;
+  function startScheduler() {
+    if (schedulerHandle) return;
+    const tick = async () => {
+      try { await runChoreDigest(); } catch (e) { console.error('[scheduler] chore digest:', e.message); }
+      try { await runTakeTurnsDigest(); } catch (e) { console.error('[scheduler] take-turns digest:', e.message); }
+    };
+    setTimeout(tick, 10 * 1000);
+    schedulerHandle = setInterval(tick, SCHED_TICK_MS);
+    console.log('[scheduler] daily digest started; tick=30min');
+  }
+  startScheduler();
+  app.listen(PORT, () => console.log(`Homestead on :${PORT}`));
+}
+module.exports = app;
