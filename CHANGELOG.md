@@ -1,5 +1,48 @@
 # Changelog
 
+## v0.0.4 (2026-08-09)
+
+- **Shared lists primitive (PHA-1621):** first-class lists for the
+  household, replacing the "groceries-as-task" hack. Lists are not
+  tasks: no assignee ceremony, no due dates, check-and-clear
+  semantics, manual ordering, recurring restock.
+
+  - New `lists` table: `(id, name, icon, owner_user_id, visibility,
+    sort, created_by_user_id)`. Visibility is `private` (owner +
+    admin only) or `household` (all authed users).
+  - New `list_items` table: `(id, list_id, text, checked, position,
+    added_by_user_id, checked_by_user_id, checked_at)`. Foreign key
+    on `list_id` with `ON DELETE CASCADE` so deleting a list cleans
+    up its items in a single round-trip.
+  - New `/api/lists` REST surface: full CRUD + the dead-simple
+    `POST /api/lists/:id/items {text}` that Signal / agent / curl
+    hit to add items. Idempotent check / uncheck (no overwrite of
+    `checked_by` on re-check, so the activity feed doesn't get
+    duplicate events from retried webhooks). Drag-reorder via
+    `POST /api/lists/:id/items/reorder {order:[ids]}`. Bulk
+    `POST /api/lists/:id/clear-checked` removes the whole checked
+    bucket.
+  - New **Lists** tab in the nav (Home / Lists / Tasks / Calendar /
+    Apps). List picker view shows list cards with icon + name +
+    item counts. Detail view has a pinned add-input at the top
+    (one-thumb grocery-store flow), tap-to-check items sink to
+    the bottom of the checked bucket with strikethrough, drag
+    handle (⋮⋮) on each item for HTML5 DnD reorder, and a
+    `Clear N checked` button that appears once anything is
+    checked.
+  - First-run seed: Groceries, Costco, Household — the three
+    lists the household actually uses day-to-day. Seeded only
+    when the `lists` table is empty so re-running the container
+    never clobbers user-created lists.
+  - `added_by_user_id` / `checked_by_user_id` are recorded on
+    every write so the activity feed issue (PHA-1622) can read
+    them directly without a join through tasks.
+
+- **Agent integration target:** the curl-only "add milk" path is
+  documented in the new `/api/lists` section above. The
+  household Signal bot wires to this endpoint as its primary
+  add path; no ceremony, just `{listId}` + `{text}`.
+
 ## v0.0.3 (2026-08-04)
 
 - **`/api/health` JSON endpoint (PHA-1706):** returns
