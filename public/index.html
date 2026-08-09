@@ -163,7 +163,53 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 .badge{display:inline-block;font-size:10px;letter-spacing:.06em;text-transform:uppercase;
   background:var(--accent-soft);color:var(--accent);padding:2px 6px;border-radius:6px;font-weight:700}
 
-/* full-screen app shell */
+/* lists */
+.list-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.list-card{background:var(--surface);border-radius:20px;padding:5px;box-shadow:0 6px 24px rgba(0,0,0,.035);
+  text-decoration:none;color:inherit;transition:transform .4s var(--ease);position:relative;cursor:pointer}
+.list-card:active{transform:scale(.96)}
+.list-card-in{border:1px solid var(--line);border-radius:16px;padding:18px 16px}
+.list-card-icon{font-size:30px;line-height:1}
+.list-card-name{font-weight:800;font-size:16px;margin-top:10px;letter-spacing:-.01em}
+.list-card-meta{font-size:12px;color:var(--muted);margin-top:4px;display:flex;align-items:center;gap:6px}
+.list-card-meta .pill{background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:10px;
+  letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:6px}
+@media(min-width:768px){.list-grid{grid-template-columns:repeat(3,1fr)}}
+.list-detail-head{display:flex;align-items:center;gap:10px;padding:6px 4px 14px}
+.list-detail-head .back{width:38px;height:38px;border-radius:12px;border:1px solid var(--line);font-size:18px;flex-shrink:0}
+.list-detail-head h2{flex:1;min-width:0;font-weight:800;font-size:20px;letter-spacing:-.01em;margin:0;
+  display:flex;align-items:center;gap:8px}
+.list-detail-head h2 .licon{font-size:22px;line-height:1}
+.list-detail-head .more{width:38px;height:38px;border-radius:12px;border:1px solid var(--line);font-size:16px;color:var(--muted)}
+.add-bar{display:flex;gap:8px;padding:8px 0 14px;position:sticky;top:0;background:var(--bg);z-index:5}
+.add-bar input{flex:1;padding:13px 16px;border:1px solid var(--line);border-radius:14px;background:var(--surface);
+  outline:none;font-size:15px;min-width:0}
+.add-bar input:focus{border-color:var(--accent)}
+.add-bar button{padding:0 18px;border-radius:14px;background:var(--accent);color:#fff;font-weight:700;font-size:18px;flex-shrink:0}
+.add-bar button:active{transform:scale(.96)}
+.list-items{list-style:none;padding:0;margin:0}
+.li{display:flex;align-items:center;gap:12px;padding:14px 6px;border-bottom:1px solid var(--line);
+  background:var(--surface);transition:opacity .3s var(--ease),transform .3s var(--ease);touch-action:none}
+.li:last-child{border-bottom:none}
+.li .grip{color:var(--muted);font-size:18px;padding:4px 2px;cursor:grab;flex-shrink:0;user-select:none;
+  opacity:.4;touch-action:none}
+.li .grip:active{cursor:grabbing;opacity:1}
+.li .chk{width:28px;height:28px;border-radius:9px;border:2px solid var(--line);flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff;
+  transition:all .35s var(--ease);background:transparent}
+.li.checked .chk{background:var(--u-all);border-color:var(--u-all)}
+.li.checked .li-text{text-decoration:line-through;color:var(--muted)}
+.li-text{flex:1;min-width:0;font-weight:500;font-size:16px;line-height:1.35;word-break:break-word}
+.li-meta{font-size:11px;color:var(--muted);margin-top:3px;display:flex;align-items:center;gap:6px}
+.li .del{color:var(--muted);font-size:18px;padding:6px;opacity:.5;flex-shrink:0}
+.li .del:active{opacity:1;color:#b3453a}
+.li-section{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;
+  padding:14px 6px 6px;display:flex;justify-content:space-between;align-items:center}
+.li-section .clear{color:var(--accent);font-weight:700;font-size:12px;letter-spacing:.04em;text-transform:none;
+  padding:4px 10px;border-radius:8px}
+.li-section .clear:active{background:var(--accent-soft)}
+.li.dragging{opacity:.5;transform:scale(.98)}
+.li.drag-over{box-shadow:inset 0 2px 0 var(--accent)}
 #shell{position:fixed;inset:0;z-index:100;background:#000;display:none}
 #shell.on{display:block}
 #shellFrame{width:100%;height:100dvh;border:none;background:#111}
@@ -228,10 +274,34 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
         <button class="link" id="addSvc">+ Add</button></div>
       <div class="svc-grid" id="svcGrid"></div>
     </div>
+    <div class="page" id="page-lists">
+      <!-- list-of-lists view -->
+      <div id="listsIndexView">
+        <div class="sec" style="display:flex;justify-content:space-between;align-items:center">
+          <span>Shared lists</span>
+          <button class="link" id="addListBtn">+ New list</button>
+        </div>
+        <div class="list-grid" id="listGrid"></div>
+      </div>
+      <!-- single-list detail view -->
+      <div id="listsDetailView" style="display:none">
+        <div class="list-detail-head">
+          <button class="back" id="listBackBtn" aria-label="Back to lists">‹</button>
+          <h2 id="listDetailTitle"><span class="licon" id="listDetailIcon"></span><span id="listDetailName"></span></h2>
+          <button class="more" id="listDetailMore" aria-label="List options">⋯</button>
+        </div>
+        <div class="add-bar">
+          <input id="listAddInput" type="text" placeholder="Add an item…" autocomplete="off" autocorrect="off" spellcheck="false" autocapitalize="sentences">
+          <button id="listAddBtn" aria-label="Add">＋</button>
+        </div>
+        <div id="listItemsHost"></div>
+      </div>
+    </div>
   </main>
   <button id="fab">+</button>
   <nav>
     <button data-p="home" class="on"><span class="ico">🏡</span>Home</button>
+    <button data-p="lists"><span class="ico">📝</span>Lists</button>
     <button data-p="tasks"><span class="ico">✓</span>Tasks</button>
     <button data-p="cal"><span class="ico">📅</span>Calendar</button>
     <button data-p="svc"><span class="ico">🛰️</span>Apps</button>
@@ -248,7 +318,7 @@ const api=async(m,u,b)=>{const r=await fetch(u,{method:m,headers:{'Content-Type'
 
 /* ---- state ---- */
 let ME=null, USERS={};
-let TASKS=[],EVENTS=[],SVCS=[];
+let TASKS=[],EVENTS=[],SVCS=[],LISTS=[];
 let calY,calM,selDate=today();
 
 function today(){const d=new Date();return d.toISOString().slice(0,10)}
@@ -349,8 +419,8 @@ async function boot(user){
   await refresh();
 }
 async function refresh(){
-  [TASKS,EVENTS,SVCS]=await Promise.all([api('GET','/api/tasks'),api('GET','/api/events'),api('GET','/api/services')]);
-  renderHome();renderTasks();renderCal();renderSvcs();
+  [TASKS,EVENTS,SVCS,LISTS]=await Promise.all([api('GET','/api/tasks'),api('GET','/api/events'),api('GET','/api/services'),api('GET','/api/lists')]);
+  renderHome();renderTasks();renderCal();renderSvcs();renderLists();
 }
 
 /* ---- rendering ---- */
@@ -514,6 +584,10 @@ function modePickerHtml(id, sel){
 $('#fab').onclick=()=>{
   if(curPage==='svc')return openSvcSheet();
   if(curPage==='cal')return openEventSheet(null,selDate);
+  if(curPage==='lists'){
+    if(activeListId)return document.getElementById('listAddInput').focus();
+    return openListCreateSheet();
+  }
   if(curPage==='home')return openPicker();
   openTaskSheet();
 };
@@ -732,6 +806,289 @@ function openUserEditSheet(username){
     }catch(e){$('#f-err').textContent=(e&&e.error)||'Failed'}
   };
 }
+
+/* ---- lists (PHA-1621) ---- */
+// Shared-list primitive. Mobile-first: add-input is pinned to the top of
+// the detail view so one thumb can add items while holding a phone in
+// one hand at the grocery store. Items come back already ordered
+// (unchecked by position asc, then checked); tap to toggle check sinks
+// the item to the bottom of the checked bucket. Long-press / drag handle
+// reorders unchecked items; clear-checked is a one-tap action when any
+// checked items exist.
+let activeListId=null; // null when on the lists index view
+
+function renderLists(){
+  // Index view: grid of list cards
+  if(!LISTS.length){
+    $('#listGrid').innerHTML=`<div class="empty"><span>📝</span>No lists yet. Tap “+ New list” to start one.</div>`;
+  } else {
+    $('#listGrid').innerHTML=LISTS.map(l=>{
+      const total=l.items.length;
+      const checked=l.items.filter(i=>i.checked).length;
+      return `<div class="list-card" data-id="${l.id}">
+        <div class="list-card-in">
+          <div class="list-card-icon">${esc(l.icon||'📝')}</div>
+          <div class="list-card-name">${esc(l.name)}</div>
+          <div class="list-card-meta">
+            <span class="pill">${total-checked} to grab</span>
+            ${checked?`<span>· ${checked} checked</span>`:''}
+            ${l.visibility==='private'?`<span>· 🔒</span>`:''}
+          </div>
+        </div></div>`;
+    }).join('');
+    $('#listGrid').querySelectorAll('.list-card').forEach(el=>{
+      el.onclick=()=>openListDetail(parseInt(el.dataset.id,10));
+    });
+  }
+  // Detail view: re-render items if we're inside one
+  if(activeListId){
+    const l=LISTS.find(x=>x.id===activeListId);
+    if(l)renderListDetail(l); else {activeListId=null;showListsIndex()}
+  }
+}
+
+function showListsIndex(){
+  activeListId=null;
+  $('#listsIndexView').style.display='';
+  $('#listsDetailView').style.display='none';
+}
+function openListDetail(id){
+  activeListId=id;
+  $('#listsIndexView').style.display='none';
+  $('#listsDetailView').style.display='';
+  const l=LISTS.find(x=>x.id===id);
+  if(!l)return showListsIndex();
+  $('#listDetailIcon').textContent=l.icon||'📝';
+  $('#listDetailName').textContent=l.name;
+  renderListDetail(l);
+  // Focus the add input on desktop / when keyboard pops. On mobile, the
+  // tap that opened the list should not steal focus — let the user tap
+  // the input explicitly.
+  if(innerWidth>600)setTimeout(()=>$('#listAddInput').focus(),50);
+}
+
+function renderListDetail(l){
+  const items=l.items||[];
+  const unchecked=items.filter(i=>!i.checked);
+  const checked=items.filter(i=>i.checked);
+  const hasChecked=checked.length>0;
+  const me=ME||{username:''};
+  const userLabel=(uid)=>{
+    if(!uid)return'';
+    // Resolve username by user id from cached USERS dict (we only know
+    // usernames on the client; look up via /api/users which is cached).
+    const u=Object.values(USERS).find(x=>String(x.id)===String(uid));
+    return u?u.display:'';
+  };
+  const liRow=(i,draggable)=>{
+    const adder=userLabel(i.added_by_user_id);
+    const checker=userLabel(i.checked_by_user_id);
+    const meta=checker?`checked by ${esc(checker)}`
+      : adder?`added by ${esc(adder)}`
+      :'';
+    return `<li class="li ${i.checked?'checked':''}" data-id="${i.id}" ${draggable?'draggable="true"':''}>
+      <span class="grip" aria-hidden="true">⋮⋮</span>
+      <button class="chk" aria-label="${i.checked?'Uncheck':'Check'}" onclick="toggleListItem(${l.id},${i.id},${!i.checked})">${i.checked?'✓':''}</button>
+      <div class="li-body" style="flex:1;min-width:0">
+        <div class="li-text">${esc(i.text)}</div>
+        ${meta?`<div class="li-meta">${meta}</div>`:''}
+      </div>
+      <button class="del" aria-label="Delete" onclick="delListItem(${l.id},${i.id})">✕</button>
+    </li>`;
+  };
+  const head=(label,action)=>`<div class="li-section"><span>${label}</span>${action||''}</div>`;
+  const clearBtn=hasChecked
+    ?`<button class="clear" onclick="clearCheckedList(${l.id})">Clear ${checked.length} checked</button>`
+    :'';
+  let html='';
+  if(unchecked.length){
+    html+=`<ul class="list-items" id="uncheckedItems">${unchecked.map(i=>liRow(i,true)).join('')}</ul>`;
+  } else if(!hasChecked){
+    html=`<div class="empty"><span>🥕</span>Nothing on this list yet. Add the first thing above.</div>`;
+  }
+  if(hasChecked){
+    html+=head('Checked', clearBtn) +
+      `<ul class="list-items" id="checkedItems">${checked.map(i=>liRow(i,false)).join('')}</ul>`;
+  } else if(unchecked.length){
+    // Show the section header with the clear button so it's discoverable
+    // before the user has any checked items.
+    html+=head('Checked', '');
+  }
+  $('#listItemsHost').innerHTML=html;
+  wireDragReorder();
+}
+
+// ---- list actions ----
+async function toggleListItem(listId,itemId,checked){
+  // Optimistic local flip; the GET response is re-rendered from the
+  // authoritative server response on refresh.
+  const l=LISTS.find(x=>x.id===listId);
+  if(!l)return;
+  const it=l.items.find(i=>i.id===itemId);
+  if(it)it.checked=checked?1:0;
+  renderListDetail(l);
+  renderLists(); // counts in the index card change
+  try{
+    if(checked)await api('POST',`/api/lists/${listId}/items/${itemId}/check`);
+    else await api('POST',`/api/lists/${listId}/items/${itemId}/uncheck`);
+  }catch(e){
+    // Rollback on failure
+    if(it)it.checked=checked?0:1;
+    renderListDetail(l);renderLists();
+    alert((e&&e.error)||'Failed');
+  }
+}
+async function delListItem(listId,itemId){
+  if(!confirm('Delete this item?'))return;
+  const l=LISTS.find(x=>x.id===listId);
+  if(!l)return;
+  l.items=l.items.filter(i=>i.id!==itemId);
+  renderListDetail(l);renderLists();
+  try{await api('DELETE',`/api/lists/${listId}/items/${itemId}`)}
+  catch(e){alert((e&&e.error)||'Failed');await refresh()}
+}
+async function clearCheckedList(listId){
+  if(!confirm('Remove all checked items from this list?'))return;
+  const l=LISTS.find(x=>x.id===listId);
+  if(!l)return;
+  l.items=l.items.filter(i=>!i.checked);
+  renderListDetail(l);renderLists();
+  try{await api('POST',`/api/lists/${listId}/clear-checked`)}
+  catch(e){alert((e&&e.error)||'Failed');await refresh()}
+}
+
+async function addListItem(listId,text){
+  text=(text||'').trim();
+  if(!text)return false;
+  try{
+    const item=await api('POST',`/api/lists/${listId}/items`,{text});
+    const l=LISTS.find(x=>x.id===listId);
+    if(l){l.items.push(item);renderListDetail(l);renderLists()}
+    return true;
+  }catch(e){
+    alert((e&&e.error)||'Failed');
+    return false;
+  }
+}
+
+function openListCreateSheet(){
+  openSheet(`<h2>New list</h2>
+    <div class="row"><input class="field" id="f-icon" value="📝" maxlength="4" style="flex:0 0 70px;text-align:center;font-size:22px">
+    <input class="field" id="f-name" placeholder="List name" autofocus></div>
+    <label>Visibility</label>${userPickerHtml('f-vis','household').replace(/data-v="(household|private)"/g,(m,v)=>`data-v="${v}" class="${v==='private'?'':'sel'}"`)}
+    <button class="btn" style="margin-top:16px" id="f-save">Create</button>`);
+  // Override the visibility picker to use 2 plain buttons (not Everyone+Users)
+  $('#f-vis').innerHTML=`<button type="button" data-v="household" class="sel">🏠 Household</button><button type="button" data-v="private">🔒 Private</button>`;
+  segWire('f-vis');
+  setTimeout(()=>$('#f-name').focus(),80);
+  $('#f-save').onclick=async()=>{
+    const name=$('#f-name').value.trim();
+    if(!name)return;
+    try{
+      const l=await api('POST','/api/lists',{name,icon:$('#f-icon').value||'📝',visibility:segVal('f-vis')||'household'});
+      LISTS.push({...l,items:[]});
+      renderLists();
+      closeSheet();
+      openListDetail(l.id);
+    }catch(e){$('#f-save').textContent=(e&&e.error)||'Failed';setTimeout(()=>$('#f-save').textContent='Create',1500)}
+  };
+}
+function openListEditSheet(listId){
+  const l=LISTS.find(x=>x.id===listId);
+  if(!l)return;
+  openSheet(`<h2>List settings</h2>
+    <div class="row"><input class="field" id="f-icon" value="${esc(l.icon||'📝')}" maxlength="4" style="flex:0 0 70px;text-align:center;font-size:22px">
+    <input class="field" id="f-name" value="${esc(l.name)}"></div>
+    <label>Visibility</label><div class="seg" id="f-vis"><button type="button" data-v="household" class="${l.visibility==='household'?'sel':''}">🏠 Household</button><button type="button" data-v="private" class="${l.visibility==='private'?'sel':''}">🔒 Private</button></div>
+    <button class="btn" style="margin-top:16px" id="f-save">Save</button>
+    <button class="link danger" style="margin-top:14px;width:100%" id="f-del">Delete list</button>`);
+  segWire('f-vis');
+  $('#f-save').onclick=async()=>{
+    try{
+      const body={name:$('#f-name').value.trim(),icon:$('#f-icon').value||'📝',visibility:segVal('f-vis')||'household'};
+      if(!body.name)return;
+      const updated=await api('PUT',`/api/lists/${listId}`,body);
+      Object.assign(l,updated);
+      $('#listDetailIcon').textContent=l.icon||'📝';
+      $('#listDetailName').textContent=l.name;
+      renderLists();
+      closeSheet();
+    }catch(e){alert((e&&e.error)||'Failed')}
+  };
+  $('#f-del').onclick=async()=>{
+    if(!confirm(`Delete list "${l.name}" and all its items?`))return;
+    try{
+      await api('DELETE',`/api/lists/${listId}`);
+      LISTS=LISTS.filter(x=>x.id!==listId);
+      closeSheet();showListsIndex();renderLists();
+    }catch(e){alert((e&&e.error)||'Failed')}
+  };
+}
+
+// ---- drag-to-reorder (HTML5 DnD, mobile-friendly via touch-action:none on .li) ----
+let dragSrcId=null;
+function wireDragReorder(){
+  const host=document.getElementById('uncheckedItems');
+  if(!host)return;
+  host.querySelectorAll('.li').forEach(li=>{
+    li.addEventListener('dragstart',e=>{
+      dragSrcId=parseInt(li.dataset.id,10);
+      li.classList.add('dragging');
+      e.dataTransfer.effectAllowed='move';
+      // Firefox needs data to actually start a drag
+      try{e.dataTransfer.setData('text/plain',String(dragSrcId))}catch{}
+    });
+    li.addEventListener('dragend',()=>{
+      li.classList.remove('dragging');
+      host.querySelectorAll('.li').forEach(x=>x.classList.remove('drag-over'));
+    });
+    li.addEventListener('dragover',e=>{e.preventDefault();li.classList.add('drag-over')});
+    li.addEventListener('dragleave',()=>li.classList.remove('drag-over'));
+    li.addEventListener('drop',async e=>{
+      e.preventDefault();
+      li.classList.remove('drag-over');
+      const dstId=parseInt(li.dataset.id,10);
+      if(!dragSrcId||dragSrcId===dstId)return;
+      const listId=activeListId;
+      const l=LISTS.find(x=>x.id===listId);
+      if(!l)return;
+      // Reorder client-side
+      const items=l.items.slice().sort((a,b)=>(a.checked-b.checked)||(a.position-b.position));
+      const uchk=items.filter(i=>!i.checked);
+      const srcIdx=uchk.findIndex(i=>i.id===dragSrcId);
+      const dstIdx=uchk.findIndex(i=>i.id===dstId);
+      if(srcIdx<0||dstIdx<0)return;
+      const [moved]=uchk.splice(srcIdx,1);
+      uchk.splice(dstIdx,0,moved);
+      // Rebuild full items with new positions for unchecked, keep checked positions
+      let p=1;
+      const merged=[];
+      uchk.forEach(i=>{merged.push({...i,position:p++})});
+      items.filter(i=>i.checked).forEach(i=>merged.push(i));
+      l.items=merged;
+      renderListDetail(l);
+      // Persist
+      try{await api('POST',`/api/lists/${listId}/items/reorder`,{order:uchk.map(i=>i.id)})}
+      catch(e){alert((e&&e.error)||'Reorder failed');await refresh()}
+    });
+  });
+}
+
+// ---- wiring ----
+$('#addListBtn').onclick=()=>openListCreateSheet();
+$('#listBackBtn').onclick=()=>showListsIndex();
+$('#listDetailMore').onclick=()=>{if(activeListId)openListEditSheet(activeListId)};
+$('#listAddBtn').onclick=()=>{
+  const inp=$('#listAddInput');
+  if(addListItem(activeListId,inp.value))inp.value='';
+};
+$('#listAddInput').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    e.preventDefault();
+    const inp=e.currentTarget;
+    if(addListItem(activeListId,inp.value))inp.value='';
+  }
+});
 
 /* ---- init ---- */
 api('GET','/api/me').then(r=>{if(r.user)boot(r.user)});
