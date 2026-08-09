@@ -20,6 +20,7 @@ WORKDIR /app
 # the container fails with SQLITE_CANTOPEN on boot. Root inside a single-
 # purpose app container with no exposed shell is fine for this use case.
 COPY --from=deps /app/node_modules ./node_modules
+COPY package.json ./
 COPY server.js ./
 COPY public ./public
 ENV DATA_DIR=/data PORT=3080 NODE_ENV=production
