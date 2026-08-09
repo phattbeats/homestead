@@ -28,6 +28,7 @@ const bcrypt = require('bcryptjs');
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const webpush = require('web-push');
 
 const userModel = require('./lib/user-model');
 
@@ -35,6 +36,45 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const db = new Database(path.join(DATA_DIR, 'life.db'));
 userModel.migrate(db);
+
+// v0.1.0: web push subscriptions (PHA-1619)
+db.exec(`
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint TEXT UNIQUE NOT NULL,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  last_success_at TEXT,
+  last_failure_at TEXT,
+  failure_count INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id);
+-- v0.1.0: per-user notification preferences (PHA-1619)
+CREATE TABLE IF NOT EXISTS notification_prefs (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  quiet_start_hour INTEGER NOT NULL DEFAULT 21,
+  quiet_end_hour INTEGER NOT NULL DEFAULT 8,
+  chore_due INTEGER NOT NULL DEFAULT 1,
+  take_turns INTEGER NOT NULL DEFAULT 1,
+  system INTEGER NOT NULL DEFAULT 1
+);
+-- v0.1.0: notification delivery log (PHA-1619)
+CREATE TABLE IF NOT EXISTS notification_log (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  category TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT,
+  url TEXT,
+  tag TEXT,
+  delivered INTEGER NOT NULL DEFAULT 0,
+  skipped_reason TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_notification_log_user ON notification_log(user_id, created_at DESC);
+`);
 
 const app = express();
 app.set('trust proxy', 1);
@@ -80,6 +120,119 @@ function authenticate(req, res, next) {
 }
 // Legacy alias used by route definitions below.
 const auth = authenticate;
+
+// ---- VAPID keypair (PHA-1619) ----
+// Generated once on first startup, persisted to DATA_DIR/vapid.json.
+// The public key is exposed via /api/push/vapid-public-key so the service
+// worker can subscribe. The private key stays on the server and is loaded
+// into web-push once at boot. If the file is missing or unreadable, a fresh
+// keypair is generated. Rotating keys invalidates every existing push
+// subscription (browsers will get 410 Gone on next push), so rotation
+// requires either a forced re-subscribe from every client or a graceful
+// migration window.
+const VAPID_PATH = path.join(DATA_DIR, 'vapid.json');
+function loadOrCreateVapid() {
+  try {
+    if (fs.existsSync(VAPID_PATH)) {
+      const j = JSON.parse(fs.readFileSync(VAPID_PATH, 'utf8'));
+      if (j && j.publicKey && j.privateKey) return j;
+    }
+  } catch (err) {
+    console.warn('[vapid] existing key unreadable, regenerating:', err.message);
+  }
+  const keys = webpush.generateVAPIDKeys();
+  const payload = { ...keys, subject: 'mailto:admin@homestead.local', createdAt: new Date().toISOString() };
+  fs.writeFileSync(VAPID_PATH, JSON.stringify(payload, null, 2), { mode: 0o600 });
+  console.log('[vapid] generated new keypair at', VAPID_PATH);
+  return payload;
+}
+const VAPID = loadOrCreateVapid();
+webpush.setVapidDetails(VAPID.subject, VAPID.publicKey, VAPID.privateKey);
+
+// ---- notification helpers (PHA-1619) ----
+// notify(userId, {title, body, url, tag, category}) is the single delivery
+// primitive. category drives per-user preferences (chore_due, take_turns,
+// system) and quiet-hours enforcement. Returns { delivered, skipped, errors }.
+function getPrefs(userId) {
+  const row = db.prepare('SELECT * FROM notification_prefs WHERE user_id = ?').get(userId);
+  if (row) return row;
+  db.prepare('INSERT INTO notification_prefs (user_id) VALUES (?)').run(userId);
+  return db.prepare('SELECT * FROM notification_prefs WHERE user_id = ?').get(userId);
+}
+function setPrefs(userId, patch) {
+  const cur = getPrefs(userId);
+  const next = {
+    quiet_start_hour: Number.isInteger(patch.quiet_start_hour) ? patch.quiet_start_hour : cur.quiet_start_hour,
+    quiet_end_hour: Number.isInteger(patch.quiet_end_hour) ? patch.quiet_end_hour : cur.quiet_end_hour,
+    chore_due: patch.chore_due === undefined ? cur.chore_due : (patch.chore_due ? 1 : 0),
+    take_turns: patch.take_turns === undefined ? cur.take_turns : (patch.take_turns ? 1 : 0),
+    system: patch.system === undefined ? cur.system : (patch.system ? 1 : 0),
+  };
+  db.prepare(`UPDATE notification_prefs
+              SET quiet_start_hour=?, quiet_end_hour=?, chore_due=?, take_turns=?, system=?
+              WHERE user_id=?`)
+    .run(next.quiet_start_hour, next.quiet_end_hour, next.chore_due, next.take_turns, next.system, userId);
+  return next;
+}
+function isInQuietHours(prefs, now) {
+  const h = now.getHours();
+  const s = prefs.quiet_start_hour, e = prefs.quiet_end_hour;
+  if (s === e) return false;
+  if (s < e) return h >= s && h < e;
+  return h >= s || h < e;
+}
+function logNotification(userId, category, payload, delivered, skippedReason) {
+  db.prepare(`INSERT INTO notification_log (user_id,category,title,body,url,tag,delivered,skipped_reason)
+              VALUES (?,?,?,?,?,?,?,?)`)
+    .run(userId || null, category || 'system', payload.title || '', payload.body || '',
+         payload.url || '', payload.tag || '', delivered ? 1 : 0, skippedReason || null);
+}
+async function notify(userId, payload, opts = {}) {
+  const category = payload.category || opts.category || 'system';
+  const prefs = getPrefs(userId);
+  if (prefs[category] === 0) {
+    logNotification(userId, category, payload, 0, 'category_disabled');
+    return { delivered: 0, skipped: 1, errors: 0, reason: 'category_disabled' };
+  }
+  const now = new Date();
+  const force = opts.force === true;
+  if (!force && isInQuietHours(prefs, now)) {
+    logNotification(userId, category, payload, 0, 'quiet_hours');
+    return { delivered: 0, skipped: 1, errors: 0, reason: 'quiet_hours' };
+  }
+  const subs = db.prepare('SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?').all(userId);
+  if (!subs.length) {
+    logNotification(userId, category, payload, 0, 'no_subscription');
+    return { delivered: 0, skipped: 0, errors: 0, reason: 'no_subscription' };
+  }
+  const json = JSON.stringify({
+    title: payload.title || '',
+    body: payload.body || '',
+    url: payload.url || '/',
+    tag: payload.tag || category,
+    icon: '/icon.svg',
+    badge: '/icon.svg',
+    category,
+  });
+  let delivered = 0, errors = 0;
+  for (const s of subs) {
+    try {
+      await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, json, { TTL: 60 * 60 * 24 });
+      db.prepare('UPDATE push_subscriptions SET last_success_at=datetime(\'now\'), failure_count=0 WHERE id=?').run(s.id);
+      delivered++;
+    } catch (err) {
+      errors++;
+      const status = err.statusCode || 0;
+      if (status === 404 || status === 410) {
+        db.prepare('DELETE FROM push_subscriptions WHERE id=?').run(s.id);
+      } else {
+        db.prepare('UPDATE push_subscriptions SET last_failure_at=datetime(\'now\'), failure_count=failure_count+1 WHERE id=?').run(s.id);
+      }
+    }
+  }
+  logNotification(userId, category, payload, delivered, delivered === 0 && errors > 0 ? 'all_endpoints_failed' : null);
+  return { delivered, skipped: 0, errors };
+}
 
 const PROCESS_STARTED_AT_MS = Date.now();
 const PKG_VERSION = require('./package.json').version;
@@ -357,6 +510,94 @@ app.delete('/api/services/:id', auth, (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- push notifications (PHA-1619) ----
+// Public VAPID public key — fetched by the service worker at startup so
+// it can build a PushSubscription. No auth required: the public key is
+// not sensitive (it's the corresponding private key that authenticates
+// the server against the push service).
+app.get('/api/push/vapid-public-key', (req, res) => {
+  res.json({ publicKey: VAPID.publicKey, subject: VAPID.subject });
+});
+
+// Subscribe the current user's device/browser. The body is the raw
+// PushSubscription JSON from the browser's PushManager — endpoint +
+// keys.p256dh + keys.auth. We dedupe by endpoint so a re-subscribe
+// (e.g. after a key rotation) doesn't create a second row.
+app.post('/api/push/subscribe', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const sub = req.body || {};
+  if (!sub.endpoint || !sub.keys || !sub.keys.p256dh || !sub.keys.auth) {
+    return res.status(400).json({ error: 'invalid_subscription' });
+  }
+  db.prepare(`INSERT INTO push_subscriptions (user_id,endpoint,p256dh,auth)
+              VALUES (?,?,?,?)
+              ON CONFLICT(endpoint) DO UPDATE SET
+                user_id=excluded.user_id,
+                p256dh=excluded.p256dh,
+                auth=excluded.auth,
+                failure_count=0`)
+    .run(me.id, sub.endpoint, sub.keys.p256dh, sub.keys.auth);
+  const row = db.prepare('SELECT id,endpoint,created_at,last_success_at FROM push_subscriptions WHERE endpoint=?').get(sub.endpoint);
+  res.json({ ok: true, subscription: row });
+});
+
+// Unsubscribe by endpoint. Only the owning user (or an admin) can remove.
+app.post('/api/push/unsubscribe', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const endpoint = (req.body || {}).endpoint;
+  if (!endpoint) return res.status(400).json({ error: 'endpoint required' });
+  const target = db.prepare('SELECT user_id FROM push_subscriptions WHERE endpoint=?').get(endpoint);
+  if (!target) return res.json({ ok: true, removed: 0 });
+  if (target.user_id !== me.id && !me.is_admin) return res.status(403).json({ error: 'forbidden' });
+  const r = db.prepare('DELETE FROM push_subscriptions WHERE endpoint=?').run(endpoint);
+  res.json({ ok: true, removed: r.changes });
+});
+
+// Per-user notification prefs — GET returns, PUT replaces the boolean
+// toggles + quiet hours window. Defaults are applied lazily by getPrefs()
+// so a user who has never opened the page still gets sensible behaviour.
+app.get('/api/push/prefs', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  res.json({ prefs: getPrefs(me.id) });
+});
+app.put('/api/push/prefs', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const b = req.body || {};
+  if (b.quiet_start_hour != null && (b.quiet_start_hour < 0 || b.quiet_start_hour > 23))
+    return res.status(400).json({ error: 'quiet_start_hour out of range' });
+  if (b.quiet_end_hour != null && (b.quiet_end_hour < 0 || b.quiet_end_hour > 23))
+    return res.status(400).json({ error: 'quiet_end_hour out of range' });
+  res.json({ prefs: setPrefs(me.id, b) });
+});
+
+// Manual notify endpoint (auth required). Body:
+//   { userId?: <users.id>, username?: <users.username>, payload: {title, body, url, tag, category}, force?: bool }
+// userId wins over username; both default to the caller. force=true bypasses
+// quiet hours (useful for take-turns handoff that lands at 3am). Agents /
+// automation call this through the same primitive (PHA-1617 will too).
+app.post('/api/notify', auth, async (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const body = req.body || {};
+  const payload = body.payload || {};
+  if (!payload.title) return res.status(400).json({ error: 'payload.title required' });
+  let targetUserId = body.userId;
+  if (targetUserId == null && body.username) {
+    const u = db.prepare('SELECT id FROM users WHERE username = ?').get(body.username);
+    if (!u) return res.status(404).json({ error: 'unknown_username' });
+    targetUserId = u.id;
+  }
+  if (targetUserId == null) targetUserId = me.id;
+  const target = db.prepare('SELECT id, username FROM users WHERE id=?').get(targetUserId);
+  if (!target) return res.status(404).json({ error: 'unknown_user' });
+  const result = await notify(target.id, payload, { force: !!body.force });
+  res.json({ userId: target.id, username: target.username, ...result });
+});
+
 // 404 JSON for unknown /api/* paths.
 app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 
@@ -370,6 +611,72 @@ app.get(/^(?!\/api).*/, (req, res) => res.sendFile(path.join(__dirname, 'public'
 
 const PORT = process.env.PORT || 3080;
 if (require.main === module) {
+  // ---- daily digest scheduler (PHA-1619) ----
+  // Runs once on boot and again every 30 minutes. The scheduler is
+  // cheap: it only fires the actual digest at most once per day per
+  // user, keyed by date + category in notification_log. Take-turns
+  // handoff is checked on the same tick — when a rotating chore's due
+  // date arrives, the current assignee gets a one-shot notification.
+  const SCHED_TICK_MS = 30 * 60 * 1000;
+  function todayKey() { return new Date().toISOString().slice(0, 10); }
+  function alreadySentToday(userId, category) {
+    const row = db.prepare(`SELECT 1 FROM notification_log
+                            WHERE user_id=? AND category=? AND created_at LIKE ? AND delivered=1 LIMIT 1`)
+      .get(userId, category, todayKey() + '%');
+    return !!row;
+  }
+  async function runChoreDigest() {
+    const today = todayKey();
+    const chores = db.prepare(`SELECT * FROM tasks
+                               WHERE done=0 AND assignee NOT IN ('all','rotate')
+                                 AND due_date IS NOT NULL AND due_date <= ?
+                               ORDER BY due_date, id`).all(today);
+    for (const t of chores) {
+      const u = db.prepare('SELECT id, username FROM users WHERE username = ?').get(t.assignee);
+      if (!u) continue;
+      if (alreadySentToday(u.id, 'chore_due')) continue;
+      const overdue = t.due_date < today;
+      const payload = {
+        title: overdue ? `Overdue: ${t.title}` : `Due today: ${t.title}`,
+        body: overdue ? `${t.title} was due ${t.due_date}. Tap to mark done.`
+                      : `${t.title} is on your list today. Tap to mark done.`,
+        url: '/',
+        tag: `chore-due-${t.id}`,
+        category: 'chore_due',
+      };
+      await notify(u.id, payload);
+    }
+  }
+  async function runTakeTurnsDigest() {
+    const today = todayKey();
+    const chores = db.prepare(`SELECT * FROM tasks
+                               WHERE done=0 AND rotate=1 AND assignee NOT IN ('all','rotate')
+                                 AND due_date=?`).all(today);
+    for (const t of chores) {
+      const u = db.prepare('SELECT id, username FROM users WHERE username = ?').get(t.assignee);
+      if (!u) continue;
+      if (alreadySentToday(u.id, 'take_turns')) continue;
+      await notify(u.id, {
+        title: `Your turn: ${t.title}`,
+        body: `${t.title} is up today. Tap to mark done and pass it on.`,
+        url: '/',
+        tag: `take-turns-${t.id}`,
+        category: 'take_turns',
+      });
+    }
+  }
+  let schedulerHandle = null;
+  function startScheduler() {
+    if (schedulerHandle) return;
+    const tick = async () => {
+      try { await runChoreDigest(); } catch (e) { console.error('[scheduler] chore digest:', e.message); }
+      try { await runTakeTurnsDigest(); } catch (e) { console.error('[scheduler] take-turns digest:', e.message); }
+    };
+    setTimeout(tick, 10 * 1000);
+    schedulerHandle = setInterval(tick, SCHED_TICK_MS);
+    console.log('[scheduler] daily digest started; tick=30min');
+  }
+  startScheduler();
   app.listen(PORT, () => console.log(`Homestead on :${PORT}`));
 }
 module.exports = app;

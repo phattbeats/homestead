@@ -1,5 +1,45 @@
 # Changelog
 
+## v0.1.0 (2026-08-09) — PHA-1619
+
+- **Web push notifications.** Standard VAPID-based push (no Firebase),
+  with a per-user subscription store and a server-side `notify(userId,
+  payload)` primitive that downstream features (PHA-1617 events
+  webhook, future agent handoffs) can build on. Surface area:
+  - `GET /api/push/vapid-public-key` (public): returns the server's
+    VAPID public key so the service worker can subscribe.
+  - `POST /api/push/subscribe` (auth): idempotent — re-subscribing the
+    same endpoint resets its failure counter.
+  - `POST /api/push/unsubscribe` (auth): removes by endpoint.
+  - `GET /api/push/prefs` / `PUT /api/push/prefs` (auth): per-user
+    quiet hours (default 21:00–08:00) and three category toggles
+    (`chore_due`, `take_turns`, `system`).
+  - `POST /api/notify` (auth): `{ userId | username, payload, force }`
+    — `force` bypasses quiet hours for urgent agent-driven handoffs.
+  - Subscriptions returning 404/410 from the push service are pruned
+    on the failed send; other failures increment `failure_count`.
+  - Daily digest: server-side scheduler on a 30-minute tick, idempotent
+    via a per-user/per-category `notification_log` dedupe.
+- **Schema additions.** New tables `push_subscriptions`,
+  `notification_prefs`, `notification_log` — all keyed to
+  `users.id` (the stable PK), so the future PHA-1618 user-model
+  migration is a no-op for these tables.
+- **Frontend.** Avatar menu gains an "Enable push notifications"
+  button + per-user prefs editor (quiet hours + category toggles).
+  Auto-resubscribes on login if the browser already has a granted
+  permission, so a returning user on a new device does not have to
+  click "Enable" again.
+- **Service worker (`public/sw.js`).** Adds `push` and
+  `notificationclick` handlers. Click focuses an existing Homestead tab
+  or opens a new one; rotating-chore handoffs are sticky
+  (`requireInteraction: true`).
+- **VAPID keypair** generated on first boot, persisted to
+  `DATA_DIR/vapid.json` (mode 0600), loaded into `web-push` at
+  startup. Rotation invalidates every existing subscription (browsers
+  will see 410 Gone on next push) — keep the file across restarts.
+- **README** updated with push-notification setup, iOS 16.4+ install
+  requirements, and a curl-based smoke test against `/api/notify`.
+
 ## v0.0.5 (2026-08-09)
 
 - **PHA-1618: generalized user model — `users` is now a profile cache, not a directory of record.**
