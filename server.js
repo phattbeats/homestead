@@ -406,6 +406,215 @@ app.delete('/api/services/:id', auth, (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- lists ----
+// Shared lists primitive (PHA-1621). Different from tasks: no assignee
+// ceremony, no due dates, check-and-clear semantics, manual ordering,
+// recurring restock. The "add milk to the grocery list" flow is the
+// highest-frequency touch surface the app has — Signal / agent / curl
+// all hit POST /api/lists/:id/items {text} as the dead-simple add path.
+// Items are returned ordered: unchecked first (by position, oldest at
+// top), then checked (most recently checked at bottom). The UI relies
+// on this ordering so tap-to-check can immediately re-sort with the
+// checked item sliding to the bottom of its bucket.
+function getMyUserId() {
+  return db.prepare('SELECT id FROM users WHERE username = ?').get(req_session_user_username()).id;
+}
+function req_session_user_username() {
+  // Tiny helper to keep call-sites readable; the auth middleware guarantees
+  // req.session.user is set for everything past the middleware.
+  return req.session.user.username;
+}
+// The above indirection exists because the inline () => req.session.user.username
+// pattern would close over the wrong `req` under async reorder. JavaScript.
+function _myId() {
+  return db.prepare('SELECT id FROM users WHERE username = ?').get(req.session.user.username).id;
+}
+function _listCanSee(list, meId, meIsAdmin) {
+  if (!list) return false;
+  if (list.visibility === 'household') return true;
+  if (meIsAdmin) return true;
+  return list.owner_user_id === meId;
+}
+function _listCanEdit(list, meId, meIsAdmin) {
+  // Anyone with read access can add items / toggle checks — lists are
+  // collaborative, not single-owner. Only admin or the original creator
+  // can rename, change visibility, or delete the list itself.
+  if (!list) return false;
+  if (meIsAdmin) return true;
+  return list.created_by_user_id === meId;
+}
+
+app.get('/api/lists', auth, (req, res) => {
+  const me = getMe(req.session.user.username);
+  const meId = me.id;
+  const meIsAdmin = !!me.is_admin;
+  // Return lists the user can see, with their items embedded. Visibility
+  // is enforced here, not in a JOIN, so a private list with no items
+  // doesn't leak via an empty row.
+  const lists = db.prepare('SELECT * FROM lists ORDER BY sort, id').all()
+    .filter(l => _listCanSee(l, meId, meIsAdmin));
+  const itemsStmt = db.prepare('SELECT * FROM list_items WHERE list_id = ? ORDER BY checked, position, id');
+  const out = lists.map(l => ({ ...l, items: itemsStmt.all(l.id) }));
+  res.json(out);
+});
+
+app.get('/api/lists/:id', auth, (req, res) => {
+  const me = getMe(req.session.user.username);
+  const list = db.prepare('SELECT * FROM lists WHERE id = ?').get(req.params.id);
+  if (!_listCanSee(list, me.id, !!me.is_admin)) return res.status(404).json({ error: 'not_found' });
+  const items = db.prepare('SELECT * FROM list_items WHERE list_id = ? ORDER BY checked, position, id').all(list.id);
+  res.json({ ...list, items });
+});
+
+app.post('/api/lists', auth, (req, res) => {
+  const me = getMe(req.session.user.username);
+  const { name, icon = '📝', visibility = 'household' } = req.body || {};
+  if (!name || !name.trim()) return res.status(400).json({ error: 'name required' });
+  if (!['private', 'household'].includes(visibility)) return res.status(400).json({ error: 'invalid visibility' });
+  const max = db.prepare('SELECT COALESCE(MAX(sort),0) m FROM lists').get().m;
+  const r = db.prepare('INSERT INTO lists (name, icon, owner_user_id, visibility, sort, created_by_user_id) VALUES (?,?,?,?,?,?)')
+    .run(name.trim().slice(0, 80), icon, visibility === 'private' ? me.id : null, visibility, max + 1, me.id);
+  res.json(db.prepare('SELECT * FROM lists WHERE id = ?').get(r.lastInsertRowid));
+});
+
+app.put('/api/lists/:id', auth, (req, res) => {
+  const me = getMe(req.session.user.username);
+  const list = db.prepare('SELECT * FROM lists WHERE id = ?').get(req.params.id);
+  if (!list) return res.status(404).json({ error: 'not found' });
+  if (!_listCanEdit(list, me.id, !!me.is_admin)) return res.status(403).json({ error: 'forbidden' });
+  const b = { ...list, ...req.body };
+  if (b.name !== undefined) {
+    if (!b.name || !b.name.trim()) return res.status(400).json({ error: 'name required' });
+    b.name = b.name.trim().slice(0, 80);
+  }
+  if (b.visibility !== undefined && !['private', 'household'].includes(b.visibility)) {
+    return res.status(400).json({ error: 'invalid visibility' });
+  }
+  if (b.visibility === 'private' && !list.owner_user_id) b.owner_user_id = me.id;
+  db.prepare('UPDATE lists SET name=?, icon=?, visibility=?, owner_user_id=? WHERE id=?')
+    .run(b.name, b.icon ?? list.icon, b.visibility ?? list.visibility, b.owner_user_id ?? list.owner_user_id, list.id);
+  res.json(db.prepare('SELECT * FROM lists WHERE id = ?').get(list.id));
+});
+
+app.delete('/api/lists/:id', auth, (req, res) => {
+  const me = getMe(req.session.user.username);
+  const list = db.prepare('SELECT * FROM lists WHERE id = ?').get(req.params.id);
+  if (!list) return res.status(404).json({ error: 'not found' });
+  if (!_listCanEdit(list, me.id, !!me.is_admin)) return res.status(403).json({ error: 'forbidden' });
+  // ON DELETE CASCADE on list_items.list_id handles item cleanup.
+  db.prepare('DELETE FROM lists WHERE id = ?').run(list.id);
+  res.json({ ok: true });
+});
+
+// Items ------------------------------------------------------------------
+
+function _bumpPosition(listId) {
+  // New items get MAX(position)+1 in their list so insertion order is
+  // preserved within the (unchecked, position) sort tuple. Checked items
+  // don't get a new position — they keep their original position so the
+  // 'checked bucket' stays in check-order at the bottom.
+  const r = db.prepare('SELECT COALESCE(MAX(position),0) m FROM list_items WHERE list_id = ?').get(listId);
+  return r.m + 1;
+}
+
+app.post('/api/lists/:id/items', auth, (req, res) => {
+  const me = getMe(req.session.user.username);
+  const list = db.prepare('SELECT * FROM lists WHERE id = ?').get(req.params.id);
+  if (!_listCanSee(list, me.id, !!me.is_admin)) return res.status(404).json({ error: 'not_found' });
+  const text = (req.body && req.body.text || '').trim();
+  if (!text) return res.status(400).json({ error: 'text required' });
+  const r = db.prepare('INSERT INTO list_items (list_id, text, position, added_by_user_id) VALUES (?,?,?,?)')
+    .run(list.id, text.slice(0, 500), _bumpPosition(list.id), me.id);
+  res.json(db.prepare('SELECT * FROM list_items WHERE id = ?').get(r.lastInsertRowid));
+});
+
+app.put('/api/lists/:id/items/:itemId', auth, (req, res) => {
+  const me = getMe(req.session.user.username);
+  const list = db.prepare('SELECT * FROM lists WHERE id = ?').get(req.params.id);
+  if (!_listCanSee(list, me.id, !!me.is_admin)) return res.status(404).json({ error: 'not_found' });
+  const item = db.prepare('SELECT * FROM list_items WHERE id = ? AND list_id = ?').get(req.params.itemId, list.id);
+  if (!item) return res.status(404).json({ error: 'not found' });
+  const b = { ...item, ...req.body };
+  if (b.text !== undefined) {
+    if (!b.text || !b.text.trim()) return res.status(400).json({ error: 'text required' });
+    b.text = b.text.trim().slice(0, 500);
+  }
+  db.prepare('UPDATE list_items SET text=? WHERE id=?').run(b.text, item.id);
+  res.json(db.prepare('SELECT * FROM list_items WHERE id = ?').get(item.id));
+});
+
+app.delete('/api/lists/:id/items/:itemId', auth, (req, res) => {
+  const me = getMe(req.session.user.username);
+  const list = db.prepare('SELECT * FROM lists WHERE id = ?').get(req.params.id);
+  if (!_listCanSee(list, me.id, !!me.is_admin)) return res.status(404).json({ error: 'not_found' });
+  const item = db.prepare('SELECT * FROM list_items WHERE id = ? AND list_id = ?').get(req.params.itemId, list.id);
+  if (!item) return res.status(404).json({ error: 'not found' });
+  db.prepare('DELETE FROM list_items WHERE id = ?').run(item.id);
+  res.json({ ok: true });
+});
+
+// Idempotent check / uncheck — Signal / curl can retry without toggling
+// back. The check endpoint records checked_by + checked_at once and
+// leaves them alone on subsequent calls (no overwrite). This matters
+// because the activity feed (PHA-1622) will read checked_by as "who
+// grabbed this off the list", and we don't want a duplicate webhook
+// from a retried POST to record a fresh "check" event.
+app.post('/api/lists/:id/items/:itemId/check', auth, (req, res) => {
+  const me = getMe(req.session.user.username);
+  const list = db.prepare('SELECT * FROM lists WHERE id = ?').get(req.params.id);
+  if (!_listCanSee(list, me.id, !!me.is_admin)) return res.status(404).json({ error: 'not_found' });
+  const item = db.prepare('SELECT * FROM list_items WHERE id = ? AND list_id = ?').get(req.params.itemId, list.id);
+  if (!item) return res.status(404).json({ error: 'not found' });
+  if (!item.checked) {
+    db.prepare('UPDATE list_items SET checked=1, checked_by_user_id=?, checked_at=datetime(\'now\') WHERE id=?')
+      .run(me.id, item.id);
+  }
+  res.json(db.prepare('SELECT * FROM list_items WHERE id = ?').get(item.id));
+});
+
+app.post('/api/lists/:id/items/:itemId/uncheck', auth, (req, res) => {
+  const me = getMe(req.session.user.username);
+  const list = db.prepare('SELECT * FROM lists WHERE id = ?').get(req.params.id);
+  if (!_listCanSee(list, me.id, !!me.is_admin)) return res.status(404).json({ error: 'not_found' });
+  const item = db.prepare('SELECT * FROM list_items WHERE id = ? AND list_id = ?').get(req.params.itemId, list.id);
+  if (!item) return res.status(404).json({ error: 'not found' });
+  if (item.checked) {
+    // Restoring an item goes back into the unchecked bucket. Give it a
+    // fresh position so it appears at the bottom of the unchecked
+    // bucket (i.e., the most-recently-restored item is the last thing
+    // you see at the bottom of the unchecked section before the
+    // checked-items divider).
+    db.prepare('UPDATE list_items SET checked=0, checked_by_user_id=NULL, checked_at=NULL, position=? WHERE id=?')
+      .run(_bumpPosition(list.id), item.id);
+  }
+  res.json(db.prepare('SELECT * FROM list_items WHERE id = ?').get(item.id));
+});
+
+// Drag reorder. The client sends the full ordered id list for the list.
+// Items not mentioned keep their current position; this is forgiving if
+// the client races a delete (so we never resurrect a deleted item).
+app.post('/api/lists/:id/items/reorder', auth, (req, res) => {
+  const me = getMe(req.session.user.username);
+  const list = db.prepare('SELECT * FROM lists WHERE id = ?').get(req.params.id);
+  if (!_listCanSee(list, me.id, !!me.is_admin)) return res.status(404).json({ error: 'not_found' });
+  const order = Array.isArray(req.body && req.body.order) ? req.body.order : null;
+  if (!order) return res.status(400).json({ error: 'order array required' });
+  const upd = db.prepare('UPDATE list_items SET position=? WHERE id=? AND list_id=?');
+  const tx = db.transaction((ids) => {
+    ids.forEach((id, i) => upd.run(i + 1, id, list.id));
+  });
+  tx(order.filter(n => Number.isInteger(n)));
+  res.json({ ok: true, count: order.length });
+});
+
+app.post('/api/lists/:id/clear-checked', auth, (req, res) => {
+  const me = getMe(req.session.user.username);
+  const list = db.prepare('SELECT * FROM lists WHERE id = ?').get(req.params.id);
+  if (!_listCanSee(list, me.id, !!me.is_admin)) return res.status(404).json({ error: 'not_found' });
+  const r = db.prepare('DELETE FROM list_items WHERE list_id = ? AND checked = 1').run(list.id);
+  res.json({ ok: true, removed: r.changes });
+});
+
 // 404 JSON for unknown /api/* paths.
 // Without this, the SPA catch-all below returns the 39KB index.html shell
 // for every unmatched /api/* request — breaking health checks, masking
