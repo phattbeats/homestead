@@ -52,6 +52,29 @@ CREATE TABLE IF NOT EXISTS services (
   descr TEXT DEFAULT '',
   sort INTEGER DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS lists (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  icon TEXT DEFAULT '📝',
+  owner_user_id INTEGER,
+  visibility TEXT NOT NULL DEFAULT 'household', -- 'private' | 'household'
+  sort INTEGER NOT NULL DEFAULT 0,
+  created_by_user_id INTEGER,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS list_items (
+  id INTEGER PRIMARY KEY,
+  list_id INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  checked INTEGER NOT NULL DEFAULT 0,
+  position INTEGER NOT NULL DEFAULT 0,
+  added_by_user_id INTEGER,
+  checked_by_user_id INTEGER,
+  checked_at TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (list_id) REFERENCES lists(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_list_items_list ON list_items(list_id, position);
 `);
 // v2 migrations: per-person ownership + open mode
 const svcCols = db.prepare("PRAGMA table_info(services)").all().map(c => c.name);
@@ -88,6 +111,18 @@ else {
 if (db.prepare('SELECT COUNT(*) c FROM services').get().c === 0) {
   const ins = db.prepare('INSERT INTO services (name,url,icon,descr,sort) VALUES (?,?,?,?,?)');
   ins.run('Example', 'https://example.com', '🔗', 'Replace with your own services', 1);
+}
+
+// Seed lists on first run — Groceries, Costco, Household. These are the
+// three lists the household actually uses day-to-day (PHA-1621). Seeded
+// only when the lists table is empty so we never clobber a household's
+// own list setup on subsequent boots.
+if (db.prepare('SELECT COUNT(*) c FROM lists').get().c === 0) {
+  const ins = db.prepare('INSERT INTO lists (name, icon, visibility, sort) VALUES (?,?,?,?)');
+  ins.run('Groceries', '🥕', 'household', 1);
+  ins.run('Costco', '🛒', 'household', 2);
+  ins.run('Household', '🏠', 'household', 3);
+  console.log('[seed] Created Groceries, Costco, Household lists.');
 }
 
 const app = express();
