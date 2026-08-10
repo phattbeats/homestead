@@ -878,6 +878,107 @@ app.post('/api/calendar-sources/:id/refresh', auth, (req, res) => {
   res.json({ ok: true, status: 'syncing' });
 });
 
+// ---- calendar source write-back (PHA-1866) ----
+// Phase 2: round-trip createEvent / updateEvent / deleteEvent through
+// the provider's adapter. The HTTP route is a thin shim — the adapter
+// owns the URL composition, the VCALENDAR serialization, and the
+// If-None-Match / If-Match semantics. We fire-and-forget a sync after
+// every successful write so the next /api/events/merged call sees the
+// updated provider state.
+//
+// Only the adapter knows whether the provider is read-only (Google
+// service accounts with no DAV) — the route blindly delegates. A 502
+// from the provider surfaces to the caller verbatim.
+
+function readSourceForWrite(req, res) {
+  const me = userModel.getMe(db, req.session.user.username);
+  const src = db.prepare('SELECT * FROM calendar_sources WHERE id = ?').get(req.params.id);
+  if (!src) { res.status(404).json({ error: 'not found' }); return null; }
+  if (src.user_id != null && src.user_id !== me.id && !me.is_admin) {
+    res.status(403).json({ error: 'not yours' }); return null;
+  }
+  return src;
+}
+
+function kickSync(src) {
+  Promise.resolve()
+    .then(() => calendarSources.syncSource(db, db.prepare('SELECT * FROM calendar_sources WHERE id = ?').get(src.id)))
+    .catch((e) => {
+      db.prepare(`UPDATE calendar_sources SET last_error = ?, last_error_at = datetime('now') WHERE id = ?`)
+        .run(String(e && e.message || e).slice(0, 1024), src.id);
+    });
+}
+
+function veventFromBody(body) {
+  // Translate the slim HTTP body into the adapter's `vevent` shape.
+  // The server is intentionally a thin shim — clients send the same
+  // fields the UI shows and we forward them.
+  if (!body || !body.start) return null;
+  return {
+    uid: body.uid || undefined,
+    title: body.title || '',
+    description: body.description || '',
+    location: body.location || '',
+    start: body.start,
+    end: body.end || null,
+    allDay: !!body.allDay,
+    sequence: body.sequence || 0,
+  };
+}
+
+app.post('/api/calendar-sources/:id/events', auth, (req, res) => {
+  const src = readSourceForWrite(req, res);
+  if (!src) return;
+  const vevent = veventFromBody(req.body || {});
+  if (!vevent) return res.status(400).json({ error: 'start is required' });
+  const adapter = calendarSources.createAdapter(src);
+  adapter.createEvent({
+    calendarHref: src.calendar_id,
+    vevent,
+    externalId: req.body && req.body.uid,
+  }).then((out) => {
+    kickSync(src);
+    res.json(out);
+  }).catch((e) => {
+    res.status(502).json({ error: 'provider_error', detail: String(e && e.message || e).slice(0, 512) });
+  });
+});
+
+app.put('/api/calendar-sources/:id/events/:externalId', auth, (req, res) => {
+  const src = readSourceForWrite(req, res);
+  if (!src) return;
+  const vevent = veventFromBody(req.body || {});
+  if (!vevent) return res.status(400).json({ error: 'start is required' });
+  const adapter = calendarSources.createAdapter(src);
+  adapter.updateEvent({
+    calendarHref: src.calendar_id,
+    externalId: req.params.externalId,
+    vevent,
+    etag: req.body && req.body.etag,
+  }).then((out) => {
+    kickSync(src);
+    res.json(out);
+  }).catch((e) => {
+    res.status(502).json({ error: 'provider_error', detail: String(e && e.message || e).slice(0, 512) });
+  });
+});
+
+app.delete('/api/calendar-sources/:id/events/:externalId', auth, (req, res) => {
+  const src = readSourceForWrite(req, res);
+  if (!src) return;
+  const adapter = calendarSources.createAdapter(src);
+  adapter.deleteEvent({
+    calendarHref: src.calendar_id,
+    externalId: req.params.externalId,
+    etag: req.query && req.query.etag,
+  }).then((out) => {
+    kickSync(src);
+    res.json(out);
+  }).catch((e) => {
+    res.status(502).json({ error: 'provider_error', detail: String(e && e.message || e).slice(0, 512) });
+  });
+});
+
 // GET /api/events/merged?from=YYYY-MM-DD&to=YYYY-MM-DD
 // Returns a unified list of native Homestead events + cached
 // provider events, tagged with `origin: 'native' | 'provider:<id>'`

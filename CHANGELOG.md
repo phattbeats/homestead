@@ -1,5 +1,51 @@
 # Changelog
 
+## v0.1.10 (2026-08-10) — PHA-1866
+
+- **Phase 2 calendar write-back (CalDAV).** Homestead now round-trips
+  events through the configured CalDAV providers (Nextcloud, Apple
+  iCloud) end-to-end instead of just reading them. The provider-
+  agnostic `CalendarSource` interface gains three new methods:
+  `createEvent({ calendarHref, vevent, externalId? })`,
+  `updateEvent({ calendarHref, externalId, vevent, etag? })`, and
+  `deleteEvent({ calendarHref, externalId, etag? })`. The CalDAV
+  adapter implements them as RFC 4791 PUT/DELETE with the right
+  conditional headers — `If-None-Match: *` on create to prevent
+  overwrite, `If-Match: <etag>` on update/delete to guard against
+  lost-update. Microsoft 365 (PHA-1864) and Google (PHA-1865) will
+  register the same interface methods when their adapters land.
+- **New HTTP surface.** `POST /api/calendar-sources/:id/events`,
+  `PUT  /api/calendar-sources/:id/events/:externalId`, and
+  `DELETE /api/calendar-sources/:id/events/:externalId` (all auth-
+  gated, owner or admin). A successful write returns the canonical
+  `{ externalId, href, etag }` and kicks a fire-and-forget sync so
+  the next `GET /api/events/merged` reflects the provider state.
+  Provider errors surface as 502 with the upstream status code
+  preserved on the row's `last_error` / `last_error_at`.
+- **VCALENDAR serializer.** `lib/caldav-source.js` gains a
+  `buildVCalendar(vevent)` that is the inverse of the existing
+  `parseVEvents` parser — round-trip verified by tests 7 + 12.
+  Escapes RFC 5545 special characters (`\`, `,`, `;`, `\n`) and
+  emits `VALUE=DATE` for `allDay` events. UID is auto-generated
+  (RFC 4122 v4) when the caller doesn't provide one.
+- **Single-VEVENT scope.** Recurrence editing remains out of scope
+  (PHA-1620 step 4: "No recurrence editing in v1 — single VEVENT
+  only"). The serializer/DTOs are forward-compatible with a future
+  RRULE expansion; today's body shape is the flat `vevent` per
+  event.
+- **No new npm dependencies.** The CalDAV adapter still ships with
+  a hand-rolled XML walker and iCal parser — the write side uses
+  the same primitives.
+- **Test coverage.** 6 new tests in `scripts/test-calendar-
+  sources.js` (94 pass total, 0 fail) covering the serializer
+  round-trip, the URL resolver, the stub-HTTP write flow, the
+  lost-update 412 error path, the required-field validation, and
+  the `app_password` leak check on provider-error messages. The
+  end-to-end smoke (`scripts/smoke-calendar-sources.js`) now also
+  exercises the write-back flow against a fake CalDAV provider —
+  43 pass / 0 fail, including the full create→update→delete round
+  trip and the cross-the-flow `app_password` leak check.
+
 ## v0.1.9 (2026-08-10) — PHA-1620 + PHA-1864
 
 - **Universal calendar read-through (PHA-1620).** Homestead now reads
