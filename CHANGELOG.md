@@ -1,5 +1,74 @@
 # Changelog
 
+## v0.1.4 (2026-08-09) — PHA-1865
+
+- **Google Calendar (`GoogleSource`) adapter shipped.** The same
+  `CalendarSource` interface that backed `CalDAVSource` (v0.1.1) and
+  `GraphSource` (v0.1.2) now also backs `GoogleSource` for Google
+  Calendar. No merge-layer, API-surface, or DTO changes — the third
+  adapter registers behind `registerAdapter('google', …)` and is
+  reachable through the existing `POST /api/calendar-sources` endpoint
+  with `provider: "google"`. Adding further OAuth2 providers now
+  follows the same single-file pattern.
+- **OAuth2 credentials for Google Calendar.** `cred_blob` for
+  `google` sources carries `{ access_token, refresh_token,
+  expires_at, client_id, client_secret?, scope? }`. The adapter:
+  - sends `Authorization: Bearer <access_token>` on every request,
+  - refreshes proactively when `expires_at` is within the next 60
+    seconds,
+  - refreshes reactively when the provider returns 401,
+  - uses `https://oauth2.googleapis.com/token` with
+    `grant_type=refresh_token`. `client_id` is mandatory (the
+    refresh-token grant needs it); `client_secret` is optional —
+    confidential web apps send it, public installed apps (TVs /
+    CLI / mobile) omit it and rely on PKCE to protect the
+    auth-code flow.
+- **Google Calendar API v3 endpoints used (read path):**
+  - `GET /users/me/calendarList` — calendar discovery (kept on the
+    interface for the Phase-2 setup UI; not currently exercised by
+    the read-through path).
+  - `GET /calendars/{calendarId}/events?timeMin=…&timeMax=…&singleEvents=true&orderBy=startTime&maxResults=2500`
+    — window-bounded event list with `singleEvents=true` so
+    recurring events are expanded server-side (no client-side
+    recurrence expansion needed). Pagination via `nextPageToken`
+    with a 20-page safety brake.
+- **Google → CalendarSource event mapping.** `lib/google-source.js`
+  (`mapEvent` / `googleDateTimeToIso`) handles the RFC 3339-with-offset
+  timed-event form (`start.dateTime` + `start.timeZone`) and the
+  date-only all-day form (`start.date`). All forms are normalized to
+  UTC ISO strings so the merge layer treats every provider the same.
+- **`POST /api/calendar-sources` now accepts `provider: "google"`**
+  (was 501 pre-PHA-1865). Required fields: `access_token` and
+  `client_id`. Optional fields: `refresh_token`, `expires_at`,
+  `client_secret` (only confidential web apps need it), `scope`. The
+  parallel `provider: "ms365"` case is also included in this PR so
+  the diff stays cohesive against `pha-1620-calendar-adapters`; the
+  Graph adapter itself (PHA-1864) lives in the parallel PR #7 and
+  either merge order resolves cleanly.
+- **66 unit tests + 35 smoke assertions.** `scripts/test-google-source.js`
+  covers factory validation, calendar/event mapping (timed + all-day),
+  Bearer auth, refresh-on-401, pre-emptive refresh, pagination
+  safety brake, the primary-calendar fallback, RFC 3339 normalization
+  edge cases, end-to-end `syncSource` through `lib/calendar-sources.js`,
+  and the `publicView` leak-check. `scripts/smoke-google-source.js`
+  boots the real `server.js` against a fake Google Calendar API v3
+  and walks the full `/api/login` → `POST /api/calendar-sources` →
+  `/api/calendar-sources/:id/refresh` → `/api/events/merged` flow
+  with the same credential-leak contract checks as the CalDAV /
+  Graph smoke scripts. Also exercises the 400 paths for missing
+  `access_token` and missing `client_id`.
+- **No new runtime dependencies.** Google calls go through the same
+  hand-rolled https layer as CalDAV/Graph; the Google ↔
+  CalendarSource mapping is in `lib/google-source.js`. `npm test`
+  now runs `test-user-model.js` + `test-calendar-sources.js` +
+  `test-google-source.js` (existing scripts unchanged).
+- **Operational notes.** Same as Graph: refreshed access tokens are
+  NOT yet re-encrypted and persisted to the database; the next sync
+  will re-refresh against the stored refresh token. Re-persistence
+  is the PHA-1866 follow-up. The merge endpoint already exposes the
+  per-source `stale` flag so a temporarily-stale badge surfaces
+  during the refresh round-trip.
+
 ## v0.1.1 (2026-08-09) — PHA-1620
 
 - **Universal calendar read-through.** Homestead now reads events from

@@ -1,12 +1,12 @@
 {
   "name": "homestead",
-  "version": "0.1.1",
+  "version": "0.1.4",
   "description": "Shared life app: tasks with take-turns rotation, calendar, and a full-screen iframe app shell for self-hosted services.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node scripts/test-user-model.js && node scripts/test-calendar-sources.js",
-    "test:smoke": "node scripts/smoke-calendar-sources.js"
+    "test": "node scripts/test-user-model.js && node scripts/test-calendar-sources.js && node scripts/test-google-source.js",
+    "test:smoke": "node scripts/smoke-calendar-sources.js && node scripts/smoke-google-source.js"
   },
   "engines": {
     "node": ">=22"

@@ -541,19 +541,60 @@ app.post('/api/calendar-sources', auth, (req, res) => {
     return res.status(503).json({ error: 'CALENDAR_CRED_KEY not configured' });
   }
   const me = userModel.getMe(db, req.session.user.username);
-  const { provider, account_id, calendar_id, base_url, display_name, color, app_password, shared } = req.body || {};
-  if (!provider || !account_id || !calendar_id || !app_password) {
-    return res.status(400).json({ error: 'provider, account_id, calendar_id, app_password required' });
+  const body = req.body || {};
+  const { provider, account_id, calendar_id, base_url, display_name, color, shared } = body;
+  if (!provider || !account_id || !calendar_id) {
+    return res.status(400).json({ error: 'provider, account_id, calendar_id required' });
   }
   if (!['caldav_nextcloud', 'caldav_icloud', 'ms365', 'google'].includes(provider)) {
     return res.status(400).json({ error: 'unsupported provider' });
+  }
+  // Per-provider credential validation. CalDAV wants an app-password;
+  // Graph wants an OAuth2 access+refresh token pair; Google wants an
+  // OAuth2 access+refresh token pair plus a client_id (needed for the
+  // refresh-token grant). The encrypted payload is provider-specific —
+  // we keep the JSON shape narrow so lib/caldav-source.js /
+  // lib/google-source.js (and lib/graph-source.js from PR #7) can
+  // require fields directly without defensive parsing.
+  let credPayload;
+  if (provider === 'caldav_nextcloud' || provider === 'caldav_icloud') {
+    if (!body.app_password) return res.status(400).json({ error: 'app_password required for CalDAV providers' });
+    credPayload = { app_password: body.app_password };
+  } else if (provider === 'google') {
+    // PHA-1865: Google Calendar adapter. client_id is mandatory (the
+    // refresh-token grant needs it); client_secret is optional —
+    // confidential web apps send it, public installed apps omit it.
+    if (!body.access_token) return res.status(400).json({ error: 'access_token required for google' });
+    if (!body.client_id) return res.status(400).json({ error: 'client_id required for google (set during source creation; needed for the refresh path)' });
+    credPayload = {
+      access_token: body.access_token,
+      refresh_token: body.refresh_token || null,
+      expires_at: body.expires_at || null,
+      client_id: body.client_id,
+      client_secret: body.client_secret || null,
+      scope: body.scope || null,
+    };
+  } else {
+    // ms365 (PHA-1864) lives in the parallel PR #7; the case is
+    // included here so the PR's diff stays cohesive — both PRs
+    // resolve cleanly against the shared base regardless of merge
+    // order.
+    if (!body.access_token) return res.status(400).json({ error: 'access_token required for ms365' });
+    credPayload = {
+      access_token: body.access_token,
+      refresh_token: body.refresh_token || null,
+      expires_at: body.expires_at || null,
+      client_id: body.client_id || null,
+      tenant_id: body.tenant_id || null,
+      scope: body.scope || null,
+    };
   }
   let userId = me.id;
   if (shared) {
     if (!me.is_admin) return res.status(403).json({ error: 'admin only for shared sources' });
     userId = null;
   }
-  const credBlob = secretBox.encryptString(JSON.stringify({ app_password }));
+  const credBlob = secretBox.encryptString(JSON.stringify(credPayload));
   const row = db.prepare(`INSERT INTO calendar_sources
     (user_id, provider, account_id, calendar_id, base_url, display_name, color, cred_blob, created_by)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(

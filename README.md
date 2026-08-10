@@ -38,11 +38,23 @@ dependencies.
 ## Calendar read-through (universal: CalDAV / Graph / Google)
 
 Homestead reads events from configured external calendars through a
-provider-agnostic `CalendarSource` interface. v0.1.1 ships the first
-adapter (`CalDAVSource`) covering both **Nextcloud** and **Apple iCloud**
-via a single implementation parameterized on `base_url`. **Microsoft 365**
-and **Google Calendar** are follow-up child issues that register behind
-the same interface — no merge-layer or API-surface changes needed.
+provider-agnostic `CalendarSource` interface. **v0.1.4** ships the
+third adapter (`GoogleSource` — PHA-1865) behind the same contract as
+`CalDAVSource` (v0.1.1) and `GraphSource` (v0.1.2):
+
+  * **`CalDAVSource`** — Nextcloud and Apple iCloud, one implementation
+    parameterized on `base_url` (HTTP Basic auth with an app-password).
+  * **`GraphSource`** (PHA-1864) — Microsoft 365 via Microsoft Graph
+    (`/me/calendars/{id}/calendarView`). OAuth2 access + refresh
+    tokens; the adapter refreshes on 401 / pre-emptively on
+    `expires_at`. Wire with the Azure app registration whose
+    `Calendars.Read` offline-access scope was granted.
+  * **`GoogleSource`** (PHA-1865) — Google Calendar via Calendar API
+    v3 (`/calendars/{id}/events` with `singleEvents=true` +
+    `orderBy=startTime`). OAuth2 access + refresh tokens; the adapter
+    refreshes on 401 / pre-emptively on `expires_at`. Wire with the
+    Google Cloud OAuth client (`client_id` mandatory, `client_secret`
+    optional depending on app type).
 
 ### Setup
 
@@ -54,11 +66,23 @@ the same interface — no merge-layer or API-surface changes needed.
    this is set, `/api/health.ok` flips to `false` and
    `POST /api/calendar-sources` returns 503.
 
-2. Generate an **app-password** for each provider:
+2. Generate the per-provider credential:
 
        - Nextcloud: Settings → Security → App passwords
        - Apple iCloud: https://appleid.apple.com → Sign-In and Security
          → App-Specific Passwords (2FA required)
+       - Microsoft 365: an Azure app registration with the
+         `Calendars.Read` and `offline_access` scopes; complete the
+         OAuth2 device-code or auth-code flow and capture the resulting
+         `access_token` + `refresh_token` pair (the adapter refreshes
+         on 401 / `expires_at`)
+       - Google Calendar: a Google Cloud OAuth client ID (type
+         "Web application" for browser-based setup, or "TV and
+         Limited Input devices" / "Desktop app" for installed apps);
+         complete the OAuth2 auth-code flow with the
+         `https://www.googleapis.com/auth/calendar.readonly` scope and
+         capture the resulting `access_token` + `refresh_token` pair
+         (the adapter refreshes on 401 / `expires_at`)
 
 3. Add the source via the API (the UI is the PHA-1868 follow-up):
 
@@ -75,10 +99,48 @@ the same interface — no merge-layer or API-surface changes needed.
          }' \
          http://homestead.lan:3080/api/calendar-sources
 
-   The app-password is encrypted at rest (AES-256-GCM) and **never
+   The credentials are encrypted at rest (AES-256-GCM) and **never
    returned by any API endpoint**. For a household-shared calendar
    (e.g. Nextcloud's Shade/Kelly Household), set `shared: true` (admin
    only).
+
+   Microsoft 365:
+
+       curl -X POST -H 'Content-Type: application/json' \
+         -b cookies.txt \
+         -d '{
+           "provider": "ms365",
+           "account_id": "brandon@phatt.vip",
+           "calendar_id": "AAMkAGRiYW5kb24tY2Fs",
+           "display_name": "Work",
+           "color": "#8a9ec4",
+           "access_token": "<oauth2 access token>",
+           "refresh_token": "<oauth2 refresh token>",
+           "expires_at": "2026-08-15T20:00:00Z",
+           "client_id": "<azure app client id>",
+           "tenant_id": "common",
+           "scope": "Calendars.Read offline_access"
+         }' \
+         http://homestead.lan:3080/api/calendar-sources
+
+   Google Calendar:
+
+       curl -X POST -H 'Content-Type: application/json' \
+         -b cookies.txt \
+         -d '{
+           "provider": "google",
+           "account_id": "brandon@phatt.vip",
+           "calendar_id": "primary",
+           "display_name": "Personal",
+           "color": "#a4c2f4",
+           "access_token": "<oauth2 access token>",
+           "refresh_token": "<oauth2 refresh token>",
+           "expires_at": "2026-08-15T20:00:00Z",
+           "client_id": "<google oauth client id>.apps.googleusercontent.com",
+           "client_secret": "<google oauth client secret>",
+           "scope": "https://www.googleapis.com/auth/calendar.readonly"
+         }' \
+         http://homestead.lan:3080/api/calendar-sources
 
 4. Read merged events via `/api/events/merged?from=YYYY-MM-DD&to=YYYY-MM-DD`.
    Each event carries `origin` (`native` or `provider:<provider>`) and
@@ -96,8 +158,17 @@ the same interface — no merge-layer or API-surface changes needed.
   for what the client sees; the leak check is a load-bearing
   acceptance test.
 - **Phase 2 write-back** (createEvent / updateEvent / deleteEvent via
-  CalDAV PUT) is tracked under PHA-1866 — single-VEVENT scope per the
+  CalDAV PUT for CalDAV providers and the equivalent for Graph /
+  Google) is tracked under PHA-1866 — single-VEVENT scope per the
   work order (recurrence editing deferred).
+- **Token refresh (Graph / Google)** happens server-side inside the
+  adapter: a 401 from the provider, or a token whose `expires_at` is
+  within the next 60 seconds, triggers a refresh-token grant at
+  `https://oauth2.googleapis.com/token` (Google) or
+  `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token`
+  (Microsoft). Refresh tokens are not currently re-persisted to the
+  database (the next sync will read the original access_token and
+  re-refresh); persisting rotated tokens is the PHA-1866 follow-up.
 
 ## Push notifications
 
