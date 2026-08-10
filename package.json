@@ -1,12 +1,12 @@
 {
   "name": "homestead",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Shared life app: tasks with take-turns rotation, calendar, and a full-screen iframe app shell for self-hosted services.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node scripts/test-user-model.js && node scripts/test-sync-plex.js && node scripts/test-sync-kavita.js",
-    "test:smoke": "node scripts/smoke-push.js && node scripts/smoke-sync-plex.js && node scripts/smoke-sync-kavita.js"
+    "test": "node scripts/test-user-model.js && node scripts/test-sync-plex.js && node scripts/test-sync-kavita.js && node scripts/test-sync-seerr.js",
+    "test:smoke": "node scripts/smoke-push.js && node scripts/smoke-sync-plex.js && node scripts/smoke-sync-kavita.js && node scripts/smoke-sync-seerr.js"
   },
   "engines": {
     "node": ">=22"
