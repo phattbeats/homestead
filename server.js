@@ -36,6 +36,7 @@ const kavitaSync = require('./lib/sync/kavita');
 
 const healthChecker = require('./lib/health-checker');
 const entityGraph = require('./lib/sync/_schema');
+const activity = require('./lib/activity');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -47,6 +48,10 @@ userModel.migrate(db);
 // defensive self-installs (same underlying schema) are dropped now that
 // Phase A owns this.
 entityGraph.migrate(db);
+// PHA-1622: activity feed schema + boot-time retention prune (90 days /
+// 10k rows, same idempotent-migrate-on-boot pattern as PHA-1618).
+activity.migrate(db);
+activity.prune(db);
 
 // v0.1.0: web push subscriptions (PHA-1619)
 db.exec(`
@@ -115,6 +120,7 @@ function authenticate(req, res, next) {
     } else {
       groups = groupsHeader.split(',').map(s => s.trim()).filter(Boolean);
     }
+    const isNewSession = !req.session.user || req.session.user.username !== headerUser.toLowerCase();
     const u = userModel.provisionOrClaim(db, headerUser, 'header_trust', headerUser, groups);
     if (!u) return res.status(401).json({ error: 'invalid trusted username' });
     req.session.user = {
@@ -124,6 +130,15 @@ function authenticate(req, res, next) {
       isAdmin: !!u.is_admin,
       authProvider: 'header_trust',
     };
+    // PHA-1622: "new device only" — a session that didn't already carry
+    // this username (fresh cookie or switched user), not every
+    // header-trust request (which fires on every page load / poll).
+    if (isNewSession) {
+      activity.logActivity(db, {
+        actorUserId: u.id, verb: 'login', objectType: 'user', objectId: u.id,
+        summaryText: `${u.display} logged in`, meta: { authProvider: 'header_trust' },
+      });
+    }
     return next();
   }
   if (req.session.user) return next();
@@ -245,6 +260,15 @@ async function notify(userId, payload, opts = {}) {
   return { delivered, skipped: 0, errors };
 }
 
+// PHA-1622: log an activity row for the session's authenticated user.
+// `req` supplies the actor; everything else passes through to
+// activity.logActivity. Best-effort — never throws.
+function logActivityForReq(req, fields) {
+  const username = req.session && req.session.user && req.session.user.username;
+  const actorUserId = username ? (db.prepare('SELECT id FROM users WHERE username = ?').get(username) || {}).id || null : null;
+  activity.logActivity(db, { actorUserId, ...fields });
+}
+
 const PROCESS_STARTED_AT_MS = Date.now();
 const PKG_VERSION = require('./package.json').version;
 const COMMIT_SHA = process.env.COMMIT_SHA || null;
@@ -289,6 +313,10 @@ app.post('/api/login', (req, res) => {
     isAdmin: !!u.is_admin,
     authProvider: 'password',
   };
+  activity.logActivity(db, {
+    actorUserId: u.id, verb: 'login', objectType: 'user', objectId: u.id,
+    summaryText: `${u.display} logged in`, meta: { authProvider: 'password' },
+  });
   res.json({ user: req.session.user });
 });
 app.post('/api/logout', (req, res) => req.session.destroy(() => res.json({ ok: true })));
@@ -372,6 +400,10 @@ app.put('/api/users/:username', auth, (req, res) => {
     preferences ? JSON.stringify(preferences) : null,
     target.id
   );
+  logActivityForReq(req, {
+    verb: 'updated', objectType: 'user', objectId: target.id,
+    summaryText: `${req.session.user.display} updated ${me.username === target.username ? 'their' : target.display + "'s"} profile`,
+  });
   res.json({ ok: true });
 });
 app.post('/api/users/:username/password', auth, (req, res) => {
@@ -420,6 +452,10 @@ app.post('/api/tasks', auth, (req, res) => {
   const alt = rotate && alt_assignee ? alt_assignee : null;
   const r = db.prepare('INSERT INTO tasks (title,notes,assignee,alt_assignee,due_date,recur,rotate,created_by) VALUES (?,?,?,?,?,?,?,?)')
     .run(title, notes, assignee, alt, due_date, recur, rotate ? 1 : 0, req.session.user.username);
+  logActivityForReq(req, {
+    verb: 'created', objectType: 'task', objectId: r.lastInsertRowid,
+    summaryText: `${req.session.user.display} created task "${title}"`,
+  });
   res.json(db.prepare('SELECT * FROM tasks WHERE id = ?').get(r.lastInsertRowid));
 });
 app.put('/api/tasks/:id', auth, (req, res) => {
@@ -431,6 +467,10 @@ app.put('/api/tasks/:id', auth, (req, res) => {
   const alt = b.rotate && b.alt_assignee ? b.alt_assignee : null;
   db.prepare('UPDATE tasks SET title=?,notes=?,assignee=?,alt_assignee=?,due_date=?,recur=?,rotate=? WHERE id=?')
     .run(b.title, b.notes, b.assignee, alt, b.due_date, b.recur, b.rotate ? 1 : 0, t.id);
+  logActivityForReq(req, {
+    verb: 'updated', objectType: 'task', objectId: t.id,
+    summaryText: `${req.session.user.display} updated task "${b.title}"`,
+  });
   res.json(db.prepare('SELECT * FROM tasks WHERE id = ?').get(t.id));
 });
 function bumpDate(dateStr, recur) {
@@ -453,14 +493,31 @@ app.post('/api/tasks/:id/toggle', auth, (req, res) => {
     }
     db.prepare('UPDATE tasks SET due_date=?, assignee=?, alt_assignee=?, done=0, done_by=?, done_at=datetime(\'now\') WHERE id=?')
       .run(bumpDate(t.due_date, t.recur), assignee, alt, req.session.user.username, t.id);
+    logActivityForReq(req, {
+      verb: 'completed', objectType: 'task', objectId: t.id,
+      summaryText: `${req.session.user.display} checked off "${t.title}"`,
+      meta: t.rotate && alt ? { rotated_to: assignee } : undefined,
+    });
   } else {
+    const nowDone = t.done ? 0 : 1;
     db.prepare('UPDATE tasks SET done=?, done_by=?, done_at=datetime(\'now\') WHERE id=?')
-      .run(t.done ? 0 : 1, req.session.user.username, t.id);
+      .run(nowDone, req.session.user.username, t.id);
+    logActivityForReq(req, {
+      verb: nowDone ? 'completed' : 'reopened', objectType: 'task', objectId: t.id,
+      summaryText: `${req.session.user.display} ${nowDone ? 'checked off' : 'reopened'} "${t.title}"`,
+    });
   }
   res.json(db.prepare('SELECT * FROM tasks WHERE id = ?').get(t.id));
 });
 app.delete('/api/tasks/:id', auth, (req, res) => {
+  const t = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.id);
+  if (t) {
+    logActivityForReq(req, {
+      verb: 'deleted', objectType: 'task', objectId: t.id,
+      summaryText: `${req.session.user.display} deleted task "${t.title}"`,
+    });
+  }
   res.json({ ok: true });
 });
 
@@ -478,6 +535,10 @@ app.post('/api/events', auth, (req, res) => {
   if (!userModel.validateAssignee(db, owner)) return res.status(400).json({ error: 'unknown owner' });
   const r = db.prepare('INSERT INTO events (title,date,time,notes,owner,created_by) VALUES (?,?,?,?,?,?)')
     .run(title, date, time, notes, owner, req.session.user.username);
+  logActivityForReq(req, {
+    verb: 'created', objectType: 'event', objectId: r.lastInsertRowid,
+    summaryText: `${req.session.user.display} added event "${title}"`,
+  });
   res.json(db.prepare('SELECT * FROM events WHERE id = ?').get(r.lastInsertRowid));
 });
 app.put('/api/events/:id', auth, (req, res) => {
@@ -487,10 +548,21 @@ app.put('/api/events/:id', auth, (req, res) => {
   if (!userModel.validateAssignee(db, b.owner)) return res.status(400).json({ error: 'unknown owner' });
   db.prepare('UPDATE events SET title=?,date=?,time=?,notes=?,owner=? WHERE id=?')
     .run(b.title, b.date, b.time, b.notes, b.owner, e.id);
+  logActivityForReq(req, {
+    verb: 'updated', objectType: 'event', objectId: e.id,
+    summaryText: `${req.session.user.display} updated event "${b.title}"`,
+  });
   res.json(db.prepare('SELECT * FROM events WHERE id = ?').get(e.id));
 });
 app.delete('/api/events/:id', auth, (req, res) => {
+  const e = db.prepare('SELECT * FROM events WHERE id = ?').get(req.params.id);
   db.prepare('DELETE FROM events WHERE id = ?').run(req.params.id);
+  if (e) {
+    logActivityForReq(req, {
+      verb: 'deleted', objectType: 'event', objectId: e.id,
+      summaryText: `${req.session.user.display} deleted event "${e.title}"`,
+    });
+  }
   res.json({ ok: true });
 });
 
@@ -525,6 +597,10 @@ app.post('/api/services', auth, (req, res) => {
     .run(name, url, icon, descr, max + 1, owner, open_mode,
          health_url || null, health_interval_sec);
   const row = db.prepare('SELECT * FROM services WHERE id = ?').get(r.lastInsertRowid);
+  logActivityForReq(req, {
+    verb: 'created', objectType: 'service', objectId: row.id,
+    summaryText: `${req.session.user.display} added the "${name}" tile`,
+  });
   // Start a checker immediately so the new tile's status isn't stuck
   // on "unknown" until the next refresh tick.
   if (healthCheckerHandle) healthCheckerHandle.refresh();
@@ -542,12 +618,23 @@ app.put('/api/services/:id', auth, (req, res) => {
          b.health_url ?? null, b.health_interval_sec ?? 60, s.id);
   if (healthCheckerHandle) healthCheckerHandle.refresh();
   const row = db.prepare('SELECT * FROM services WHERE id = ?').get(s.id);
+  logActivityForReq(req, {
+    verb: 'updated', objectType: 'service', objectId: s.id,
+    summaryText: `${req.session.user.display} edited the "${row.name}" tile`,
+  });
   res.json(withHealth([row])[0]);
 });
 app.delete('/api/services/:id', auth, (req, res) => {
+  const s = db.prepare('SELECT * FROM services WHERE id = ?').get(req.params.id);
   db.prepare('DELETE FROM services WHERE id = ?').run(req.params.id);
   // FK ON DELETE CASCADE on service_health_state handles the cleanup.
   if (healthCheckerHandle) healthCheckerHandle.refresh();
+  if (s) {
+    logActivityForReq(req, {
+      verb: 'deleted', objectType: 'service', objectId: s.id,
+      summaryText: `${req.session.user.display} removed the "${s.name}" tile`,
+    });
+  }
   res.json({ ok: true });
 });
 
@@ -971,6 +1058,18 @@ app.get('/api/review-queue', auth, (req, res) => {
   res.json({ items });
 });
 
+// ---- activity feed (PHA-1622) ----
+// GET /api/activity?since&user&limit — reverse-chron, for the UI feed
+// and for agents (e.g. PHA-1617) that need observable context.
+app.get('/api/activity', auth, (req, res) => {
+  res.json({ items: activity.listActivity(db, {
+    since: req.query.since || null,
+    user: req.query.user || null,
+    before: req.query.before || null,
+    limit: req.query.limit,
+  }) });
+});
+
 // 404 JSON for unknown /api/* paths.
 app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 
@@ -1129,6 +1228,7 @@ if (require.main === module) {
       try { await runTakeTurnsDigest(); } catch (e) { console.error('[scheduler] take-turns digest:', e.message); }
       try { await runPlexSyncTick(); } catch (e) { console.error('[scheduler] plex sync tick:', e.message); }
       try { await runKavitaSyncTick(); } catch (e) { console.error('[scheduler] kavita sync tick:', e.message); }
+      try { activity.prune(db); } catch (e) { console.error('[scheduler] activity prune:', e.message); }
     };
     setTimeout(tick, 10 * 1000);
     schedulerHandle = setInterval(tick, SCHED_TICK_MS);

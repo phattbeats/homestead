@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.1.8 (2026-08-10) — PHA-1622
+
+- **Activity feed.** New `lib/activity.js` (`migrate`, `logActivity`,
+  `listActivity`, `prune`) backing an `activity` table (id, ts,
+  actor_user_id, verb, object_type, object_id, summary_text, meta
+  json), joined against `users` at read time so the API returns
+  actor display/color inline. `logActivity()` is best-effort — a
+  broken feed row never fails the mutation it describes.
+  Every mutating endpoint now logs exactly one row: task
+  create/update/complete/reopen/delete (rotation swaps recorded in
+  `meta.rotated_to`), event create/update/delete, service (tile)
+  create/update/delete, user profile edit, and login — the last one
+  gated on "new device only" (a session that didn't already carry
+  that username), not every header-trust request, so it doesn't fire
+  on every poll.
+  `GET /api/activity?since&user&before&limit` serves the UI and
+  future agent consumers (PHA-1617); `before` is an id cursor for
+  pagination.
+  Retention: prune() drops rows older than 90 days, then trims to the
+  newest 10k if still over cap; wired into the existing 30-minute
+  scheduler tick alongside the digest/sync jobs.
+  UI: a reverse-chron "Activity" card on the Home page, consecutive
+  same-actor rows grouped under one avatar dot, with a "Load more"
+  cursor-paginated tail.
+  Acceptance: 14 tests in `scripts/test-activity.js`; manually swept
+  every mutating endpoint end-to-end (create/toggle/delete on tasks,
+  events, services; login) and confirmed one activity row per call.
+
 ## v0.1.7 (2026-08-10) — PHA-1874 (PHA-1624 Phase B-2)
 
 - **Kavita sync worker.** New `lib/sync/kavita.js`

@@ -79,6 +79,16 @@ main{padding:14px 18px;max-width:680px;margin:0 auto}
 .overdue{color:#b3453a;font-weight:600}
 .x{color:var(--muted);font-size:18px;padding:6px;opacity:.5}
 
+/* activity feed */
+.act-group{display:flex;gap:12px;padding:10px 4px;border-bottom:1px solid var(--line)}
+.act-group:last-child{border-bottom:none}
+.act-dot{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;color:#fff}
+.act-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.act-row{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+.act-ts{color:var(--muted);font-size:11px;white-space:nowrap;flex-shrink:0}
+#loadMoreAct{display:block;width:100%;text-align:center;padding:10px;color:var(--muted);font-size:12px}
+
 /* calendar */
 .cal-head{display:flex;justify-content:space-between;align-items:center;padding:4px 6px 12px}
 .cal-head b{font-size:17px;letter-spacing:-.01em}
@@ -246,6 +256,8 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
       <div class="card"><div class="card-in" id="todayEvents"></div></div>
       <div class="sec">On the list</div>
       <div class="card"><div class="card-in" id="todayTasks"></div></div>
+      <div class="sec">Activity</div>
+      <div class="card"><div class="card-in" id="activityFeed"></div></div>
     </div>
     <div class="page" id="page-tasks">
       <div class="sec">To do</div>
@@ -422,6 +434,53 @@ async function boot(user){
 async function refresh(){
   [TASKS,EVENTS,SVCS]=await Promise.all([api('GET','/api/tasks'),api('GET','/api/events'),api('GET','/api/services')]);
   renderHome();renderTasks();renderCal();renderSvcs();
+  loadActivity();
+}
+
+/* ---- activity feed (PHA-1622) ---- */
+let ACTIVITY=[];
+function timeAgo(ts){
+  const then=new Date(ts.replace(' ','T')+'Z').getTime();
+  const s=Math.max(0,Math.round((Date.now()-then)/1000));
+  if(s<60)return 'just now';
+  const m=Math.round(s/60);if(m<60)return m+'m';
+  const h=Math.round(m/60);if(h<24)return h+'h';
+  const d=Math.round(h/24);return d+'d';
+}
+function activityLine(a){
+  return esc(a.summary_text);
+}
+async function loadActivity(){
+  ACTIVITY=(await api('GET','/api/activity?limit=30')).items;
+  renderActivity();
+}
+async function loadMoreActivity(){
+  if(!ACTIVITY.length)return;
+  const oldest=ACTIVITY[ACTIVITY.length-1].id;
+  const more=(await api('GET','/api/activity?limit=30&before='+oldest)).items;
+  ACTIVITY=ACTIVITY.concat(more);
+  renderActivity();
+}
+function renderActivity(){
+  if(!ACTIVITY.length){$('#activityFeed').innerHTML=`<div class="empty"><span>👋</span>No activity yet</div>`;return}
+  // Group consecutive same-actor rows into one block.
+  const groups=[];
+  for(const a of ACTIVITY){
+    const last=groups[groups.length-1];
+    const actorKey=a.actor?a.actor.username:'system';
+    if(last&&last.actorKey===actorKey){last.items.push(a);}
+    else groups.push({actorKey,actor:a.actor,items:[a]});
+  }
+  $('#activityFeed').innerHTML=groups.map(g=>{
+    const color=g.actor?g.actor.color:'#999';
+    const initials=g.actor?g.actor.display.trim()[0].toUpperCase():'•';
+    return `<div class="act-group">
+      <div class="act-dot" style="background:${color}">${initials}</div>
+      <div class="act-body">
+        ${g.items.map(a=>`<div class="act-row"><span>${activityLine(a)}</span><span class="act-ts">${timeAgo(a.ts)}</span></div>`).join('')}
+      </div>
+    </div>`;
+  }).join('')+(ACTIVITY.length%30===0?`<button class="link" id="loadMoreAct" onclick="loadMoreActivity()">Load more</button>`:'');
 }
 
 /* ---- rendering ---- */
