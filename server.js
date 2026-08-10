@@ -32,6 +32,7 @@ const webpush = require('web-push');
 
 const userModel = require('./lib/user-model');
 const plexSync = require('./lib/sync/plex');
+const kavitaSync = require('./lib/sync/kavita');
 
 const healthChecker = require('./lib/health-checker');
 const entityGraph = require('./lib/sync/_schema');
@@ -42,8 +43,8 @@ const db = new Database(path.join(DATA_DIR, 'life.db'));
 userModel.migrate(db);
 // PHA-1872 (design doc PHA-1624 §3): entity graph schema, wired right
 // after userModel.migrate() to match the existing boot-migration pattern.
-// Phase A's canonical migrate() call — Phase B-1's defensive
-// plexSync.migrate(db) (same underlying schema) is dropped now that
+// Phase A's canonical migrate() call — Phase B-1's and Phase B-2's
+// defensive self-installs (same underlying schema) are dropped now that
 // Phase A owns this.
 entityGraph.migrate(db);
 
@@ -613,6 +614,69 @@ app.get('/api/admin/sync/plex/status', auth, (req, res) => {
   });
 });
 
+// ---- Entity-graph sync admin endpoints (PHA-1624 Phase B-2, PHA-1874) ----
+//
+// POST /api/admin/sync/kavita         admin-only manual trigger
+// GET  /api/admin/sync/kavita/status  admin-only last-run summary
+//
+// The worker is also cron-driven every 6h from the boot scheduler.
+// Manual triggers run async so the HTTP request returns immediately;
+// poll /api/admin/sync/kavita/status to see the result.
+//
+// Single-process serialization matches the Plex worker: a sync is
+// in-flight if `kavitaSyncRunning` is set. One running sync at a time
+// per service.
+
+let kavitaSyncRunning = false;
+let kavitaSyncLastResult = null;
+let kavitaSyncLastRunAt = null;
+
+async function runKavitaSync() {
+  if (kavitaSyncRunning) return { ok: false, reason: 'already_running' };
+  if (!process.env.KAVITA_API_KEY) {
+    const r = { ok: false, reason: 'KAVITA_API_KEY not set', errors: [] };
+    kavitaSyncLastResult = r;
+    kavitaSyncLastRunAt = new Date().toISOString();
+    return r;
+  }
+  kavitaSyncRunning = true;
+  try {
+    const result = await kavitaSync.syncKavita({
+      db,
+      baseUrl: process.env.KAVITA_URL || 'https://kavita.phatt.vip',
+      apiKey: process.env.KAVITA_API_KEY,
+    });
+    kavitaSyncLastResult = result;
+    kavitaSyncLastRunAt = new Date().toISOString();
+    return { ok: true, ...result };
+  } catch (e) {
+    const err = { ok: false, error: String(e && e.message || e) };
+    kavitaSyncLastResult = err;
+    kavitaSyncLastRunAt = new Date().toISOString();
+    return err;
+  } finally {
+    kavitaSyncRunning = false;
+  }
+}
+
+app.post('/api/admin/sync/kavita', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+  if (kavitaSyncRunning) return res.status(409).json({ ok: false, reason: 'already_running' });
+  // Fire-and-forget; caller polls /status.
+  runKavitaSync();
+  res.json({ ok: true, status: 'syncing' });
+});
+
+app.get('/api/admin/sync/kavita/status', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+  res.json({
+    running: kavitaSyncRunning,
+    lastRunAt: kavitaSyncLastRunAt,
+    lastResult: kavitaSyncLastResult,
+  });
+});
 
 
 // ---- push notifications (PHA-1619) ----
@@ -1034,6 +1098,29 @@ if (require.main === module) {
     }
   }
 
+  // Kavita entity-graph sync (PHA-1874): every 6h. Skipped silently
+  // when KAVITA_API_KEY is unset. Same 6h cadence + same
+  // in-flight guard pattern as the Plex worker.
+  const KAVITA_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;     // 6h
+  let kavitaSyncLastTickAt = 0;
+  async function runKavitaSyncTick() {
+    if (!process.env.KAVITA_API_KEY) return;  // optional dependency
+    if (kavitaSyncRunning) return;            // manual trigger in flight
+    const now = Date.now();
+    if (kavitaSyncLastTickAt && (now - kavitaSyncLastTickAt) < KAVITA_SYNC_INTERVAL_MS) return;
+    kavitaSyncLastTickAt = now;
+    try {
+      const r = await runKavitaSync();
+      if (r && r.ok) {
+        console.log(`[scheduler] kavita sync: +${r.added}/~${r.updated} entities, ${r.edges} edges, ${r.stale} stale, ${r.libraries} libs, ${r.items} items (${r.durationMs}ms)`);
+      } else {
+        console.log(`[scheduler] kavita sync skipped: ${r && (r.reason || r.error) || 'unknown'}`);
+      }
+    } catch (e) {
+      console.error('[scheduler] kavita sync:', e.message);
+    }
+  }
+
   let schedulerHandle = null;
   function startScheduler() {
     if (schedulerHandle) return;
@@ -1041,10 +1128,11 @@ if (require.main === module) {
       try { await runChoreDigest(); } catch (e) { console.error('[scheduler] chore digest:', e.message); }
       try { await runTakeTurnsDigest(); } catch (e) { console.error('[scheduler] take-turns digest:', e.message); }
       try { await runPlexSyncTick(); } catch (e) { console.error('[scheduler] plex sync tick:', e.message); }
+      try { await runKavitaSyncTick(); } catch (e) { console.error('[scheduler] kavita sync tick:', e.message); }
     };
     setTimeout(tick, 10 * 1000);
     schedulerHandle = setInterval(tick, SCHED_TICK_MS);
-    console.log('[scheduler] daily digest started; tick=30min; plex entity-sync every 6h');
+    console.log('[scheduler] daily digest started; tick=30min; plex+kavita entity-sync every 6h');
   }
   startScheduler();
   startHealthChecker();
