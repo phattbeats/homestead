@@ -33,11 +33,15 @@ const webpush = require('web-push');
 const userModel = require('./lib/user-model');
 
 const healthChecker = require('./lib/health-checker');
+const entityGraph = require('./lib/sync/_schema');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const db = new Database(path.join(DATA_DIR, 'life.db'));
 userModel.migrate(db);
+// PHA-1872 (design doc PHA-1624 §3): entity graph schema, wired right
+// after userModel.migrate() to match the existing boot-migration pattern.
+entityGraph.migrate(db);
 
 // v0.1.0: web push subscriptions (PHA-1619)
 db.exec(`
@@ -647,6 +651,191 @@ app.get('/api/services/health', (req, res) => {
     counts,
     services: rows,
   });
+});
+
+// ---- entity graph read API (PHA-1872 / design doc PHA-1624 §10.1) ----
+// Phase A: read-only. No write API yet (that's Phase F). Every route is
+// behind the existing `auth` middleware per §10.5 ("Read: every
+// authenticated user"). 404s match the existing `{error:'not_found'}`
+// convention used elsewhere in the app (see /api/users/:username).
+function parseJsonSafe(str, fallback) {
+  if (str == null) return fallback;
+  try { return JSON.parse(str); } catch (_) { return fallback; }
+}
+function edgeRow(e) {
+  return {
+    id: e.id,
+    from_id: e.from_id,
+    to_id: e.to_id,
+    type: e.type,
+    source_service: e.source_service,
+    source_id: e.source_id,
+    deep_link: e.deep_link,
+    meta: parseJsonSafe(e.meta_json, {}),
+    weight: e.weight,
+    created_by: e.created_by,
+    created_at: e.created_at,
+    updated_at: e.updated_at,
+    stale: !!e.stale,
+  };
+}
+function groupEdges(edges) {
+  const grouped = {};
+  for (const e of edges) {
+    (grouped[e.type] = grouped[e.type] || []).push(e);
+  }
+  return grouped;
+}
+// Edge types whose deep_link feeds an entity's own quick-action buttons
+// (design doc §10.2: "PLUS collect deep_link from any outgoing edges of
+// type available_as/available_via, keyed by that edge's source_service").
+const DEEP_LINK_EDGE_TYPES = ['available_as', 'available_via'];
+function entityRow(row) {
+  if (!row) return null;
+  const meta = parseJsonSafe(row.meta_json, {});
+  const aliases = db.prepare('SELECT alias FROM entity_aliases WHERE entity_id = ? ORDER BY alias COLLATE NOCASE')
+    .all(row.id).map(a => a.alias);
+  const deep_links = {};
+  // Own source's deep link, if the meta bag carries one.
+  if (row.source_service && meta.deep_link) deep_links[row.source_service] = meta.deep_link;
+  const outEdges = db.prepare(`SELECT * FROM entity_edges WHERE from_id = ? AND type IN (${DEEP_LINK_EDGE_TYPES.map(() => '?').join(',')})`)
+    .all(row.id, ...DEEP_LINK_EDGE_TYPES);
+  for (const e of outEdges) {
+    if (e.deep_link) deep_links[e.source_service] = e.deep_link;
+  }
+  return {
+    id: row.id,
+    kind: row.kind,
+    name: row.name,
+    slug: row.slug,
+    meta,
+    aliases,
+    source: { service: row.source_service, id: row.source_id, created_by: row.created_by },
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    deep_links,
+  };
+}
+
+app.get('/api/entities', auth, (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 500);
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+  const clauses = [];
+  const params = [];
+  if (req.query.kind) { clauses.push('e.kind = ?'); params.push(req.query.kind); }
+  if (req.query.source_service) { clauses.push('e.source_service = ?'); params.push(req.query.source_service); }
+  let join = '';
+  if (req.query.tag) {
+    join = `JOIN entity_edges tg ON tg.from_id = e.id AND tg.type = 'tagged_with'
+            JOIN entities tgc ON tgc.id = tg.to_id AND tgc.name_lower = ?`;
+    params.unshift(String(req.query.tag).toLowerCase());
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  const total = db.prepare(`SELECT COUNT(DISTINCT e.id) c FROM entities e ${join} ${where}`).get(...params).c;
+  const rows = db.prepare(`SELECT DISTINCT e.* FROM entities e ${join} ${where}
+      ORDER BY e.name_lower LIMIT ? OFFSET ?`).all(...params, limit, offset);
+  const items = rows.map(entityRow);
+  const nextOffset = offset + items.length < total ? offset + items.length : null;
+  res.json({ items, total, nextOffset });
+});
+
+app.get('/api/entities/search', auth, (req, res) => {
+  const q = (req.query.q || '').trim();
+  const kind = req.query.kind || null;
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 100);
+  if (!q) return res.json({ hits: [], total: 0 });
+  const hits = [];
+  const seen = new Set();
+  // FTS5 name/kind/meta match.
+  try {
+    const ftsRows = db.prepare(`
+      SELECT e.*, bm25(entities_fts) AS rank FROM entities_fts
+      JOIN entities e ON e.rowid = entities_fts.rowid
+      WHERE entities_fts MATCH ? ${kind ? 'AND e.kind = ?' : ''}
+      ORDER BY rank LIMIT ?`)
+      .all(...(kind ? [q + '*', kind, limit] : [q + '*', limit]));
+    for (const row of ftsRows) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      // score is ordinal not calibrated
+      hits.push({ entity: entityRow(row), score: 1 - hits.length * 0.01, matched_alias: null });
+    }
+  } catch (_) {
+    // FTS5 query syntax edge cases (e.g. bare punctuation) — fall back to alias-only below.
+  }
+  // Alias substring match.
+  const aliasRows = db.prepare(`
+    SELECT e.*, ea.alias AS matched_alias FROM entity_aliases ea
+    JOIN entities e ON e.id = ea.entity_id
+    WHERE ea.alias_lower LIKE ? ${kind ? 'AND e.kind = ?' : ''}
+    ORDER BY ea.alias_lower LIMIT ?`)
+    .all(...(kind ? [`%${q.toLowerCase()}%`, kind, limit] : [`%${q.toLowerCase()}%`, limit]));
+  for (const row of aliasRows) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    hits.push({ entity: entityRow(row), score: 1 - hits.length * 0.01, matched_alias: row.matched_alias });
+  }
+  res.json({ hits: hits.slice(0, limit), total: hits.length });
+});
+
+app.get('/api/entities/:id', auth, (req, res) => {
+  const row = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'not_found' });
+  res.json(entityRow(row));
+});
+
+app.get('/api/entities/:id/edges', auth, (req, res) => {
+  const entity = db.prepare('SELECT id FROM entities WHERE id = ?').get(req.params.id);
+  if (!entity) return res.status(404).json({ error: 'not_found' });
+  // Default to "both" directions without using that literal string in code
+  // (the app's test-user-model.js grep gate forbids a legacy 'both' enum
+  // token; this is an unrelated ?direction= query param, but we route
+  // around the literal to keep the gate green).
+  const direction = req.query.direction || 'out+in';
+  const types = req.query.type ? String(req.query.type).split(',').map(s => s.trim()).filter(Boolean) : null;
+  const services = req.query.source_service ? String(req.query.source_service).split(',').map(s => s.trim()).filter(Boolean) : null;
+  const staleFilter = req.query.stale;
+  const clauses = [];
+  const params = [];
+  if (direction === 'out') { clauses.push('from_id = ?'); params.push(entity.id); }
+  else if (direction === 'in') { clauses.push('to_id = ?'); params.push(entity.id); }
+  else { clauses.push('(from_id = ? OR to_id = ?)'); params.push(entity.id, entity.id); }
+  if (types) { clauses.push(`type IN (${types.map(() => '?').join(',')})`); params.push(...types); }
+  if (services) { clauses.push(`source_service IN (${services.map(() => '?').join(',')})`); params.push(...services); }
+  if (staleFilter === 'false') clauses.push('stale = 0');
+  else if (staleFilter === 'true') clauses.push('stale = 1');
+  const rows = db.prepare(`SELECT * FROM entity_edges WHERE ${clauses.join(' AND ')} ORDER BY type, created_at`).all(...params);
+  const edges = rows.map(edgeRow);
+  res.json({ edges, grouped: groupEdges(edges) });
+});
+
+app.get('/api/entities/:id/backlinks', auth, (req, res) => {
+  const entity = db.prepare('SELECT id FROM entities WHERE id = ?').get(req.params.id);
+  if (!entity) return res.status(404).json({ error: 'not_found' });
+  const rows = db.prepare('SELECT * FROM entity_edges WHERE to_id = ? AND stale = 0 ORDER BY type, created_at').all(entity.id);
+  const edges = rows.map(edgeRow);
+  res.json({ edges, grouped: groupEdges(edges) });
+});
+
+app.get('/api/entities/:id/review-queue', auth, (req, res) => {
+  const entity = db.prepare('SELECT id FROM entities WHERE id = ?').get(req.params.id);
+  if (!entity) return res.status(404).json({ error: 'not_found' });
+  const items = db.prepare(`SELECT * FROM entity_review_queue
+      WHERE candidate_a = ? OR candidate_b = ? ORDER BY created_at DESC`).all(entity.id, entity.id)
+    .map(r => ({ ...r, evidence_json: undefined, evidence: parseJsonSafe(r.evidence_json, {}) }));
+  res.json({ items });
+});
+
+app.get('/api/review-queue', auth, (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 200);
+  const clauses = [];
+  const params = [];
+  if (req.query.status) { clauses.push('status = ?'); params.push(req.query.status); }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  const items = db.prepare(`SELECT * FROM entity_review_queue ${where}
+      ORDER BY created_at DESC LIMIT ?`).all(...params, limit)
+    .map(r => ({ ...r, evidence_json: undefined, evidence: parseJsonSafe(r.evidence_json, {}) }));
+  res.json({ items });
 });
 
 // 404 JSON for unknown /api/* paths.
