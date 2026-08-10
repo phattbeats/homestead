@@ -31,11 +31,21 @@ const fs = require('fs');
 const webpush = require('web-push');
 
 const userModel = require('./lib/user-model');
+const calendarSources = require('./lib/calendar-sources');
+const secretBox = require('./lib/secret-box');
+const plexSync = require('./lib/sync/plex');
+
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const db = new Database(path.join(DATA_DIR, 'life.db'));
 userModel.migrate(db);
+calendarSources.migrate(db);
+// v0.1.5: entity-graph schema (PHA-1624, Phase A; self-installed here so
+// the Plex worker boots even if Phase A's standalone migration hasn't
+// landed. Idempotent — no-op once Phase A ships its own migrate()).
+plexSync.migrate(db);
+
 
 // v0.1.0: web push subscriptions (PHA-1619)
 db.exec(`
@@ -510,6 +520,231 @@ app.delete('/api/services/:id', auth, (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- calendar sources (PHA-1620) ----
+// All routes never return cred_blob. The DTO is built by
+// calendarSources.publicView(). Adding a source requires CALENDAR_CRED_KEY.
+app.get('/api/calendar-sources', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  // Household-shared sources (user_id IS NULL) are visible to
+  // everyone. Per-user sources are visible to the owner + admins.
+  const rows = db.prepare('SELECT * FROM calendar_sources ORDER BY id').all();
+  const visible = rows.filter(r => r.user_id == null || r.user_id === me.id || me.is_admin);
+  res.json(visible.map(calendarSources.publicView));
+});
+
+function parseColor(c) {
+  if (!c) return null;
+  return /^#[0-9a-fA-F]{6}$/.test(String(c)) ? String(c) : null;
+}
+
+app.post('/api/calendar-sources', auth, (req, res) => {
+  if (!secretBox.keyReady()) {
+    return res.status(503).json({ error: 'CALENDAR_CRED_KEY not configured' });
+  }
+  const me = userModel.getMe(db, req.session.user.username);
+  const body = req.body || {};
+  const { provider, account_id, calendar_id, base_url, display_name, color, shared } = body;
+  if (!provider || !account_id || !calendar_id) {
+    return res.status(400).json({ error: 'provider, account_id, calendar_id required' });
+  }
+  if (!['caldav_nextcloud', 'caldav_icloud', 'ms365', 'google'].includes(provider)) {
+    return res.status(400).json({ error: 'unsupported provider' });
+  }
+  // Per-provider credential validation. CalDAV wants an app-password;
+  // Graph wants an OAuth2 access+refresh token pair; Google wants an
+  // OAuth2 access+refresh token pair plus a client_id (needed for the
+  // refresh-token grant). The encrypted payload is provider-specific —
+  // we keep the JSON shape narrow so lib/caldav-source.js /
+  // lib/google-source.js (and lib/graph-source.js from PR #7) can
+  // require fields directly without defensive parsing.
+  let credPayload;
+  if (provider === 'caldav_nextcloud' || provider === 'caldav_icloud') {
+    if (!body.app_password) return res.status(400).json({ error: 'app_password required for CalDAV providers' });
+    credPayload = { app_password: body.app_password };
+  } else if (provider === 'google') {
+    // PHA-1865: Google Calendar adapter. client_id is mandatory (the
+    // refresh-token grant needs it); client_secret is optional —
+    // confidential web apps send it, public installed apps omit it.
+    if (!body.access_token) return res.status(400).json({ error: 'access_token required for google' });
+    if (!body.client_id) return res.status(400).json({ error: 'client_id required for google (set during source creation; needed for the refresh path)' });
+    credPayload = {
+      access_token: body.access_token,
+      refresh_token: body.refresh_token || null,
+      expires_at: body.expires_at || null,
+      client_id: body.client_id,
+      client_secret: body.client_secret || null,
+      scope: body.scope || null,
+    };
+  } else {
+    // ms365 (PHA-1864) lives in the parallel PR #7; the case is
+    // included here so the PR's diff stays cohesive — both PRs
+    // resolve cleanly against the shared base regardless of merge
+    // order.
+    if (!body.access_token) return res.status(400).json({ error: 'access_token required for ms365' });
+    credPayload = {
+      access_token: body.access_token,
+      refresh_token: body.refresh_token || null,
+      expires_at: body.expires_at || null,
+      client_id: body.client_id || null,
+      tenant_id: body.tenant_id || null,
+      scope: body.scope || null,
+    };
+  }
+  let userId = me.id;
+  if (shared) {
+    if (!me.is_admin) return res.status(403).json({ error: 'admin only for shared sources' });
+    userId = null;
+  }
+  const credBlob = secretBox.encryptString(JSON.stringify(credPayload));
+  const row = db.prepare(`INSERT INTO calendar_sources
+    (user_id, provider, account_id, calendar_id, base_url, display_name, color, cred_blob, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    userId, provider, account_id, calendar_id, base_url || null,
+    display_name || null, parseColor(color) || '#7c9eb8', credBlob, me.username
+  );
+  const created = db.prepare('SELECT * FROM calendar_sources WHERE id = ?').get(row.lastInsertRowid);
+  res.json(calendarSources.publicView(created));
+});
+
+app.delete('/api/calendar-sources/:id', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  const src = db.prepare('SELECT * FROM calendar_sources WHERE id = ?').get(req.params.id);
+  if (!src) return res.status(404).json({ error: 'not found' });
+  if (src.user_id != null && src.user_id !== me.id && !me.is_admin) {
+    return res.status(403).json({ error: 'not yours' });
+  }
+  db.prepare('DELETE FROM calendar_sources WHERE id = ?').run(src.id);
+  res.json({ ok: true });
+});
+
+app.post('/api/calendar-sources/:id/refresh', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  const src = db.prepare('SELECT * FROM calendar_sources WHERE id = ?').get(req.params.id);
+  if (!src) return res.status(404).json({ error: 'not found' });
+  if (src.user_id != null && src.user_id !== me.id && !me.is_admin) {
+    return res.status(403).json({ error: 'not yours' });
+  }
+  // Sync is async; the per-source errors are captured on the row.
+  Promise.resolve()
+    .then(() => calendarSources.syncSource(db, src))
+    .catch((e) => {
+      db.prepare(`UPDATE calendar_sources SET last_error = ?, last_error_at = datetime('now') WHERE id = ?`)
+        .run(String(e && e.message || e).slice(0, 1024), src.id);
+    });
+  res.json({ ok: true, status: 'syncing' });
+});
+
+// ---- Entity-graph sync admin endpoints (PHA-1624 Phase B-1, PHA-1873) ----
+//
+// POST /api/admin/sync/plex           admin-only manual trigger
+// GET  /api/admin/sync/plex/status    admin-only last-run summary
+//
+// The worker is also cron-driven every 6h from the boot scheduler.
+// Manual triggers run async so the HTTP request returns immediately;
+// poll /api/admin/sync/plex/status to see the result.
+
+// Single-process serialization: a sync is in-flight if this flag is set.
+// (We don't try to be cute with promise chains — Plex syncs are slow
+// enough that a debounce is more useful than a queue.)
+let plexSyncRunning = false;
+let plexSyncLastResult = null;
+let plexSyncLastRunAt = null;
+
+async function runPlexSync() {
+  if (plexSyncRunning) return { ok: false, reason: 'already_running' };
+  if (!process.env.PLEX_TOKEN) {
+    const r = { ok: false, reason: 'PLEX_TOKEN not set', errors: [] };
+    plexSyncLastResult = r;
+    plexSyncLastRunAt = new Date().toISOString();
+    return r;
+  }
+  plexSyncRunning = true;
+  try {
+    const result = await plexSync.syncPlex({
+      db,
+      baseUrl: process.env.PLEX_URL || 'https://plex.phatt.vip',
+      token: process.env.PLEX_TOKEN,
+    });
+    plexSyncLastResult = result;
+    plexSyncLastRunAt = new Date().toISOString();
+    return { ok: true, ...result };
+  } catch (e) {
+    const err = { ok: false, error: String(e && e.message || e) };
+    plexSyncLastResult = err;
+    plexSyncLastRunAt = new Date().toISOString();
+    return err;
+  } finally {
+    plexSyncRunning = false;
+  }
+}
+
+app.post('/api/admin/sync/plex', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+  if (plexSyncRunning) return res.status(409).json({ ok: false, reason: 'already_running' });
+  // Fire-and-forget; caller polls /status.
+  runPlexSync();
+  res.json({ ok: true, status: 'syncing' });
+});
+
+app.get('/api/admin/sync/plex/status', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+  res.json({
+    running: plexSyncRunning,
+    lastRunAt: plexSyncLastRunAt,
+    lastResult: plexSyncLastResult,
+  });
+});
+
+// GET /api/events/merged?from=YYYY-MM-DD&to=YYYY-MM-DD
+// Returns a unified list of native Homestead events + cached
+// provider events, tagged with `origin: 'native' | 'provider:<id>'`
+// so the month grid can paint per-provider pips.
+app.get('/api/events/merged', auth, (req, res) => {
+  const { from, to } = req.query;
+  if (!from || !to) return res.status(400).json({ error: 'from and to required (YYYY-MM-DD)' });
+  const native = db.prepare(
+    'SELECT id, title, date, time, notes, owner FROM events WHERE date >= ? AND date <= ? ORDER BY date, time'
+  ).all(from, to).map(e => ({
+    id: `native-${e.id}`,
+    title: e.title,
+    notes: e.notes,
+    start: e.date + (e.time ? 'T' + e.time + ':00' : 'T00:00:00'),
+    end: null,
+    allDay: !e.time,
+    owner: e.owner,
+    origin: 'native',
+    source_id: null,
+    color: null,
+    stale: false,
+    last_error: null,
+  }));
+  const cached = db.prepare(`
+    SELECT cec.id, cec.title, cec.description, cec.start_at, cec.end_at, cec.all_day, cec.location,
+           cec.source_id, cs.provider, cs.account_id, cs.color, cs.display_name, cs.last_synced_at, cs.last_error
+    FROM calendar_event_cache cec
+    JOIN calendar_sources cs ON cs.id = cec.source_id
+    WHERE cec.start_at >= ? AND cec.start_at <= ?
+  `).all(from + 'T00:00:00Z', to + 'T23:59:59Z').map(e => ({
+    id: `provider-${e.id}`,
+    title: e.title,
+    notes: e.description,
+    start: e.start_at,
+    end: e.end_at,
+    allDay: !!e.all_day,
+    location: e.location,
+    owner: null,
+    origin: `provider:${e.provider}`,
+    source_id: e.source_id,
+    color: e.color,
+    stale: !e.last_synced_at || (Date.now() - new Date(e.last_synced_at + 'Z').getTime()) > calendarSources.FRESHNESS_MS,
+    last_error: e.last_error,
+  }));
+  res.json({ events: [...native, ...cached] });
+});
+
+
 // ---- push notifications (PHA-1619) ----
 // Public VAPID public key — fetched by the service worker at startup so
 // it can build a PushSubscription. No auth required: the public key is
@@ -665,16 +900,42 @@ if (require.main === module) {
       });
     }
   }
+  // Plex entity-graph sync (PHA-1873): every 6h. Skipped silently when
+  // PLEX_TOKEN is unset (the household might not have Plex yet). The
+  // tick is independent of the chore-digest tick; we use the same
+  // setInterval handle but guard with an "if it's been 6h" check so we
+  // don't run two unrelated intervals.
+  const PLEX_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;     // 6h
+  let plexSyncLastTickAt = 0;
+  async function runPlexSyncTick() {
+    if (!process.env.PLEX_TOKEN) return;       // optional dependency
+    if (plexSyncRunning) return;                // manual trigger in flight
+    const now = Date.now();
+    if (plexSyncLastTickAt && (now - plexSyncLastTickAt) < PLEX_SYNC_INTERVAL_MS) return;
+    plexSyncLastTickAt = now;
+    try {
+      const r = await runPlexSync();
+      if (r && r.ok) {
+        console.log(`[scheduler] plex sync: +${r.added}/~${r.updated} entities, ${r.edges} edges, ${r.stale} stale, ${r.libraries} libs, ${r.items} items (${r.durationMs}ms)`);
+      } else {
+        console.log(`[scheduler] plex sync skipped: ${r && (r.reason || r.error) || 'unknown'}`);
+      }
+    } catch (e) {
+      console.error('[scheduler] plex sync:', e.message);
+    }
+  }
+
   let schedulerHandle = null;
   function startScheduler() {
     if (schedulerHandle) return;
     const tick = async () => {
       try { await runChoreDigest(); } catch (e) { console.error('[scheduler] chore digest:', e.message); }
       try { await runTakeTurnsDigest(); } catch (e) { console.error('[scheduler] take-turns digest:', e.message); }
+      try { await runPlexSyncTick(); } catch (e) { console.error('[scheduler] plex sync tick:', e.message); }
     };
     setTimeout(tick, 10 * 1000);
     schedulerHandle = setInterval(tick, SCHED_TICK_MS);
-    console.log('[scheduler] daily digest started; tick=30min');
+    console.log('[scheduler] daily digest started; tick=30min; plex entity-sync every 6h');
   }
   startScheduler();
   app.listen(PORT, () => console.log(`Homestead on :${PORT}`));

@@ -16,6 +16,15 @@ dependencies.
   off a recurring task rolls it forward instead of marking it done.
 - **Calendar** — month grid with per-person colour pips. Tap a day to see
   or add events.
+- **Entity graph (v0.1.5)** — Plex sync worker (PHA-1624 Phase B-1)
+  walks your Plex library every 6h and reconciles movies / shows /
+  seasons / episodes into Homestead's entity graph (`works`, `people`,
+  `concepts`) with typed edges (`available_as`, `part_of`,
+  `tagged_with`, `directed_by`). The graph is the meta-agent's (PHA-1617)
+  primary sense organ and powers the cmd-K search palette (Phase A).
+  Manual trigger: `POST /api/admin/sync/plex` (admin-only); status:
+  `GET /api/admin/sync/plex/status`. Set `PLEX_TOKEN` (and optionally
+  `PLEX_URL`) in the container env to enable.
 - **Services launcher** — editable tile grid (long-press a tile to edit).
   Tap a tile to open the service inside Homestead in a full-screen iframe,
   with a draggable escape dot (tap to return to the dashboard; drag to
