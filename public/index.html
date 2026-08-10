@@ -106,6 +106,16 @@ main{padding:14px 18px;max-width:680px;margin:0 auto}
 .svc-icon{font-size:28px}
 .svc-name{font-weight:700;margin-top:10px;font-size:15px}
 .svc-desc{font-size:12px;color:var(--muted);margin-top:2px}
+/* v0.0.6 health indicator (PHA-1623): subtle red dot + down-since
+   label. The dot sits in the same corner as the owner-dot; tap-
+   through still works (it's a CSS overlay, not a button). */
+.svc-health{position:absolute;top:10px;left:10px;display:none;align-items:center;gap:5px;
+  padding:3px 7px 3px 6px;border-radius:99px;background:rgba(179,69,58,.12);color:#b3453a;
+  font-size:10px;font-weight:700;letter-spacing:.04em;line-height:1}
+.svc-health.on{display:inline-flex}
+.svc-health .dot-red{width:7px;height:7px;border-radius:50%;background:#b3453a;flex-shrink:0}
+.svc.svc-down .svc-in{border-color:rgba(179,69,58,.18)}
+.svc-down .svc-desc{color:#b3453a;font-weight:600}
 
 /* fab + tabbar */
 #fab{position:fixed;right:20px;bottom:calc(env(safe-area-inset-bottom) + 88px);width:56px;height:56px;
@@ -424,15 +434,34 @@ function pickDay(ds){selDate=ds;renderCal()}
 $('#calPrev').onclick=()=>{calM--;if(calM<0){calM=11;calY--}renderCal()};
 $('#calNext').onclick=()=>{calM++;if(calM>11){calM=0;calY++}renderCal()};
 let showAll=false;
+// v0.0.6 health badge (PHA-1623): format a "down since HH:MM" label
+// from an ISO timestamp in the local timezone.
+function fmtDownSince(iso){
+  if(!iso)return '';
+  try{
+    const d=new Date(iso);
+    const hh=String(d.getHours()).padStart(2,'0');
+    const mm=String(d.getMinutes()).padStart(2,'0');
+    return `down since ${hh}:${mm}`;
+  }catch(_){return 'down'}
+}
 function renderSvcs(){
   const mine=SVCS.filter(s=>showAll||!s.owner||s.owner==='all'||s.owner===ME.username);
   $('#showAll').textContent=showAll?'· showing all':'· showing mine';
-  $('#svcGrid').innerHTML=mine.map(s=>`
-    <a class="svc" href="${esc(s.url)}" onclick="return launchSvc(event,${s.id})"
-       oncontextmenu="event.preventDefault();openSvcSheet(${s.id})">
+  $('#svcGrid').innerHTML=mine.map(s=>{
+    const h=s.health||{status:'unknown'};
+    const isDown=h.status==='down';
+    return `
+    <a class="svc${isDown?' svc-down':''}" href="${esc(s.url)}" onclick="return launchSvc(event,${s.id})"
+       oncontextmenu="event.preventDefault();openSvcSheet(${s.id})"
+       ${isDown?`title="${esc(fmtDownSince(h.down_since))}"`:''}>
       <span class="svc-owner" style="background:${userColorVar(s.owner)}"></span>
+      <span class="svc-health${isDown?' on':''}" aria-hidden="${!isDown}">
+        <span class="dot-red"></span>${esc(fmtDownSince(h.down_since))}
+      </span>
       <div class="svc-in"><div class="svc-icon">${s.icon||'🔗'}</div>
-      <div class="svc-name">${esc(s.name)}</div><div class="svc-desc">${esc(s.descr)}&nbsp;</div></div></a>`).join('');
+      <div class="svc-name">${esc(s.name)}</div><div class="svc-desc">${esc(isDown?fmtDownSince(h.down_since):(s.descr||''))}&nbsp;</div></div></a>`;
+  }).join('');
 }
 function launchSvc(ev,id){
   const s=SVCS.find(x=>x.id===id);
@@ -589,7 +618,8 @@ function openEventSheet(id,date){
   };
 }
 function openSvcSheet(id){
-  const s=SVCS.find(x=>x.id===id)||{name:'',url:'',icon:'🔗',descr:'',owner:'all',open_mode:'frame'};
+  const s=SVCS.find(x=>x.id===id)||{name:'',url:'',icon:'🔗',descr:'',owner:'all',open_mode:'frame',
+    health_url:'',health_interval_sec:60};
   openSheet(`<h2>${id?'Edit app':'Add an app'}</h2>
     <div class="row"><input class="field" id="f-icon" placeholder="🔗" value="${esc(s.icon||'🔗')}" style="flex:0 0 70px;text-align:center">
     <input class="field" id="f-name" placeholder="Name" value="${esc(s.name)}"></div>
@@ -597,12 +627,22 @@ function openSvcSheet(id){
     <input class="field" id="f-descr" placeholder="Short description" value="${esc(s.descr||'')}">
     <label>Whose app?</label>${userPickerHtml('f-owner', s.owner||'all')}
     <label>Opens</label>${modePickerHtml('f-mode', s.open_mode||'frame')}
+    <h3>Health check (optional)</h3>
+    <input class="field" id="f-health-url" placeholder="Health URL — leave blank to use the tile URL"
+      value="${esc(s.health_url||'')}" inputmode="url">
+    <label>Check every</label>
+    <div class="row"><input class="field" id="f-health-int" type="number" min="0" step="5"
+      placeholder="60" value="${esc(s.health_interval_sec==null?60:s.health_interval_sec)}">
+    <span style="align-self:center;color:var(--muted);font-size:13px">seconds <span style="opacity:.6">(0 = off)</span></span></div>
     <button class="btn" style="margin-top:16px" id="f-save">${id?'Save':'Add it'}</button>
     ${id?`<button class="link danger" style="margin-top:14px;width:100%" onclick="delSvc(${id})">Remove app</button>`:''}`);
   segWire('f-owner');segWire('f-mode');
   $('#f-save').onclick=async()=>{
+    const hInt=parseInt($('#f-health-int').value,10);
     const body={name:$('#f-name').value.trim(),url:$('#f-url').value.trim(),icon:$('#f-icon').value||'🔗',descr:$('#f-descr').value,
-      owner:segVal('f-owner')||'all',open_mode:segVal('f-mode')||'frame'};
+      owner:segVal('f-owner')||'all',open_mode:segVal('f-mode')||'frame',
+      health_url:$('#f-health-url').value.trim()||null,
+      health_interval_sec:Number.isFinite(hInt)?hInt:60};
     if(!body.name||!body.url)return;
     try{
       if(id)await api('PUT',`/api/services/${id}`,body);else await api('POST','/api/services',body);
