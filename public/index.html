@@ -92,10 +92,21 @@ main{padding:14px 18px;max-width:680px;margin:0 auto}
 .day.sel{background:var(--ink);color:#fff}
 .pips{display:flex;gap:2px;height:5px}
 .pip{width:5px;height:5px;border-radius:50%}
+/* PHA-1867: provider pips carry a 1px surface-coloured ring so they
+   don't blur together with the per-user coloured pips on the same cell.
+   The ring is drawn via box-shadow inset so the dot stays a circle. */
+.pip.provider{box-shadow:0 0 0 1px var(--surface), 0 0 0 2px var(--line)}
 .ev{display:flex;gap:12px;padding:12px 4px;border-bottom:1px solid var(--line);align-items:center}
 .ev:last-child{border-bottom:none}
 .ev-time{font-size:12px;font-weight:700;color:var(--muted);width:52px;flex-shrink:0}
 .ev-bar{width:4px;height:34px;border-radius:2px;flex-shrink:0}
+/* PHA-1867: provider events sit in the same row layout as native events
+   but render the source as a small chip + a left-bar tint so the user
+   can tell at a glance that the row came from Nextcloud / iCloud / etc. */
+.ev.provider{opacity:.96}
+.ev.provider .t-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.src-chip{display:inline-block;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;color:#fff;text-transform:uppercase;line-height:1.6}
+.stale{color:var(--muted);font-weight:700;font-size:11px}
 
 /* services */
 .svc-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
@@ -304,6 +315,7 @@ const api=async(m,u,b)=>{const r=await fetch(u,{method:m,headers:{'Content-Type'
 /* ---- state ---- */
 let ME=null, USERS={};
 let TASKS=[],EVENTS=[],SVCS=[];
+let MERGED=[]; // PHA-1867: native + cached provider events for the current month
 let calY,calM,selDate=today();
 
 function today(){const d=new Date();return d.toISOString().slice(0,10)}
@@ -419,8 +431,23 @@ async function boot(user){
     }
   }catch(_){}
 }
+async function refreshMerged(){
+  // Fetch the merged feed for the current calendar month. Called both
+  // from refresh() (initial load) and from the calPrev/calNext handlers
+  // (month navigation). Errors are swallowed — if the merged feed is
+  // unavailable the native-only fallback in eventsForDay() still renders.
+  try{
+    const monthStart = `${calY}-${String(calM+1).padStart(2,'0')}-01`;
+    const monthEnd = new Date(calY, calM+1, 0).toISOString().slice(0,10);
+    const merged = await api('GET',`/api/events/merged?from=${monthStart}&to=${monthEnd}`);
+    MERGED = (merged && merged.events) || [];
+  } catch(_) {
+    MERGED = [];
+  }
+}
 async function refresh(){
   [TASKS,EVENTS,SVCS]=await Promise.all([api('GET','/api/tasks'),api('GET','/api/events'),api('GET','/api/services')]);
+  await refreshMerged();
   renderHome();renderTasks();renderCal();renderSvcs();
 }
 
@@ -440,8 +467,11 @@ function taskRow(t){
     <button class="x" onclick="delTask(${t.id})">✕</button></div>`;
 }
 function renderHome(){
-  const evs=EVENTS.filter(e=>e.date===today());
-  $('#todayEvents').innerHTML=evs.length?evs.map(evRow).join(''):`<div class="empty"><span>☀️</span>Nothing on the calendar today</div>`;
+  // PHA-1867: pull today's events from the merged feed so provider events
+  // appear on the home screen alongside native ones. Use eventsForDay
+  // for the same overlap rules as the calendar grid.
+  const evs=eventsForDay(today());
+  $('#todayEvents').innerHTML=evs.length?evs.map(mergedEvRow).join(''):`<div class="empty"><span>☀️</span>Nothing on the calendar today</div>`;
   const due=TASKS.filter(t=>!t.done&&(!t.due_date||t.due_date<=today()));
   $('#todayTasks').innerHTML=due.length?due.map(taskRow).join(''):`<div class="empty"><span>🎉</span>All caught up</div>`;
 }
@@ -458,6 +488,70 @@ function evRow(e){
     ${e.notes?`<div class="t-meta">${esc(e.notes)}</div>`:''}</div>
     <button class="x" onclick="event.stopPropagation();delEvent(${e.id})">✕</button></div>`;
 }
+// PHA-1867: provider events are read-only in v1 (Phase 2 write-back lives
+// in PHA-1866). The row uses a chip tag to show the source display_name
+// and a coloured left bar in the source's color. No edit/delete buttons
+// because we never wrote it locally — the source of truth is the provider.
+function providerEvRow(e){
+  const start = e.start || '';
+  const end = e.end || '';
+  const time = e.allDay
+    ? 'all day'
+    : (start.length >= 16 ? start.slice(11,16) : 'all day');
+  const label = e.display_name || (e.origin || '').replace('provider:','') || 'provider';
+  const color = e.color || '#7c9eb8';
+  const stale = e.stale ? ' <span class="stale" title="Provider cache is stale">⚠ stale</span>' : '';
+  const range = (!e.allDay && end && end !== start) ? ` – ${end.slice(11,16)}` : '';
+  return `<div class="ev provider">
+    <div class="ev-time">${esc(time)}${range}</div>
+    <div class="ev-bar" style="background:${color}"></div>
+    <div class="t-body">
+      <div class="t-title">${esc(e.title)}${stale}</div>
+      <div class="t-meta"><span class="src-chip" style="background:${color}">${esc(label)}</span>${e.location?` · 📍 ${esc(e.location)}`:''}${e.notes?` · ${esc(e.notes)}`:''}</div>
+    </div>
+  </div>`;
+}
+function mergedEvRow(e){
+  if (!e || !e.origin) return '';
+  if (e.origin === 'native') {
+    // Restore the numeric id the existing sheets expect.
+    const nativeId = parseInt(String(e.id).replace(/^native-/, ''), 10);
+    return evRow({
+      id: nativeId,
+      title: e.title,
+      notes: e.notes,
+      date: (e.start || '').slice(0,10),
+      time: e.allDay ? null : (e.start || '').slice(11,16),
+      owner: e.owner,
+    });
+  }
+  return providerEvRow(e);
+}
+// eventsForDay returns the merged events that are ACTIVE on the given
+// day cell. Native events use `start.slice(0,10) == ds`; provider events
+// use [start, end] overlap. Multi-day provider events appear on every
+// day they touch so the pip count and day-list stay consistent.
+function eventsForDay(ds){
+  return MERGED.filter((e)=>{
+    if(!e || !e.start) return false;
+    const start = e.start.slice(0,10);
+    if(e.origin === 'native') return start === ds;
+    const end = (e.end || e.start).slice(0,10);
+    return ds >= start && ds <= end;
+  });
+}
+// Provider pip = solid dot in provider color + 1px surface-colored ring
+// to make it pop against the per-user colored pips on the same cell.
+// Native pip stays a solid dot in the owner's color, matching v1.
+function pipFor(e){
+  if(e.origin === 'native'){
+    return `<span class="pip" style="background:${userColorVar(e.owner)}"></span>`;
+  }
+  const color = e.color || '#7c9eb8';
+  const label = e.display_name || (e.origin || '').replace('provider:','') || 'provider';
+  const stale = e.stale ? ' · stale' : '';
+  return `<span class="pip provider" style="background:${color}" title="${esc(label + stale)}"></span>`;
+}
 function renderCal(){
   const first=new Date(calY,calM,1),start=first.getDay(),dim=new Date(calY,calM+1,0).getDate();
   $('#calTitle').textContent=first.toLocaleDateString('en-US',{month:'long',year:'numeric'});
@@ -465,19 +559,19 @@ function renderCal(){
   for(let i=0;i<start;i++)html+=`<div class="day dim"></div>`;
   for(let d=1;d<=dim;d++){
     const ds=`${calY}-${String(calM+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const evs=EVENTS.filter(e=>e.date===ds);
+    const evs=eventsForDay(ds);
     const cls=ds===selDate?'sel':ds===today()?'today':'';
     html+=`<div class="day ${cls}" onclick="pickDay('${ds}')">${d}
-      <div class="pips">${evs.slice(0,3).map(e=>`<span class="pip" style="background:${userColorVar(e.owner)}"></span>`).join('')}</div></div>`;
+      <div class="pips">${evs.slice(0,3).map(pipFor).join('')}</div></div>`;
   }
   $('#calGrid').innerHTML=html;
   $('#selDayLabel').textContent=fmtDate(selDate);
-  const evs=EVENTS.filter(e=>e.date===selDate);
-  $('#dayEvents').innerHTML=evs.length?evs.map(evRow).join(''):`<div class="empty">Free day</div>`;
+  const evs=eventsForDay(selDate);
+  $('#dayEvents').innerHTML=evs.length?evs.map(mergedEvRow).join(''):`<div class="empty">Free day</div>`;
 }
 function pickDay(ds){selDate=ds;renderCal()}
-$('#calPrev').onclick=()=>{calM--;if(calM<0){calM=11;calY--}renderCal()};
-$('#calNext').onclick=()=>{calM++;if(calM>11){calM=0;calY++}renderCal()};
+$('#calPrev').onclick=async()=>{calM--;if(calM<0){calM=11;calY--}await refreshMerged();renderCal()};
+$('#calNext').onclick=async()=>{calM++;if(calM>11){calM=0;calY++}await refreshMerged();renderCal()};
 let showAll=false;
 // v0.0.6 health badge (PHA-1623): format a "down since HH:MM" label
 // from an ISO timestamp in the local timezone.

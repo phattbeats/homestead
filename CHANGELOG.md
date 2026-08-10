@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.1.11 (2026-08-10) — PHA-1867
+
+- **Month-grid merge layer (PHA-1867d).** The home + calendar pages now consume
+  `GET /api/events/merged` and render cached provider events alongside native
+  Homestead events in the same grid. PHA-1867 closes parent work-order step 3
+  ("Merge into month grid + day drill-in"). Per-provider pips carry a 1px
+  surface-coloured ring so they don't blur into the per-user coloured native
+  pips on the same cell; provider event rows in the day-drill show a coloured
+  source chip + left-bar tint, hover-label on the grid pip gives the
+  provider display name, and a `stale` warning surfaces when the
+  provider cache is older than the 5-min freshness window. Phase 2
+  write-back (PHA-1866) adds edit/delete on top.
+- **Overlap semantics.** `/api/events/merged` now uses
+  `start_at <= to AND (end_at IS NULL OR end_at >= from)` so an event
+  that starts before the requested window but ends inside it still
+  appears. Multi-day events visible on the 1st of the month, all-day
+  conferences that cross the calendar boundary, etc. — all surface
+  in every day cell they touch.
+- **Disabled sources.** Events from sources with `enabled = 0` are
+  excluded from the merged feed — the operator toggle is the single
+  switch for "stop showing this provider's events".
+- **Defence-in-depth leak check.** The merged endpoint refuses to
+  respond (HTTP 500 with a generic error) if the serialized response
+  payload contains any of `cred_blob`, `app_password`, `access_token`,
+  `refresh_token`, or `client_secret`. The publicView() contract is
+  the only path to a row; this check catches upstream bypasses.
+- **Tests.** `scripts/test-merge-layer.js` (31 unit tests covering
+  overlap math, disabled-source exclusion, leak contract, JSON shape)
+  and `scripts/smoke-merge-layer.js` (25 end-to-end smoke checks
+  against a live server.js + fake CalDAV). Wired into `npm test` and
+  `npm run test:smoke`.
+
 ## v0.1.10 (2026-08-10) — PHA-1866
 
 - **Phase 2 calendar write-back (CalDAV).** Homestead now round-trips

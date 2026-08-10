@@ -983,12 +983,36 @@ app.delete('/api/calendar-sources/:id/events/:externalId', auth, (req, res) => {
 // Returns a unified list of native Homestead events + cached
 // provider events, tagged with `origin: 'native' | 'provider:<id>'`
 // so the month grid can paint per-provider pips.
+//
+// Overlap semantics (PHA-1867):
+//   * Native events match by their `date` column (single-day, all-day).
+//   * Provider cached events match by [start_at, end_at] overlap against
+//     the requested [from, to] window. An event that starts before `from`
+//     but ends after `from` is included — the month grid is responsible
+//     for displaying only the slice that falls inside each visible day
+//     cell, but the merged feed must contain every event that touches
+//     the window so the day-cell grouping can attribute it correctly.
+//   * Disabled sources (enabled = 0) are excluded — the operator toggle
+//     is the single switch for "stop showing this provider's events".
+//   * The shape stays the same as PR #5 (PHA-1620): `origin` carries
+//     either `native` or `provider:<provider-kind>` so the frontend can
+//     distinguish without a second lookup. `cred_blob` is NEVER in the
+//     response — the publicView() contract from lib/calendar-sources.js
+//     is the only path to a row, and it omits cred_blob by design.
 app.get('/api/events/merged', auth, (req, res) => {
   const { from, to } = req.query;
   if (!from || !to) return res.status(400).json({ error: 'from and to required (YYYY-MM-DD)' });
+  const fromDay = String(from).slice(0, 10);
+  const toDay = String(to).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fromDay) || !/^\d{4}-\d{2}-\d{2}$/.test(toDay)) {
+    return res.status(400).json({ error: 'from and to must be YYYY-MM-DD' });
+  }
+  const fromIso = fromDay + 'T00:00:00Z';
+  const toIso = toDay + 'T23:59:59Z';
+
   const native = db.prepare(
     'SELECT id, title, date, time, notes, owner FROM events WHERE date >= ? AND date <= ? ORDER BY date, time'
-  ).all(from, to).map(e => ({
+  ).all(fromDay, toDay).map(e => ({
     id: `native-${e.id}`,
     title: e.title,
     notes: e.notes,
@@ -1002,13 +1026,20 @@ app.get('/api/events/merged', auth, (req, res) => {
     stale: false,
     last_error: null,
   }));
+
+  // Provider events: overlap query. An event is "in window" if its
+  // start_at <= toIso AND (end_at IS NULL OR end_at >= fromIso).
+  // All-day cached events store `end_at` as NULL or as the inclusive
+  // end-of-day stamp, so the overlap catches them either way.
   const cached = db.prepare(`
     SELECT cec.id, cec.title, cec.description, cec.start_at, cec.end_at, cec.all_day, cec.location,
            cec.source_id, cs.provider, cs.account_id, cs.color, cs.display_name, cs.last_synced_at, cs.last_error
     FROM calendar_event_cache cec
     JOIN calendar_sources cs ON cs.id = cec.source_id
-    WHERE cec.start_at >= ? AND cec.start_at <= ?
-  `).all(from + 'T00:00:00Z', to + 'T23:59:59Z').map(e => ({
+    WHERE cs.enabled = 1
+      AND cec.start_at <= ?
+      AND (cec.end_at IS NULL OR cec.end_at >= ?)
+  `).all(toIso, fromIso).map(e => ({
     id: `provider-${e.id}`,
     title: e.title,
     notes: e.description,
@@ -1023,6 +1054,17 @@ app.get('/api/events/merged', auth, (req, res) => {
     stale: !e.last_synced_at || (Date.now() - new Date(e.last_synced_at + 'Z').getTime()) > calendarSources.FRESHNESS_MS,
     last_error: e.last_error,
   }));
+
+  // Defence-in-depth: even though the DTO is built from publicView()
+  // semantics, double-check the response payload never contains any of
+  // the secret field names. The browser must never receive a cred_blob
+  // or an app_password. If this trips, something upstream bypassed the
+  // contract — fail loudly instead of shipping a leak.
+  const serialized = JSON.stringify({ events: [...native, ...cached] });
+  if (/(cred_blob|app_password|access_token|refresh_token|client_secret)/i.test(serialized)) {
+    return res.status(500).json({ error: 'credential leak detected in merged feed — refusing to respond' });
+  }
+
   res.json({ events: [...native, ...cached] });
 });
 
