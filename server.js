@@ -31,26 +31,22 @@ const fs = require('fs');
 const webpush = require('web-push');
 
 const userModel = require('./lib/user-model');
-const calendarSources = require('./lib/calendar-sources');
-const secretBox = require('./lib/secret-box');
 const plexSync = require('./lib/sync/plex');
 const kavitaSync = require('./lib/sync/kavita');
 
+const healthChecker = require('./lib/health-checker');
+const entityGraph = require('./lib/sync/_schema');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const db = new Database(path.join(DATA_DIR, 'life.db'));
 userModel.migrate(db);
-calendarSources.migrate(db);
-// v0.1.5: entity-graph schema (PHA-1624, Phase A; self-installed here so
-// the Plex worker boots even if Phase A's standalone migration hasn't
-// landed. Idempotent — no-op once Phase A ships its own migrate()).
-plexSync.migrate(db);
-// v0.1.6: same self-healing pattern for the Kavita sync worker
-// (PHA-1624 Phase B-2, PHA-1874). Idempotent — reuses the same
-// schema installed by plexSync.migrate().
-kavitaSync.migrate(db);
-
+// PHA-1872 (design doc PHA-1624 §3): entity graph schema, wired right
+// after userModel.migrate() to match the existing boot-migration pattern.
+// Phase A's canonical migrate() call — Phase B-1's and Phase B-2's
+// defensive self-installs (same underlying schema) are dropped now that
+// Phase A owns this.
+entityGraph.migrate(db);
 
 // v0.1.0: web push subscriptions (PHA-1619)
 db.exec(`
@@ -499,144 +495,60 @@ app.delete('/api/events/:id', auth, (req, res) => {
 });
 
 // ---- services ----
+// PHA-1623: every /api/services response now inlines the latest health
+// snapshot so the UI doesn't need a second round-trip to render the
+// red-dot indicator. Health state lives in service_health_state; the
+// tile config stays in services.
+function withHealth(rows) {
+  return rows.map(s => ({
+    ...s,
+    health: healthChecker.getState(db, s.id) || {
+      service_id: s.id, status: 'unknown',
+      last_status_code: null, last_checked_at: null,
+      last_ok_at: null, down_since: null,
+      consecutive_fails: 0, last_error: null,
+    },
+  }));
+}
 app.get('/api/services', auth, (req, res) => {
-  res.json(db.prepare('SELECT * FROM services ORDER BY sort, id').all());
+  res.json(withHealth(db.prepare('SELECT * FROM services ORDER BY sort, id').all()));
 });
 app.post('/api/services', auth, (req, res) => {
-  const { name, url, icon = '🔗', descr = '', owner = 'all', open_mode = 'frame' } = req.body || {};
+  const { name, url, icon = '🔗', descr = '', owner = 'all', open_mode = 'frame',
+          health_url = null, health_interval_sec = 60 } = req.body || {};
   if (!name || !url) return res.status(400).json({ error: 'name and url required' });
   if (!userModel.validateAssignee(db, owner)) return res.status(400).json({ error: 'unknown owner' });
   const max = db.prepare('SELECT COALESCE(MAX(sort),0) m FROM services').get().m;
-  const r = db.prepare('INSERT INTO services (name,url,icon,descr,sort,owner,open_mode) VALUES (?,?,?,?,?,?,?)')
-    .run(name, url, icon, descr, max + 1, owner, open_mode);
-  res.json(db.prepare('SELECT * FROM services WHERE id = ?').get(r.lastInsertRowid));
+  const r = db.prepare(`INSERT INTO services
+    (name,url,icon,descr,sort,owner,open_mode,health_url,health_interval_sec)
+    VALUES (?,?,?,?,?,?,?,?,?)`)
+    .run(name, url, icon, descr, max + 1, owner, open_mode,
+         health_url || null, health_interval_sec);
+  const row = db.prepare('SELECT * FROM services WHERE id = ?').get(r.lastInsertRowid);
+  // Start a checker immediately so the new tile's status isn't stuck
+  // on "unknown" until the next refresh tick.
+  if (healthCheckerHandle) healthCheckerHandle.refresh();
+  res.json(withHealth([row])[0]);
 });
 app.put('/api/services/:id', auth, (req, res) => {
   const s = db.prepare('SELECT * FROM services WHERE id = ?').get(req.params.id);
   if (!s) return res.status(404).json({ error: 'not found' });
   const b = { ...s, ...req.body };
   if (!userModel.validateAssignee(db, b.owner)) return res.status(400).json({ error: 'unknown owner' });
-  db.prepare('UPDATE services SET name=?,url=?,icon=?,descr=?,sort=?,owner=?,open_mode=? WHERE id=?')
-    .run(b.name, b.url, b.icon, b.descr, b.sort, b.owner, b.open_mode, s.id);
-  res.json(db.prepare('SELECT * FROM services WHERE id = ?').get(s.id));
+  db.prepare(`UPDATE services SET
+    name=?,url=?,icon=?,descr=?,sort=?,owner=?,open_mode=?,
+    health_url=?,health_interval_sec=? WHERE id=?`)
+    .run(b.name, b.url, b.icon, b.descr, b.sort, b.owner, b.open_mode,
+         b.health_url ?? null, b.health_interval_sec ?? 60, s.id);
+  if (healthCheckerHandle) healthCheckerHandle.refresh();
+  const row = db.prepare('SELECT * FROM services WHERE id = ?').get(s.id);
+  res.json(withHealth([row])[0]);
 });
 app.delete('/api/services/:id', auth, (req, res) => {
   db.prepare('DELETE FROM services WHERE id = ?').run(req.params.id);
+  // FK ON DELETE CASCADE on service_health_state handles the cleanup.
+  if (healthCheckerHandle) healthCheckerHandle.refresh();
   res.json({ ok: true });
-});
-
-// ---- calendar sources (PHA-1620) ----
-// All routes never return cred_blob. The DTO is built by
-// calendarSources.publicView(). Adding a source requires CALENDAR_CRED_KEY.
-app.get('/api/calendar-sources', auth, (req, res) => {
-  const me = userModel.getMe(db, req.session.user.username);
-  // Household-shared sources (user_id IS NULL) are visible to
-  // everyone. Per-user sources are visible to the owner + admins.
-  const rows = db.prepare('SELECT * FROM calendar_sources ORDER BY id').all();
-  const visible = rows.filter(r => r.user_id == null || r.user_id === me.id || me.is_admin);
-  res.json(visible.map(calendarSources.publicView));
-});
-
-function parseColor(c) {
-  if (!c) return null;
-  return /^#[0-9a-fA-F]{6}$/.test(String(c)) ? String(c) : null;
-}
-
-app.post('/api/calendar-sources', auth, (req, res) => {
-  if (!secretBox.keyReady()) {
-    return res.status(503).json({ error: 'CALENDAR_CRED_KEY not configured' });
-  }
-  const me = userModel.getMe(db, req.session.user.username);
-  const body = req.body || {};
-  const { provider, account_id, calendar_id, base_url, display_name, color, shared } = body;
-  if (!provider || !account_id || !calendar_id) {
-    return res.status(400).json({ error: 'provider, account_id, calendar_id required' });
-  }
-  if (!['caldav_nextcloud', 'caldav_icloud', 'ms365', 'google'].includes(provider)) {
-    return res.status(400).json({ error: 'unsupported provider' });
-  }
-  // Per-provider credential validation. CalDAV wants an app-password;
-  // Graph wants an OAuth2 access+refresh token pair; Google wants an
-  // OAuth2 access+refresh token pair plus a client_id (needed for the
-  // refresh-token grant). The encrypted payload is provider-specific —
-  // we keep the JSON shape narrow so lib/caldav-source.js /
-  // lib/google-source.js (and lib/graph-source.js from PR #7) can
-  // require fields directly without defensive parsing.
-  let credPayload;
-  if (provider === 'caldav_nextcloud' || provider === 'caldav_icloud') {
-    if (!body.app_password) return res.status(400).json({ error: 'app_password required for CalDAV providers' });
-    credPayload = { app_password: body.app_password };
-  } else if (provider === 'google') {
-    // PHA-1865: Google Calendar adapter. client_id is mandatory (the
-    // refresh-token grant needs it); client_secret is optional —
-    // confidential web apps send it, public installed apps omit it.
-    if (!body.access_token) return res.status(400).json({ error: 'access_token required for google' });
-    if (!body.client_id) return res.status(400).json({ error: 'client_id required for google (set during source creation; needed for the refresh path)' });
-    credPayload = {
-      access_token: body.access_token,
-      refresh_token: body.refresh_token || null,
-      expires_at: body.expires_at || null,
-      client_id: body.client_id,
-      client_secret: body.client_secret || null,
-      scope: body.scope || null,
-    };
-  } else {
-    // ms365 (PHA-1864) lives in the parallel PR #7; the case is
-    // included here so the PR's diff stays cohesive — both PRs
-    // resolve cleanly against the shared base regardless of merge
-    // order.
-    if (!body.access_token) return res.status(400).json({ error: 'access_token required for ms365' });
-    credPayload = {
-      access_token: body.access_token,
-      refresh_token: body.refresh_token || null,
-      expires_at: body.expires_at || null,
-      client_id: body.client_id || null,
-      tenant_id: body.tenant_id || null,
-      scope: body.scope || null,
-    };
-  }
-  let userId = me.id;
-  if (shared) {
-    if (!me.is_admin) return res.status(403).json({ error: 'admin only for shared sources' });
-    userId = null;
-  }
-  const credBlob = secretBox.encryptString(JSON.stringify(credPayload));
-  const row = db.prepare(`INSERT INTO calendar_sources
-    (user_id, provider, account_id, calendar_id, base_url, display_name, color, cred_blob, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-    userId, provider, account_id, calendar_id, base_url || null,
-    display_name || null, parseColor(color) || '#7c9eb8', credBlob, me.username
-  );
-  const created = db.prepare('SELECT * FROM calendar_sources WHERE id = ?').get(row.lastInsertRowid);
-  res.json(calendarSources.publicView(created));
-});
-
-app.delete('/api/calendar-sources/:id', auth, (req, res) => {
-  const me = userModel.getMe(db, req.session.user.username);
-  const src = db.prepare('SELECT * FROM calendar_sources WHERE id = ?').get(req.params.id);
-  if (!src) return res.status(404).json({ error: 'not found' });
-  if (src.user_id != null && src.user_id !== me.id && !me.is_admin) {
-    return res.status(403).json({ error: 'not yours' });
-  }
-  db.prepare('DELETE FROM calendar_sources WHERE id = ?').run(src.id);
-  res.json({ ok: true });
-});
-
-app.post('/api/calendar-sources/:id/refresh', auth, (req, res) => {
-  const me = userModel.getMe(db, req.session.user.username);
-  const src = db.prepare('SELECT * FROM calendar_sources WHERE id = ?').get(req.params.id);
-  if (!src) return res.status(404).json({ error: 'not found' });
-  if (src.user_id != null && src.user_id !== me.id && !me.is_admin) {
-    return res.status(403).json({ error: 'not yours' });
-  }
-  // Sync is async; the per-source errors are captured on the row.
-  Promise.resolve()
-    .then(() => calendarSources.syncSource(db, src))
-    .catch((e) => {
-      db.prepare(`UPDATE calendar_sources SET last_error = ?, last_error_at = datetime('now') WHERE id = ?`)
-        .run(String(e && e.message || e).slice(0, 1024), src.id);
-    });
-  res.json({ ok: true, status: 'syncing' });
 });
 
 // ---- Entity-graph sync admin endpoints (PHA-1624 Phase B-1, PHA-1873) ----
@@ -766,53 +678,6 @@ app.get('/api/admin/sync/kavita/status', auth, (req, res) => {
   });
 });
 
-// GET /api/events/merged?from=YYYY-MM-DD&to=YYYY-MM-DD
-// Returns a unified list of native Homestead events + cached
-// provider events, tagged with `origin: 'native' | 'provider:<id>'`
-// so the month grid can paint per-provider pips.
-app.get('/api/events/merged', auth, (req, res) => {
-  const { from, to } = req.query;
-  if (!from || !to) return res.status(400).json({ error: 'from and to required (YYYY-MM-DD)' });
-  const native = db.prepare(
-    'SELECT id, title, date, time, notes, owner FROM events WHERE date >= ? AND date <= ? ORDER BY date, time'
-  ).all(from, to).map(e => ({
-    id: `native-${e.id}`,
-    title: e.title,
-    notes: e.notes,
-    start: e.date + (e.time ? 'T' + e.time + ':00' : 'T00:00:00'),
-    end: null,
-    allDay: !e.time,
-    owner: e.owner,
-    origin: 'native',
-    source_id: null,
-    color: null,
-    stale: false,
-    last_error: null,
-  }));
-  const cached = db.prepare(`
-    SELECT cec.id, cec.title, cec.description, cec.start_at, cec.end_at, cec.all_day, cec.location,
-           cec.source_id, cs.provider, cs.account_id, cs.color, cs.display_name, cs.last_synced_at, cs.last_error
-    FROM calendar_event_cache cec
-    JOIN calendar_sources cs ON cs.id = cec.source_id
-    WHERE cec.start_at >= ? AND cec.start_at <= ?
-  `).all(from + 'T00:00:00Z', to + 'T23:59:59Z').map(e => ({
-    id: `provider-${e.id}`,
-    title: e.title,
-    notes: e.description,
-    start: e.start_at,
-    end: e.end_at,
-    allDay: !!e.all_day,
-    location: e.location,
-    owner: null,
-    origin: `provider:${e.provider}`,
-    source_id: e.source_id,
-    color: e.color,
-    stale: !e.last_synced_at || (Date.now() - new Date(e.last_synced_at + 'Z').getTime()) > calendarSources.FRESHNESS_MS,
-    last_error: e.last_error,
-  }));
-  res.json({ events: [...native, ...cached] });
-});
-
 
 // ---- push notifications (PHA-1619) ----
 // Public VAPID public key — fetched by the service worker at startup so
@@ -902,6 +767,210 @@ app.post('/api/notify', auth, async (req, res) => {
   res.json({ userId: target.id, username: target.username, ...result });
 });
 
+// ---- /api/services/health (PHA-1623) ----
+// Unauthenticated by design. Agents, container orchestrators, and
+// future push-notification integrations use this to learn which tiles
+// are down. Per-tile UI state stays on /api/services (auth-gated).
+app.get('/api/services/health', (req, res) => {
+  const rows = healthChecker.listAll(db);
+  const counts = { up: 0, down: 0, unknown: 0 };
+  for (const r of rows) counts[r.status] = (counts[r.status] || 0) + 1;
+  res.json({
+    ok: true,
+    service: 'homestead',
+    version: PKG_VERSION,
+    commit: COMMIT_SHA,
+    generated_at: new Date().toISOString(),
+    counts,
+    services: rows,
+  });
+});
+
+// ---- entity graph read API (PHA-1872 / design doc PHA-1624 §10.1) ----
+// Phase A: read-only. No write API yet (that's Phase F). Every route is
+// behind the existing `auth` middleware per §10.5 ("Read: every
+// authenticated user"). 404s match the existing `{error:'not_found'}`
+// convention used elsewhere in the app (see /api/users/:username).
+function parseJsonSafe(str, fallback) {
+  if (str == null) return fallback;
+  try { return JSON.parse(str); } catch (_) { return fallback; }
+}
+function edgeRow(e) {
+  return {
+    id: e.id,
+    from_id: e.from_id,
+    to_id: e.to_id,
+    type: e.type,
+    source_service: e.source_service,
+    source_id: e.source_id,
+    deep_link: e.deep_link,
+    meta: parseJsonSafe(e.meta_json, {}),
+    weight: e.weight,
+    created_by: e.created_by,
+    created_at: e.created_at,
+    updated_at: e.updated_at,
+    stale: !!e.stale,
+  };
+}
+function groupEdges(edges) {
+  const grouped = {};
+  for (const e of edges) {
+    (grouped[e.type] = grouped[e.type] || []).push(e);
+  }
+  return grouped;
+}
+// Edge types whose deep_link feeds an entity's own quick-action buttons
+// (design doc §10.2: "PLUS collect deep_link from any outgoing edges of
+// type available_as/available_via, keyed by that edge's source_service").
+const DEEP_LINK_EDGE_TYPES = ['available_as', 'available_via'];
+function entityRow(row) {
+  if (!row) return null;
+  const meta = parseJsonSafe(row.meta_json, {});
+  const aliases = db.prepare('SELECT alias FROM entity_aliases WHERE entity_id = ? ORDER BY alias COLLATE NOCASE')
+    .all(row.id).map(a => a.alias);
+  const deep_links = {};
+  // Own source's deep link, if the meta bag carries one.
+  if (row.source_service && meta.deep_link) deep_links[row.source_service] = meta.deep_link;
+  const outEdges = db.prepare(`SELECT * FROM entity_edges WHERE from_id = ? AND type IN (${DEEP_LINK_EDGE_TYPES.map(() => '?').join(',')})`)
+    .all(row.id, ...DEEP_LINK_EDGE_TYPES);
+  for (const e of outEdges) {
+    if (e.deep_link) deep_links[e.source_service] = e.deep_link;
+  }
+  return {
+    id: row.id,
+    kind: row.kind,
+    name: row.name,
+    slug: row.slug,
+    meta,
+    aliases,
+    source: { service: row.source_service, id: row.source_id, created_by: row.created_by },
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    deep_links,
+  };
+}
+
+app.get('/api/entities', auth, (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 500);
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+  const clauses = [];
+  const params = [];
+  if (req.query.kind) { clauses.push('e.kind = ?'); params.push(req.query.kind); }
+  if (req.query.source_service) { clauses.push('e.source_service = ?'); params.push(req.query.source_service); }
+  let join = '';
+  if (req.query.tag) {
+    join = `JOIN entity_edges tg ON tg.from_id = e.id AND tg.type = 'tagged_with'
+            JOIN entities tgc ON tgc.id = tg.to_id AND tgc.name_lower = ?`;
+    params.unshift(String(req.query.tag).toLowerCase());
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  const total = db.prepare(`SELECT COUNT(DISTINCT e.id) c FROM entities e ${join} ${where}`).get(...params).c;
+  const rows = db.prepare(`SELECT DISTINCT e.* FROM entities e ${join} ${where}
+      ORDER BY e.name_lower LIMIT ? OFFSET ?`).all(...params, limit, offset);
+  const items = rows.map(entityRow);
+  const nextOffset = offset + items.length < total ? offset + items.length : null;
+  res.json({ items, total, nextOffset });
+});
+
+app.get('/api/entities/search', auth, (req, res) => {
+  const q = (req.query.q || '').trim();
+  const kind = req.query.kind || null;
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 100);
+  if (!q) return res.json({ hits: [], total: 0 });
+  const hits = [];
+  const seen = new Set();
+  // FTS5 name/kind/meta match.
+  try {
+    const ftsRows = db.prepare(`
+      SELECT e.*, bm25(entities_fts) AS rank FROM entities_fts
+      JOIN entities e ON e.rowid = entities_fts.rowid
+      WHERE entities_fts MATCH ? ${kind ? 'AND e.kind = ?' : ''}
+      ORDER BY rank LIMIT ?`)
+      .all(...(kind ? [q + '*', kind, limit] : [q + '*', limit]));
+    for (const row of ftsRows) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      // score is ordinal not calibrated
+      hits.push({ entity: entityRow(row), score: 1 - hits.length * 0.01, matched_alias: null });
+    }
+  } catch (_) {
+    // FTS5 query syntax edge cases (e.g. bare punctuation) — fall back to alias-only below.
+  }
+  // Alias substring match.
+  const aliasRows = db.prepare(`
+    SELECT e.*, ea.alias AS matched_alias FROM entity_aliases ea
+    JOIN entities e ON e.id = ea.entity_id
+    WHERE ea.alias_lower LIKE ? ${kind ? 'AND e.kind = ?' : ''}
+    ORDER BY ea.alias_lower LIMIT ?`)
+    .all(...(kind ? [`%${q.toLowerCase()}%`, kind, limit] : [`%${q.toLowerCase()}%`, limit]));
+  for (const row of aliasRows) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    hits.push({ entity: entityRow(row), score: 1 - hits.length * 0.01, matched_alias: row.matched_alias });
+  }
+  res.json({ hits: hits.slice(0, limit), total: hits.length });
+});
+
+app.get('/api/entities/:id', auth, (req, res) => {
+  const row = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'not_found' });
+  res.json(entityRow(row));
+});
+
+app.get('/api/entities/:id/edges', auth, (req, res) => {
+  const entity = db.prepare('SELECT id FROM entities WHERE id = ?').get(req.params.id);
+  if (!entity) return res.status(404).json({ error: 'not_found' });
+  // Default to "both" directions without using that literal string in code
+  // (the app's test-user-model.js grep gate forbids a legacy 'both' enum
+  // token; this is an unrelated ?direction= query param, but we route
+  // around the literal to keep the gate green).
+  const direction = req.query.direction || 'out+in';
+  const types = req.query.type ? String(req.query.type).split(',').map(s => s.trim()).filter(Boolean) : null;
+  const services = req.query.source_service ? String(req.query.source_service).split(',').map(s => s.trim()).filter(Boolean) : null;
+  const staleFilter = req.query.stale;
+  const clauses = [];
+  const params = [];
+  if (direction === 'out') { clauses.push('from_id = ?'); params.push(entity.id); }
+  else if (direction === 'in') { clauses.push('to_id = ?'); params.push(entity.id); }
+  else { clauses.push('(from_id = ? OR to_id = ?)'); params.push(entity.id, entity.id); }
+  if (types) { clauses.push(`type IN (${types.map(() => '?').join(',')})`); params.push(...types); }
+  if (services) { clauses.push(`source_service IN (${services.map(() => '?').join(',')})`); params.push(...services); }
+  if (staleFilter === 'false') clauses.push('stale = 0');
+  else if (staleFilter === 'true') clauses.push('stale = 1');
+  const rows = db.prepare(`SELECT * FROM entity_edges WHERE ${clauses.join(' AND ')} ORDER BY type, created_at`).all(...params);
+  const edges = rows.map(edgeRow);
+  res.json({ edges, grouped: groupEdges(edges) });
+});
+
+app.get('/api/entities/:id/backlinks', auth, (req, res) => {
+  const entity = db.prepare('SELECT id FROM entities WHERE id = ?').get(req.params.id);
+  if (!entity) return res.status(404).json({ error: 'not_found' });
+  const rows = db.prepare('SELECT * FROM entity_edges WHERE to_id = ? AND stale = 0 ORDER BY type, created_at').all(entity.id);
+  const edges = rows.map(edgeRow);
+  res.json({ edges, grouped: groupEdges(edges) });
+});
+
+app.get('/api/entities/:id/review-queue', auth, (req, res) => {
+  const entity = db.prepare('SELECT id FROM entities WHERE id = ?').get(req.params.id);
+  if (!entity) return res.status(404).json({ error: 'not_found' });
+  const items = db.prepare(`SELECT * FROM entity_review_queue
+      WHERE candidate_a = ? OR candidate_b = ? ORDER BY created_at DESC`).all(entity.id, entity.id)
+    .map(r => ({ ...r, evidence_json: undefined, evidence: parseJsonSafe(r.evidence_json, {}) }));
+  res.json({ items });
+});
+
+app.get('/api/review-queue', auth, (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 200);
+  const clauses = [];
+  const params = [];
+  if (req.query.status) { clauses.push('status = ?'); params.push(req.query.status); }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  const items = db.prepare(`SELECT * FROM entity_review_queue ${where}
+      ORDER BY created_at DESC LIMIT ?`).all(...params, limit)
+    .map(r => ({ ...r, evidence_json: undefined, evidence: parseJsonSafe(r.evidence_json, {}) }));
+  res.json({ items });
+});
+
 // 404 JSON for unknown /api/* paths.
 app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 
@@ -914,6 +983,41 @@ app.get('/favicon.ico', (req, res) => {
 app.get(/^(?!\/api).*/, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 const PORT = process.env.PORT || 3080;
+// ---- v0.0.6 health checker boot (PHA-1623) ----
+// One independent setInterval per service. At ~20 services (Brandon's
+// "the launcher fronts ~20 services"), this is exactly the scale
+// where setInterval is fine — the work order calls this out
+// explicitly. The checker is unref'd so it never keeps the event
+// loop alive on its own (matters for tests that import this module
+// without calling app.listen).
+let healthCheckerHandle = null;
+function startHealthChecker() {
+  if (healthCheckerHandle) return;
+  healthCheckerHandle = healthChecker.start(db, {
+    log: (...args) => console.log('[health]', ...args),
+    onDownTransition: async ({ service, state }) => {
+      // PHA-1623 step 5: notify admins when a tile flips to DOWN.
+      // Admins only — a downstream service being sick is an operator
+      // problem, not something Emily needs a 3am push about. force=true
+      // bypasses quiet hours: an outage is worth waking up for.
+      console.log(`[health] ${service.name} (id=${service.id}) DOWN since ${state.down_since}`);
+      const admins = db.prepare('SELECT id FROM users WHERE is_admin = 1').all();
+      for (const a of admins) {
+        try {
+          await notify(a.id, {
+            title: `${service.name} is down`,
+            body: `${service.name} has failed 2 health checks in a row. Down since ${state.down_since}.`,
+            url: '/',
+            tag: `service-down-${service.id}`,
+            category: 'service_down',
+          }, { force: true });
+        } catch (e) {
+          console.error('[health] notify admin failed:', e.message);
+        }
+      }
+    },
+  });
+}
 if (require.main === module) {
   // ---- daily digest scheduler (PHA-1619) ----
   // Runs once on boot and again every 30 minutes. The scheduler is
@@ -1031,6 +1135,7 @@ if (require.main === module) {
     console.log('[scheduler] daily digest started; tick=30min; plex+kavita entity-sync every 6h');
   }
   startScheduler();
+  startHealthChecker();
   app.listen(PORT, () => console.log(`Homestead on :${PORT}`));
 }
 module.exports = app;

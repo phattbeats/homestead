@@ -106,6 +106,16 @@ main{padding:14px 18px;max-width:680px;margin:0 auto}
 .svc-icon{font-size:28px}
 .svc-name{font-weight:700;margin-top:10px;font-size:15px}
 .svc-desc{font-size:12px;color:var(--muted);margin-top:2px}
+/* v0.0.6 health indicator (PHA-1623): subtle red dot + down-since
+   label. The dot sits in the same corner as the owner-dot; tap-
+   through still works (it's a CSS overlay, not a button). */
+.svc-health{position:absolute;top:10px;left:10px;display:none;align-items:center;gap:5px;
+  padding:3px 7px 3px 6px;border-radius:99px;background:rgba(179,69,58,.12);color:#b3453a;
+  font-size:10px;font-weight:700;letter-spacing:.04em;line-height:1}
+.svc-health.on{display:inline-flex}
+.svc-health .dot-red{width:7px;height:7px;border-radius:50%;background:#b3453a;flex-shrink:0}
+.svc.svc-down .svc-in{border-color:rgba(179,69,58,.18)}
+.svc-down .svc-desc{color:#b3453a;font-weight:600}
 
 /* fab + tabbar */
 #fab{position:fixed;right:20px;bottom:calc(env(safe-area-inset-bottom) + 88px);width:56px;height:56px;
@@ -177,6 +187,37 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 .svc-owner{position:absolute;top:10px;right:10px;width:9px;height:9px;border-radius:50%}
 .showall{font-size:12px;font-weight:600;color:var(--muted)}
 @media(min-width:768px){.svc-grid{grid-template-columns:repeat(3,1fr)}}
+
+/* PHA-1872: entity page (design doc PHA-1624 §7) */
+#entityPage{position:fixed;inset:0;z-index:120;background:var(--bg,#fff);display:none;overflow-y:auto;padding:16px 16px 90px}
+#entityPage.on{display:block}
+.ent-back{background:none;border:none;font-size:15px;color:var(--muted);cursor:pointer;padding:6px 0}
+.ent-head{margin:10px 0 4px}
+.ent-head h1{font-size:22px;margin:0}
+.ent-meta-strip{font-size:13px;color:var(--muted);margin-top:4px}
+.ent-actions{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
+.ent-actions a,.ent-actions button{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;
+  border-radius:999px;border:1px solid rgba(0,0,0,.12);background:#f4f2ee;font-size:13px;text-decoration:none;color:inherit;cursor:pointer}
+.ent-group{border-top:1px solid rgba(0,0,0,.08);padding:10px 0}
+.ent-group summary{cursor:pointer;font-weight:600;font-size:14px;list-style:none}
+.ent-group summary::-webkit-details-marker{display:none}
+.ent-group summary:before{content:'▸ ';color:var(--muted)}
+.ent-group[open] summary:before{content:'▾ '}
+.ent-edge-row{padding:6px 0 6px 18px;font-size:14px;display:flex;justify-content:space-between;gap:8px}
+.ent-edge-row a{color:inherit}
+.ent-footer{margin-top:20px;padding-top:12px;border-top:1px solid rgba(0,0,0,.08);font-size:12px;color:var(--muted)}
+.ent-empty{padding:20px 0;color:var(--muted);font-size:14px}
+
+/* PHA-1872: cmd-k search palette */
+#palette{position:fixed;inset:0;z-index:130;background:rgba(0,0,0,.45);display:none;align-items:flex-start;justify-content:center;padding-top:12vh}
+#palette.on{display:flex}
+.palette-box{width:min(560px,92vw);background:var(--bg,#fff);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}
+.palette-input{width:100%;box-sizing:border-box;border:none;padding:16px;font-size:16px;outline:none;background:transparent}
+.palette-hits{max-height:50vh;overflow-y:auto;border-top:1px solid rgba(0,0,0,.08)}
+.palette-hit{padding:10px 16px;cursor:pointer;display:flex;justify-content:space-between;gap:8px;font-size:14px}
+.palette-hit:hover,.palette-hit.sel{background:#f4f2ee}
+.palette-hit .kind{color:var(--muted);font-size:12px}
+.palette-empty{padding:16px;color:var(--muted);font-size:13px}
 </style>
 </head>
 <body>
@@ -241,6 +282,20 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 <div id="shell"><iframe id="shellFrame" src="about:blank" allow="fullscreen; autoplay; clipboard-write"></iframe></div>
 <div id="dot">🏡</div>
+
+<!-- PHA-1872: entity page (design doc PHA-1624 §7) -->
+<div id="entityPage">
+  <button class="ent-back" id="entBack">‹ Back</button>
+  <div id="entBody"></div>
+</div>
+
+<!-- PHA-1872: cmd-k search palette -->
+<div id="palette">
+  <div class="palette-box">
+    <input class="palette-input" id="paletteInput" placeholder="Search entities… (name, alias, tag)" autocomplete="off">
+    <div class="palette-hits" id="paletteHits"></div>
+  </div>
+</div>
 
 <script>
 const $=s=>document.querySelector(s);
@@ -424,15 +479,34 @@ function pickDay(ds){selDate=ds;renderCal()}
 $('#calPrev').onclick=()=>{calM--;if(calM<0){calM=11;calY--}renderCal()};
 $('#calNext').onclick=()=>{calM++;if(calM>11){calM=0;calY++}renderCal()};
 let showAll=false;
+// v0.0.6 health badge (PHA-1623): format a "down since HH:MM" label
+// from an ISO timestamp in the local timezone.
+function fmtDownSince(iso){
+  if(!iso)return '';
+  try{
+    const d=new Date(iso);
+    const hh=String(d.getHours()).padStart(2,'0');
+    const mm=String(d.getMinutes()).padStart(2,'0');
+    return `down since ${hh}:${mm}`;
+  }catch(_){return 'down'}
+}
 function renderSvcs(){
   const mine=SVCS.filter(s=>showAll||!s.owner||s.owner==='all'||s.owner===ME.username);
   $('#showAll').textContent=showAll?'· showing all':'· showing mine';
-  $('#svcGrid').innerHTML=mine.map(s=>`
-    <a class="svc" href="${esc(s.url)}" onclick="return launchSvc(event,${s.id})"
-       oncontextmenu="event.preventDefault();openSvcSheet(${s.id})">
+  $('#svcGrid').innerHTML=mine.map(s=>{
+    const h=s.health||{status:'unknown'};
+    const isDown=h.status==='down';
+    return `
+    <a class="svc${isDown?' svc-down':''}" href="${esc(s.url)}" onclick="return launchSvc(event,${s.id})"
+       oncontextmenu="event.preventDefault();openSvcSheet(${s.id})"
+       ${isDown?`title="${esc(fmtDownSince(h.down_since))}"`:''}>
       <span class="svc-owner" style="background:${userColorVar(s.owner)}"></span>
+      <span class="svc-health${isDown?' on':''}" aria-hidden="${!isDown}">
+        <span class="dot-red"></span>${esc(fmtDownSince(h.down_since))}
+      </span>
       <div class="svc-in"><div class="svc-icon">${s.icon||'🔗'}</div>
-      <div class="svc-name">${esc(s.name)}</div><div class="svc-desc">${esc(s.descr)}&nbsp;</div></div></a>`).join('');
+      <div class="svc-name">${esc(s.name)}</div><div class="svc-desc">${esc(isDown?fmtDownSince(h.down_since):(s.descr||''))}&nbsp;</div></div></a>`;
+  }).join('');
 }
 function launchSvc(ev,id){
   const s=SVCS.find(x=>x.id===id);
@@ -589,7 +663,8 @@ function openEventSheet(id,date){
   };
 }
 function openSvcSheet(id){
-  const s=SVCS.find(x=>x.id===id)||{name:'',url:'',icon:'🔗',descr:'',owner:'all',open_mode:'frame'};
+  const s=SVCS.find(x=>x.id===id)||{name:'',url:'',icon:'🔗',descr:'',owner:'all',open_mode:'frame',
+    health_url:'',health_interval_sec:60};
   openSheet(`<h2>${id?'Edit app':'Add an app'}</h2>
     <div class="row"><input class="field" id="f-icon" placeholder="🔗" value="${esc(s.icon||'🔗')}" style="flex:0 0 70px;text-align:center">
     <input class="field" id="f-name" placeholder="Name" value="${esc(s.name)}"></div>
@@ -597,12 +672,22 @@ function openSvcSheet(id){
     <input class="field" id="f-descr" placeholder="Short description" value="${esc(s.descr||'')}">
     <label>Whose app?</label>${userPickerHtml('f-owner', s.owner||'all')}
     <label>Opens</label>${modePickerHtml('f-mode', s.open_mode||'frame')}
+    <h3>Health check (optional)</h3>
+    <input class="field" id="f-health-url" placeholder="Health URL — leave blank to use the tile URL"
+      value="${esc(s.health_url||'')}" inputmode="url">
+    <label>Check every</label>
+    <div class="row"><input class="field" id="f-health-int" type="number" min="0" step="5"
+      placeholder="60" value="${esc(s.health_interval_sec==null?60:s.health_interval_sec)}">
+    <span style="align-self:center;color:var(--muted);font-size:13px">seconds <span style="opacity:.6">(0 = off)</span></span></div>
     <button class="btn" style="margin-top:16px" id="f-save">${id?'Save':'Add it'}</button>
     ${id?`<button class="link danger" style="margin-top:14px;width:100%" onclick="delSvc(${id})">Remove app</button>`:''}`);
   segWire('f-owner');segWire('f-mode');
   $('#f-save').onclick=async()=>{
+    const hInt=parseInt($('#f-health-int').value,10);
     const body={name:$('#f-name').value.trim(),url:$('#f-url').value.trim(),icon:$('#f-icon').value||'🔗',descr:$('#f-descr').value,
-      owner:segVal('f-owner')||'all',open_mode:segVal('f-mode')||'frame'};
+      owner:segVal('f-owner')||'all',open_mode:segVal('f-mode')||'frame',
+      health_url:$('#f-health-url').value.trim()||null,
+      health_interval_sec:Number.isFinite(hInt)?hInt:60};
     if(!body.name||!body.url)return;
     try{
       if(id)await api('PUT',`/api/services/${id}`,body);else await api('POST','/api/services',body);
@@ -865,6 +950,155 @@ async function renderPushPrefs(){
     }catch(e){$('#np-err').textContent=(e&&e.error)||'Failed';$('#np-err').style.color=''}
   };
 }
+
+/* ---- PHA-1872: entity graph — entity page + cmd-k search palette ---- */
+/* Route: /entity/:id (design doc §10.2 deep_links + nav are id-based). */
+const EDGE_GROUP_LABELS={
+  available_as:'Available as', available_via:'Available via', authored_by:'Authored by',
+  directed_by:'Directed by', tagged_with:'Tagged with', adaptation_of:'Adaptation of',
+  part_of:'Part of', member_of:'Member of', attended:'Attended', added:'Added',
+  owns:'Owns', lives_at:'Lives at', located_in:'Located in', set_in:'Set in',
+  mentioned_in:'Mentioned in', shared_in_list:'Shared in lists', requested_in:'Requested in',
+  created:'Created',
+};
+function entGroupLabel(t){return EDGE_GROUP_LABELS[t]||t.replace(/_/g,' ')}
+function entKindIcon(k){return {work:'📚',person:'🧑',place:'📍',thing:'🧰',event:'📅',concept:'🏷️'}[k]||'•'}
+
+async function openEntityPage(id,push){
+  if(push!==false) history.pushState({entity:id},'','/entity/'+encodeURIComponent(id));
+  $('#shell').classList.remove('on');
+  closePalette();
+  const body=$('#entBody');
+  body.innerHTML='<div class="ent-empty">Loading…</div>';
+  $('#entityPage').classList.add('on');
+  let entity,edgesRes,backlinksRes;
+  try{
+    entity=await api('GET','/api/entities/'+encodeURIComponent(id));
+    [edgesRes,backlinksRes]=await Promise.all([
+      api('GET','/api/entities/'+encodeURIComponent(id)+'/edges?direction=out&stale=false'),
+      api('GET','/api/entities/'+encodeURIComponent(id)+'/backlinks'),
+    ]);
+  }catch(e){
+    body.innerHTML=`<div class="ent-empty">Couldn't load this entity (${esc((e&&e.error)||'error')}).</div>`;
+    return;
+  }
+  renderEntityPage(entity,edgesRes,backlinksRes);
+}
+function closeEntityPage(){
+  $('#entityPage').classList.remove('on');
+  history.pushState({},'','/');
+}
+function renderEntityPage(entity,edgesRes,backlinksRes){
+  const metaBits=[entity.kind];
+  if(entity.meta&&entity.meta.year)metaBits.push(String(entity.meta.year));
+  const actions=Object.entries(entity.deep_links||{}).filter(([,url])=>url).map(([svc,url])=>
+    `<a href="${esc(url)}" target="_blank" rel="noopener">🔗 Open in ${esc(svc)}</a>`).join('');
+  const groupOrder=['available_as','available_via','authored_by','directed_by','tagged_with','adaptation_of','part_of','shared_in_list','mentioned_in'];
+  const grouped=edgesRes.grouped||{};
+  const groupKeys=[...groupOrder.filter(k=>grouped[k]),...Object.keys(grouped).filter(k=>!groupOrder.includes(k))];
+  const groupsHtml=groupKeys.length?groupKeys.map(type=>{
+    const rows=grouped[type].map(e=>`<div class="ent-edge-row">
+        <span>${entKindIcon(entity.kind)} ${esc(e.meta&&e.meta.format?e.meta.format+' · ':'')}${esc(e.source_service)}</span>
+        ${e.deep_link?`<a href="${esc(e.deep_link)}" target="_blank" rel="noopener">open →</a>`:`<button onclick="openEntityPage('${esc(e.to_id)}')">view →</button>`}
+      </div>`).join('');
+    return `<details class="ent-group" open><summary>${esc(entGroupLabel(type))} (${grouped[type].length})</summary>${rows}</details>`;
+  }).join(''):'<div class="ent-empty">No edges yet.</div>';
+  const backGrouped=backlinksRes.grouped||{};
+  const backKeys=Object.keys(backGrouped);
+  const backHtml=backKeys.length?backKeys.map(type=>{
+    const rows=backGrouped[type].map(e=>`<div class="ent-edge-row">
+        <button onclick="openEntityPage('${esc(e.from_id)}')">${esc(e.from_id)} →</button>
+        <span class="kind">${esc(e.source_service)}</span>
+      </div>`).join('');
+    return `<details class="ent-group"><summary>${esc(entGroupLabel(type))} (${backGrouped[type].length})</summary>${rows}</details>`;
+  }).join(''):'<div class="ent-empty">No backlinks yet.</div>';
+  const sourceIds=[`${esc(entity.source.service||'—')}: ${esc(entity.source.id||'—')}`];
+  $('#entBody').innerHTML=`
+    <div class="ent-head">
+      <h1>${entKindIcon(entity.kind)} ${esc(entity.name)}</h1>
+      <div class="ent-meta-strip">${esc(metaBits.join(' · '))}</div>
+    </div>
+    ${actions?`<div class="ent-actions">${actions}</div>`:''}
+    <div class="sec">Edges</div>
+    ${groupsHtml}
+    <div class="sec">Backlinks</div>
+    ${backHtml}
+    <div class="ent-footer">
+      Aliases: ${entity.aliases&&entity.aliases.length?esc(entity.aliases.join(', ')):'none'}<br>
+      Source: ${sourceIds.join(' · ')}<br>
+      Updated: ${esc(entity.updated_at||'')}
+    </div>`;
+}
+$('#entBack').onclick=closeEntityPage;
+window.addEventListener('popstate',()=>{
+  const m=location.pathname.match(/^\/entity\/([^/]+)/);
+  if(m&&ME) openEntityPage(decodeURIComponent(m[1]),false);
+  else $('#entityPage').classList.remove('on');
+});
+
+/* ---- cmd-k palette ---- */
+let paletteSel=-1,paletteHitsCache=[];
+function openPalette(){
+  if(!ME)return;
+  $('#palette').classList.add('on');
+  $('#paletteInput').value='';
+  $('#paletteHits').innerHTML='';
+  paletteSel=-1;paletteHitsCache=[];
+  setTimeout(()=>$('#paletteInput').focus(),0);
+}
+function closePalette(){$('#palette').classList.remove('on')}
+document.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){
+    e.preventDefault();
+    $('#palette').classList.contains('on')?closePalette():openPalette();
+  } else if(e.key==='Escape'&&$('#palette').classList.contains('on')){
+    closePalette();
+  }
+});
+$('#palette').addEventListener('click',e=>{if(e.target.id==='palette')closePalette()});
+let paletteDebounce=null;
+$('#paletteInput').addEventListener('input',()=>{
+  clearTimeout(paletteDebounce);
+  const q=$('#paletteInput').value.trim();
+  if(!q){$('#paletteHits').innerHTML='';paletteHitsCache=[];return}
+  paletteDebounce=setTimeout(async()=>{
+    try{
+      const r=await api('GET','/api/entities/search?q='+encodeURIComponent(q)+'&limit=10');
+      paletteHitsCache=r.hits||[];
+      paletteSel=-1;
+      renderPaletteHits();
+    }catch(e){$('#paletteHits').innerHTML=`<div class="palette-empty">Search failed</div>`}
+  },150);
+});
+function renderPaletteHits(){
+  const host=$('#paletteHits');
+  if(!paletteHitsCache.length){host.innerHTML='<div class="palette-empty">No matches</div>';return}
+  host.innerHTML=paletteHitsCache.map((h,i)=>
+    `<div class="palette-hit${i===paletteSel?' sel':''}" data-i="${i}">
+      <span>${entKindIcon(h.entity.kind)} ${esc(h.entity.name)}${h.matched_alias?` <span class="kind">(${esc(h.matched_alias)})</span>`:''}</span>
+      <span class="kind">${esc(h.entity.kind)}</span>
+    </div>`).join('');
+  host.querySelectorAll('.palette-hit').forEach(el=>{
+    el.onclick=()=>{openEntityPage(paletteHitsCache[Number(el.dataset.i)].entity.id)};
+  });
+}
+$('#paletteInput').addEventListener('keydown',e=>{
+  if(e.key==='ArrowDown'){e.preventDefault();paletteSel=Math.min(paletteSel+1,paletteHitsCache.length-1);renderPaletteHits()}
+  else if(e.key==='ArrowUp'){e.preventDefault();paletteSel=Math.max(paletteSel-1,0);renderPaletteHits()}
+  else if(e.key==='Enter'){
+    const pick=paletteHitsCache[paletteSel>=0?paletteSel:0];
+    if(pick)openEntityPage(pick.entity.id);
+  }
+});
+
+// Initial route check: deep-link straight to /entity/:id once logged in.
+(function initEntityRoute(){
+  const m=location.pathname.match(/^\/entity\/([^/]+)/);
+  if(!m)return;
+  const check=setInterval(()=>{
+    if(ME){clearInterval(check);openEntityPage(decodeURIComponent(m[1]),false)}
+  },150);
+})();
 </script>
 </body>
 </html>
