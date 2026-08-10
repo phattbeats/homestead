@@ -23,6 +23,13 @@ dependencies.
   "New tab" open normally instead. Each tile has an owner (any user or
   Everyone); the grid shows yours plus shared by default, with a
   "showing mine / all" toggle.
+- **Per-service health checks (v0.0.6)** — every tile gets an optional
+  `health_url` (defaults to the tile URL) and a check interval. The
+  server polls each tile on its own schedule; two consecutive failures
+  mark the tile down and a red dot + "down since HH:MM" badge appears
+  on it. Tap-through still works. 401/403 are treated as UP (auth walls
+  are healthy). The unauthenticated `GET /api/services/health` returns
+  the full per-service state for agents and monitoring.
 - **Session auth** — `bcrypt`-hashed passwords, signed session cookies,
   90-day rolling expiry.
 - **Push notifications** — web-push reminders for chores due today,

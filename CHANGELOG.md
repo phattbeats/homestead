@@ -1,5 +1,115 @@
 # Changelog
 
+## 0.1.1 — 2026-08-10
+
+- **PHA-1623: per-service health checks — the launcher knows when an
+  app is down.**
+  The failure mode this prevents is real: Emily taps SillyTavern, gets
+  a white iframe from the reverse proxy / crashed backend, and concludes
+  the whole Homestead platform is broken — when in fact the launcher
+  itself is fine, only one downstream service is sick. The launcher
+  now polls every service tile on its own schedule and shows a subtle
+  red dot + "down since HH:MM" badge on any tile that's been failing
+  two checks in a row.
+
+  - **Per-service config:** each tile gets two new optional fields —
+    `health_url` (defaults to the tile URL) and `health_interval_sec`
+    (defaults to 60s; set to 0 to opt a tile out). The new-edit sheet
+    surfaces both fields directly under "Health check (optional)".
+
+  - **Server-side checker (`lib/health-checker.js`):** one independent
+    `setInterval` per enabled service — the work order explicitly says
+    "setInterval is fine at this scale" and the launcher's ~20 services
+    is exactly that scale. Each probe tries HEAD first (lighter on the
+    target), falls back to GET on 405/501 (some apps don't implement
+    HEAD), and uses an `AbortController` with a 5s timeout.
+
+  - **Status semantics:**
+    - `2xx` / `3xx` → `up`
+    - `401` / `403` → `up` (auth walls are healthy — the work order
+      explicitly calls this out: "auth-walled apps (401) show UP")
+    - timeouts, `5xx`, `conn-refused` → `fail`
+    - 1 fail = still `up` (so a single transient blip doesn't flap)
+    - 2 consecutive fails = `down`; `down_since` stamped on transition
+    - any `up` after `down` clears `down_since` (recovery)
+    - consecutive fails counter resets to 0 on success
+
+  - **Runtime state table (`service_health_state`):** one row per
+    service, joined to `services` on delete-cascade. Carries `status`,
+    `last_status_code`, `last_checked_at`, `last_ok_at`, `down_since`,
+    `consecutive_fails`, `last_error`. The state is wiped automatically
+    when a service is deleted (`ON DELETE CASCADE`).
+
+  - **`/api/services` now inlines the health snapshot** so the UI never
+    needs a second round-trip to render the badge. The tile stays auth-
+    gated; only the dedicated **`/api/services/health`** endpoint
+    (unauthenticated, for agents and future push-notification consumers)
+    exposes the full per-service list with the up/down/unknown counts.
+
+  - **UI badge:** `.svc-health` chip with a red dot + "down since
+    HH:MM" label appears on any down tile. The dot sits in the
+    opposite corner from the existing owner-dot so it doesn't fight
+    Brandon's per-user colour scheme. Tap-through still works — the
+    badge is a CSS overlay, not a button — and the tile gets a subtle
+    red-tinted border to make a stack of down tiles scannable at a
+    glance.
+
+  - **Optional DOWN-transition hook** (`onDownTransition`) is wired in
+    `server.js` but the body is a log line until the push notifications
+    primitive (PHA-1619) lands. The shape is what the future hook will
+    expect — when PHA-1619 merges, only the body needs to change.
+
+  - **Acceptance tests** (`scripts/test-health-checker.js`, run via
+    `npm test`): 60 assertions covering the auth-wall classification,
+    interval clamping, the 2-fail debounce, the recovery clears-
+    down_since invariant, the HEAD-405 fallback, the 5s timeout, the
+    conn-refused path, and the end-to-end start/tick/persist flow
+    against a temp SQLite.
+
+  Acceptance: stopping a test container flips its tile to `down` within
+  two intervals; restarting clears it. Auth-walled apps (401, 403)
+  show `up`. State survives server restarts because it's persisted in
+  SQLite. Test results: `60 pass, 0 fail`.
+
+
+- **Web push notifications.** Standard VAPID-based push (no Firebase),
+  with a per-user subscription store and a server-side `notify(userId,
+  payload)` primitive that downstream features (PHA-1617 events
+  webhook, future agent handoffs) can build on. Surface area:
+  - `GET /api/push/vapid-public-key` (public): returns the server's
+    VAPID public key so the service worker can subscribe.
+  - `POST /api/push/subscribe` (auth): idempotent — re-subscribing the
+    same endpoint resets its failure counter.
+  - `POST /api/push/unsubscribe` (auth): removes by endpoint.
+  - `GET /api/push/prefs` / `PUT /api/push/prefs` (auth): per-user
+    quiet hours (default 21:00–08:00) and three category toggles
+    (`chore_due`, `take_turns`, `system`).
+  - `POST /api/notify` (auth): `{ userId | username, payload, force }`
+    — `force` bypasses quiet hours for urgent agent-driven handoffs.
+  - Subscriptions returning 404/410 from the push service are pruned
+    on the failed send; other failures increment `failure_count`.
+  - Daily digest: server-side scheduler on a 30-minute tick, idempotent
+    via a per-user/per-category `notification_log` dedupe.
+- **Schema additions.** New tables `push_subscriptions`,
+  `notification_prefs`, `notification_log` — all keyed to
+  `users.id` (the stable PK), so the future PHA-1618 user-model
+  migration is a no-op for these tables.
+- **Frontend.** Avatar menu gains an "Enable push notifications"
+  button + per-user prefs editor (quiet hours + category toggles).
+  Auto-resubscribes on login if the browser already has a granted
+  permission, so a returning user on a new device does not have to
+  click "Enable" again.
+- **Service worker (`public/sw.js`).** Adds `push` and
+  `notificationclick` handlers. Click focuses an existing Homestead tab
+  or opens a new one; rotating-chore handoffs are sticky
+  (`requireInteraction: true`).
+- **VAPID keypair** generated on first boot, persisted to
+  `DATA_DIR/vapid.json` (mode 0600), loaded into `web-push` at
+  startup. Rotation invalidates every existing subscription (browsers
+  will see 410 Gone on next push) — keep the file across restarts.
+- **README** updated with push-notification setup, iOS 16.4+ install
+  requirements, and a curl-based smoke test against `/api/notify`.
+
 ## v0.1.0 (2026-08-09) — PHA-1619
 
 - **Web push notifications.** Standard VAPID-based push (no Firebase),
