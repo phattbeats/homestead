@@ -277,6 +277,257 @@ console.log('\nTest 6: syncSource + isStale');
   assert(!JSON.stringify(cached).includes('super-secret-pw'), 'cached events do not include the app_password');
 }
 
+// ---- Test 7: VCALENDAR serializer round-trip ---------------------------
+console.log('\nTest 7: VCALENDAR serializer round-trip');
+{
+  const v = {
+    title: 'Round-trip',
+    description: 'line1\nline2, with comma',
+    location: 'Café, main room',
+    start: '2026-08-15T14:00:00.000Z',
+    end: '2026-08-15T15:00:00.000Z',
+  };
+  const ical = caldav.buildVCalendar(v);
+  assert(ical.startsWith('BEGIN:VCALENDAR\r\n'), 'serialized VCALENDAR begins with BEGIN:VCALENDAR');
+  assert(ical.endsWith('END:VCALENDAR\r\n'), 'serialized VCALENDAR ends with END:VCALENDAR');
+  assert(ical.includes('VERSION:2.0'), 'serialized VCALENDAR has VERSION:2.0');
+  assert(ical.includes('PRODID:-//Homestead//CalDAV//EN'), 'serialized VCALENDAR has Homestead PRODID');
+  assert(ical.includes('DTSTART:20260815T140000Z'), 'DTSTART is in UTC format');
+  assert(ical.includes('DTEND:20260815T150000Z'), 'DTEND is in UTC format');
+  assert(ical.includes('SUMMARY:Round-trip'), 'SUMMARY line emitted');
+  assert(ical.includes('DESCRIPTION:line1\\nline2\\, with comma'), 'DESCRIPTION escapes newlines and commas');
+  assert(ical.includes('LOCATION:Café\\, main room'), 'LOCATION escapes commas');
+
+  // Parsed back, fields match (escape round-trip).
+  const parsed = caldav.parseVEvents(ical);
+  assertEq(parsed.length, 1, 'parsed one VEVENT');
+  assertEq(parsed[0].title, 'Round-trip', 'title survives round-trip');
+  assertEq(parsed[0].description, 'line1\nline2, with comma', 'description survives round-trip');
+  assertEq(parsed[0].location, 'Café, main room', 'location survives round-trip');
+  assertEq(parsed[0].start, '2026-08-15T14:00:00.000Z', 'start survives round-trip');
+  assertEq(parsed[0].end, '2026-08-15T15:00:00.000Z', 'end survives round-trip');
+
+  // Date-only event (allDay: true).
+  const icalAllDay = caldav.buildVCalendar({
+    title: 'All day',
+    start: '2026-08-20',
+    end: '2026-08-21',
+    allDay: true,
+  });
+  assert(icalAllDay.includes('DTSTART;VALUE=DATE:20260820'), 'allDay start uses VALUE=DATE');
+  assert(icalAllDay.includes('DTEND;VALUE=DATE:20260821'), 'allDay end uses VALUE=DATE');
+
+  // Provided UID is preserved.
+  const icalWithUid = caldav.buildVCalendar({ uid: 'custom-uid@host', title: 'X', start: '2026-08-15T14:00:00.000Z' });
+  assert(icalWithUid.includes('UID:custom-uid@host'), 'provided UID is preserved');
+
+  // Missing start throws.
+  assertThrows(() => caldav.buildVCalendar({ title: 'no start' }), /start is required/, 'missing start throws');
+}
+
+// ---- Test 8: resolveEventUrl helper ------------------------------------
+console.log('\nTest 8: resolveEventUrl');
+{
+  const baseUrl = 'https://nc.example/dav';
+  // Absolute calendarHref + UID → absolute URL with .ics suffix.
+  assertEq(
+    caldav.resolveEventUrl('https://nc.example/dav/calendars/brandon/personal/', 'e1@cal', null),
+    'https://nc.example/dav/calendars/brandon/personal/e1%40cal.ics',
+    'absolute calendarHref + UID → absolute URL with .ics suffix'
+  );
+  // Relative calendarHref + base_url → absolute URL.
+  assertEq(
+    caldav.resolveEventUrl('/cal/personal/', 'e1@cal', baseUrl),
+    'https://nc.example/dav/cal/personal/e1%40cal.ics',
+    'relative calendarHref + base_url → stitched absolute URL'
+  );
+  // externalId that's already a URL → returned as-is.
+  assertEq(
+    caldav.resolveEventUrl('https://nc.example/dav/cal/personal/', 'https://nc.example/dav/cal/personal/already.ics', null),
+    'https://nc.example/dav/cal/personal/already.ics',
+    'full-URL externalId passes through unchanged'
+  );
+  // Trailing slash on calendarHref is normalised.
+  assertEq(
+    caldav.resolveEventUrl('https://nc.example/dav/cal/personal', 'e1', null),
+    'https://nc.example/dav/cal/personal/e1.ics',
+    'trailing-slash-less calendarHref still gets a single slash before the UID'
+  );
+  // Relative + no base throws.
+  assertThrows(() => caldav.resolveEventUrl('/cal/personal/', 'e1', null), /baseUrl/, 'relative + no base throws');
+}
+
+// ---- Test 9: CalDAV PUT/DELETE write-back via stub HTTP ----------------
+console.log('\nTest 9: CalDAV write-back with mocked HTTP');
+{
+  const calls = [];
+  const stubHttp = async (req) => {
+    calls.push({ method: req.method, url: req.url, headers: req.headers, body: req.body });
+    if (req.method === 'PUT') {
+      return { status: 201, headers: { etag: '"new-etag"' }, body: '' };
+    }
+    if (req.method === 'DELETE') {
+      return { status: 204, headers: {}, body: '' };
+    }
+    return { status: 405, headers: {}, body: 'method not allowed' };
+  };
+  const source = caldav.makeCalDAVSource({
+    provider: 'caldav_nextcloud',
+    account_id: 'brandon',
+    base_url: 'https://nc.example/remote.php/dav',
+    app_password: 'pw-NEVER-LEAK',
+  }, { httpDo: stubHttp });
+
+  // createEvent
+  const created = await source.createEvent({
+    calendarHref: 'https://nc.example/dav/calendars/brandon/personal/',
+    vevent: {
+      title: 'New event',
+      description: 'desc',
+      location: 'loc',
+      start: '2026-08-15T14:00:00.000Z',
+      end: '2026-08-15T15:00:00.000Z',
+    },
+  });
+  assert(!!created.externalId, 'createEvent returns externalId (UID)');
+  assert(created.href.endsWith(created.externalId + '.ics'), 'createEvent href ends with UID.ics');
+  assertEq(created.etag, '"new-etag"', 'createEvent returns new etag from response');
+  const createCall = calls.find(c => c.method === 'PUT');
+  assert(!!createCall, 'PUT was issued');
+  assertEq(createCall.headers['If-None-Match'], '*', 'createEvent uses If-None-Match: *');
+  assertEq(createCall.headers['Content-Type'], 'text/calendar; charset=utf-8', 'PUT Content-Type is text/calendar');
+  assert(createCall.body.includes('BEGIN:VCALENDAR'), 'PUT body starts with VCALENDAR');
+  assert(createCall.body.includes('SUMMARY:New event'), 'PUT body contains SUMMARY');
+  assert(createCall.body.includes('UID:' + created.externalId), 'PUT body contains the generated UID');
+  assert(!JSON.stringify(calls).includes('pw-NEVER-LEAK'), 'app_password never appears in any captured request');
+
+  // updateEvent — uses If-Match when etag is provided.
+  calls.length = 0;
+  const updated = await source.updateEvent({
+    calendarHref: 'https://nc.example/dav/calendars/brandon/personal/',
+    externalId: 'updated-uid@cal',
+    vevent: {
+      title: 'Updated',
+      start: '2026-08-16T10:00:00.000Z',
+      end: '2026-08-16T11:00:00.000Z',
+    },
+    etag: '"old-etag"',
+  });
+  assertEq(updated.externalId, 'updated-uid@cal', 'updateEvent preserves externalId');
+  assert(updated.href.endsWith('updated-uid%40cal.ics'), 'updateEvent URL uses provided externalId');
+  const updateCall = calls.find(c => c.method === 'PUT');
+  assertEq(updateCall.headers['If-Match'], '"old-etag"', 'updateEvent uses If-Match with provided etag');
+  assert(updateCall.body.includes('UID:updated-uid@cal'), 'updateEvent body preserves the UID');
+
+  // updateEvent without etag skips If-Match.
+  calls.length = 0;
+  await source.updateEvent({
+    calendarHref: 'https://nc.example/dav/calendars/brandon/personal/',
+    externalId: 'updated-uid@cal',
+    vevent: { title: 'No etag', start: '2026-08-16T10:00:00.000Z' },
+  });
+  const noEtagCall = calls.find(c => c.method === 'PUT');
+  assert(!('If-Match' in noEtagCall.headers), 'updateEvent omits If-Match when no etag is provided');
+
+  // deleteEvent
+  calls.length = 0;
+  const deleted = await source.deleteEvent({
+    calendarHref: 'https://nc.example/dav/calendars/brandon/personal/',
+    externalId: 'doomed-uid@cal',
+    etag: '"current"',
+  });
+  assertEq(deleted.ok, true, 'deleteEvent returns ok:true');
+  const deleteCall = calls.find(c => c.method === 'DELETE');
+  assert(!!deleteCall, 'DELETE was issued');
+  assertEq(deleteCall.headers['If-Match'], '"current"', 'deleteEvent uses If-Match with provided etag');
+  const noCreds = JSON.stringify(calls);
+  assert(!noCreds.includes('pw-NEVER-LEAK'), 'app_password never appears in deleteEvent captures');
+}
+
+// ---- Test 10: write-back error path ------------------------------------
+console.log('\nTest 10: write-back surfaces provider errors');
+{
+  const stubHttp = async () => ({ status: 412, headers: {}, body: 'precondition failed' });
+  const source = caldav.makeCalDAVSource({
+    provider: 'caldav_nextcloud',
+    account_id: 'brandon',
+    base_url: 'https://nc.example/dav',
+    app_password: 'pw',
+  }, { httpDo: stubHttp });
+  let threw = false;
+  try {
+    await source.updateEvent({
+      calendarHref: 'https://nc.example/dav/cal/brandonsmith/personal/',
+      externalId: 'lost-update@cal',
+      vevent: { title: 'X', start: '2026-08-15T14:00:00.000Z' },
+      etag: '"stale"',
+    });
+  } catch (e) {
+    threw = true;
+    assert(/status 412/.test(e.message), '412 surfaces in the error message');
+  }
+  assert(threw, 'updateEvent throws on provider 412');
+}
+
+// ---- Test 11: createEvent validates required fields --------------------
+console.log('\nTest 11: createEvent input validation');
+{
+  const stubHttp = async () => ({ status: 201, headers: {}, body: '' });
+  const source = caldav.makeCalDAVSource({
+    provider: 'caldav_nextcloud',
+    account_id: 'brandon',
+    base_url: 'https://nc.example/dav',
+    app_password: 'pw',
+  }, { httpDo: stubHttp });
+  async function expectThrows(p, pattern, label) {
+    let msg = null;
+    try { await p; } catch (e) { msg = e.message; }
+    if (msg && pattern.test(msg)) ok(label);
+    else ng(label, msg ? `wrong error: ${msg}` : 'expected throw, got success');
+  }
+  await expectThrows(
+    source.createEvent({ calendarHref: 'https://nc.example/dav/cal/personal/', vevent: { title: 'no start' } }),
+    /start is required/, 'createEvent rejects missing start');
+  await expectThrows(
+    source.createEvent({ calendarHref: 'https://nc.example/dav/cal/personal/', vevent: null }),
+    /vevent/, 'createEvent rejects null vevent');
+  await expectThrows(
+    source.createEvent({ vevent: { start: '2026-08-15T14:00:00.000Z' } }),
+    /calendarHref/, 'createEvent rejects missing calendarHref');
+  await expectThrows(
+    source.updateEvent({ calendarHref: 'h', vevent: { start: '2026-08-15T14:00:00.000Z' } }),
+    /externalId/, 'updateEvent rejects missing externalId');
+  await expectThrows(
+    source.deleteEvent({ calendarHref: 'h' }),
+    /externalId/, 'deleteEvent rejects missing externalId');
+  await expectThrows(
+    source.deleteEvent({ externalId: 'x' }),
+    /calendarHref/, 'deleteEvent rejects missing calendarHref');
+}
+
+// ---- Test 12: provider error messages do not leak app_password ---------
+console.log('\nTest 12: provider error messages do not leak app_password');
+{
+  const stubHttp = async () => ({ status: 500, headers: {}, body: 'internal server error' });
+  const source = caldav.makeCalDAVSource({
+    provider: 'caldav_nextcloud',
+    account_id: 'brandon',
+    base_url: 'https://nc.example/dav',
+    app_password: 'TOP-SECRET-PW-12345',
+  }, { httpDo: stubHttp });
+  let msg = '';
+  try {
+    await source.createEvent({
+      calendarHref: 'https://nc.example/dav/cal/personal/',
+      vevent: { title: 'X', start: '2026-08-15T14:00:00.000Z' },
+    });
+  } catch (e) {
+    msg = e.message;
+  }
+  assert(msg.includes('status 500'), 'error message includes status code');
+  assert(!msg.includes('TOP-SECRET-PW-12345'), 'error message does NOT contain the app_password');
+}
+
 // ---- Summary -----------------------------------------------------------
 console.log(`\n${pass} pass, ${fail} fail`);
 process.exit(fail > 0 ? 1 : 0);
