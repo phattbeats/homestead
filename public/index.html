@@ -206,6 +206,15 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 .ent-head{margin:10px 0 4px}
 .ent-head h1{font-size:22px;margin:0}
 .ent-meta-strip{font-size:13px;color:var(--muted);margin-top:4px}
+.ent-review-badge{display:inline-block;margin-top:6px;padding:4px 10px;border-radius:10px;background:#FFF4D6;color:#A07820;font-size:13px;font-weight:600}
+.ent-review-row{border:1px solid var(--line);border-radius:10px;padding:10px;margin:6px 0;background:var(--surface,#fff)}
+.ent-review-meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.ent-review-meta .kind{background:var(--accent-soft);color:var(--accent);padding:2px 6px;border-radius:6px;font-weight:700}
+.ent-review-reason{margin:6px 0;font-size:13px}
+.ent-review-actions{display:flex;gap:8px;margin-top:6px}
+.ent-review-actions button{padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg,#fff);cursor:pointer;font-size:13px}
+.ent-review-actions .ent-merge{background:var(--accent);color:#fff;border-color:var(--accent)}
+.ent-review-actions .ent-reject{background:#F5E4E4;color:#9B3A3A;border-color:#E5C9C9}
 .ent-actions{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
 .ent-actions a,.ent-actions button{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;
   border-radius:999px;border:1px solid rgba(0,0,0,.12);background:#f4f2ee;font-size:13px;text-decoration:none;color:inherit;cursor:pointer}
@@ -1065,28 +1074,56 @@ async function openEntityPage(id,push){
   const body=$('#entBody');
   body.innerHTML='<div class="ent-empty">Loading…</div>';
   $('#entityPage').classList.add('on');
-  let entity,edgesRes,backlinksRes;
+  let entity,edgesRes,backlinksRes,reviewQueue;
   try{
     entity=await api('GET','/api/entities/'+encodeURIComponent(id));
-    [edgesRes,backlinksRes]=await Promise.all([
+    [edgesRes,backlinksRes,reviewQueue]=await Promise.all([
       api('GET','/api/entities/'+encodeURIComponent(id)+'/edges?direction=out&stale=false'),
       api('GET','/api/entities/'+encodeURIComponent(id)+'/backlinks'),
+      api('GET','/api/entities/'+encodeURIComponent(id)+'/review-queue'),
     ]);
   }catch(e){
     body.innerHTML=`<div class="ent-empty">Couldn't load this entity (${esc((e&&e.error)||'error')}).</div>`;
     return;
   }
-  renderEntityPage(entity,edgesRes,backlinksRes);
+  renderEntityPage(entity,edgesRes,backlinksRes,reviewQueue);
 }
 function closeEntityPage(){
   $('#entityPage').classList.remove('on');
   history.pushState({},'','/');
 }
-function renderEntityPage(entity,edgesRes,backlinksRes){
+function renderEntityPage(entity,edgesRes,backlinksRes,reviewQueue){
   const metaBits=[entity.kind];
   if(entity.meta&&entity.meta.year)metaBits.push(String(entity.meta.year));
   const actions=Object.entries(entity.deep_links||{}).filter(([,url])=>url).map(([svc,url])=>
     `<a href="${esc(url)}" target="_blank" rel="noopener">🔗 Open in ${esc(svc)}</a>`).join('');
+  // PHA-1876: "needs review" indicator + per-item Merge/Don't merge
+  // buttons. reviewQueue.items is the per-entity list of pending
+  // review rows where this entity is candidate_a or candidate_b.
+  const pendingReviews = (reviewQueue && Array.isArray(reviewQueue.items))
+    ? reviewQueue.items.filter(r => r.status === 'pending')
+    : [];
+  const reviewBadge = pendingReviews.length
+    ? `<div class="ent-review-badge" title="This entity has ${pendingReviews.length} pending review item(s)">⚠️ Needs review (${pendingReviews.length})</div>`
+    : '';
+  const reviewSectionHtml = pendingReviews.length
+    ? `<div class="sec">Review queue</div>${pendingReviews.map(r => {
+        const otherId = r.candidate_a === entity.id ? r.candidate_b : r.candidate_a;
+        const conf = (typeof r.confidence === 'number') ? r.confidence.toFixed(2) : '?';
+        return `<div class="ent-review-row" data-review-id="${esc(r.id)}" data-other-id="${esc(otherId)}">
+          <div class="ent-review-meta">
+            <span class="kind">${esc(r.kind||'review')}</span>
+            <span>confidence ${conf}</span>
+            <button onclick="openEntityPage('${esc(otherId)}')">view candidate →</button>
+          </div>
+          <div class="ent-review-reason">${esc(r.reason||'')}</div>
+          <div class="ent-review-actions">
+            <button class="ent-merge" data-action="merge">Merge into this</button>
+            <button class="ent-reject" data-action="reject">Don't merge</button>
+          </div>
+        </div>`;
+      }).join('')}`
+    : '';
   const groupOrder=['available_as','available_via','authored_by','directed_by','tagged_with','adaptation_of','part_of','shared_in_list','mentioned_in'];
   const grouped=edgesRes.grouped||{};
   const groupKeys=[...groupOrder.filter(k=>grouped[k]),...Object.keys(grouped).filter(k=>!groupOrder.includes(k))];
@@ -1111,8 +1148,10 @@ function renderEntityPage(entity,edgesRes,backlinksRes){
     <div class="ent-head">
       <h1>${entKindIcon(entity.kind)} ${esc(entity.name)}</h1>
       <div class="ent-meta-strip">${esc(metaBits.join(' · '))}</div>
+      ${reviewBadge}
     </div>
     ${actions?`<div class="ent-actions">${actions}</div>`:''}
+    ${reviewSectionHtml}
     <div class="sec">Edges</div>
     ${groupsHtml}
     <div class="sec">Backlinks</div>
@@ -1122,6 +1161,33 @@ function renderEntityPage(entity,edgesRes,backlinksRes){
       Source: ${sourceIds.join(' · ')}<br>
       Updated: ${esc(entity.updated_at||'')}
     </div>`;
+  // Wire up merge/reject buttons. Re-renders the page after a decision
+  // so the row count updates without a full re-load. `into` is always
+  // this entity's id when the user clicks "Merge into this" — the API
+  // will figure out which candidate side to keep.
+  $('#entBody').querySelectorAll('.ent-review-row').forEach(row => {
+    const reviewId = row.dataset.reviewId;
+    row.querySelectorAll('button[data-action]').forEach(btn => {
+      btn.onclick = async () => {
+        const action = btn.dataset.action;
+        btn.disabled = true;
+        try {
+          if (action === 'merge') {
+            await api('POST', '/api/review-queue/' + encodeURIComponent(reviewId) + '/merge',
+                      { into: entity.id });
+          } else if (action === 'reject') {
+            await api('POST', '/api/review-queue/' + encodeURIComponent(reviewId) + '/reject',
+                      { reason: 'dismissed from entity page' });
+          }
+          // Re-open the page to reflect the new state.
+          openEntityPage(entity.id, false);
+        } catch (e) {
+          alert('Failed: ' + ((e && e.error) || 'error'));
+          btn.disabled = false;
+        }
+      };
+    });
+  });
 }
 $('#entBack').onclick=closeEntityPage;
 window.addEventListener('popstate',()=>{

@@ -1,5 +1,52 @@
 # Changelog
 
+## v0.1.12 (2026-08-10) — PHA-1876 (PHA-1624 Phase C)
+
+- **Entity dedup + review queue.** `lib/dedup/matcher.js` exposes
+  `matchEntity(candidate)` implementing the 3-tier algorithm from
+  design doc §6:
+  - **Tier 1** — deterministic ID match. Walks every known-ID slot
+    (`isbn`, `tmdb_id`, `audible_id`, `plex_guid`, `kavita_id`) on
+    the candidate against every existing `work` entity. Never merges
+    — emits `adaptation_of` edges between siblings.
+  - **Tier 2** — TMDB cross-reference. Plex + another service with
+    the same TMDB id + collection + year → `adaptation_of` edge.
+    Falls through to Tier 3 when either side lacks the collection.
+  - **Tier 3** — fuzzy title + author. Score =
+    `0.6 * title_similarity + 0.3 * author_similarity +
+     0.1 * year_proximity` (trigram Jaccard + token-set ratio).
+    Thresholds: `≥ 0.9` auto-aliases, `0.7..0.9` queues a review,
+    `< 0.7` no-op.
+  - **`mergeEntities(db, { reviewId, intoEntityId, decidedBy })`**
+    is the **only** path that merges two entities — re-points
+    outgoing + incoming edges, promotes aliases, deletes B, and
+    marks the review row `status='merged'`. Idempotent on FK
+    conflicts (re-points first, deletes second; the review row
+    becomes a self-reference on the surviving target).
+  - **`siblingDetector(db)`** cron helper: groups every `work`
+    entity by `(name_lower, author)` and queues a review for any
+    pair without an existing `adaptation_of` edge between them.
+- **Endpoints.** Two new admin-only routes resolve review items:
+  - `POST /api/review-queue/:id/merge` body `{into: entity_id}`
+    → merges B into A, B becomes alias.
+  - `POST /api/review-queue/:id/reject` body `{reason}`
+    → marks the item `status='rejected'` (it never re-surfaces for
+    that pair — `siblingDetector` filters on `status='pending'`).
+  - `POST /api/admin/sync/sibling-detector` (admin) → manual
+    trigger; the same function runs every 6h from the boot
+    scheduler alongside Plex/Kavita entity-sync ticks.
+- **UI.** The entity page header shows a "⚠️ Needs review (N)"
+  badge when the entity has pending review items, and a
+  "Review queue" section below the deep-link actions lists every
+  pending pair with two buttons ("Merge into this" / "Don't
+  merge"). Decisions call the merge/reject endpoints and re-open
+  the page to reflect the new state.
+- **Tests.** New `scripts/test-dedup-matcher.js` — 100 assertions
+  covering all three tiers, every known-ID slot, the score formula,
+  the dryRun path, sibling detector idempotency, merge round-trip
+  (FK resolution + slot stamping), and reject terminality. Wired
+  into `npm test`.
+
 ## v0.1.11 (2026-08-10) — PHA-1867
 
 - **Month-grid merge layer (PHA-1867d).** The home + calendar pages now consume
