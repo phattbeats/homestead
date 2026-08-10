@@ -15,7 +15,11 @@ dependencies.
   the assigned users every time a recurring chore is checked off — checking
   off a recurring task rolls it forward instead of marking it done.
 - **Calendar** — month grid with per-person colour pips. Tap a day to see
-  or add events.
+  or add events. **Universal read-through (v0.1.1):** events created in
+  any configured external calendar (Nextcloud / Apple iCloud / MS365 /
+  Google) appear in the grid without a Homestead-side entry. See
+  [Calendar read-through](#calendar-read-through-universal-caldav--graph--google)
+  below for setup.
 - **Services launcher** — editable tile grid (long-press a tile to edit).
   Tap a tile to open the service inside Homestead in a full-screen iframe,
   with a draggable escape dot (tap to return to the dashboard; drag to
@@ -30,6 +34,70 @@ dependencies.
   and per-category on/off toggles. No Firebase — standard VAPID keys
   generated once and stored in `/data/vapid.json`. Requires the PWA to
   be installed to a phone home screen (iOS 16.4+ / Android Chrome).
+
+## Calendar read-through (universal: CalDAV / Graph / Google)
+
+Homestead reads events from configured external calendars through a
+provider-agnostic `CalendarSource` interface. v0.1.1 ships the first
+adapter (`CalDAVSource`) covering both **Nextcloud** and **Apple iCloud**
+via a single implementation parameterized on `base_url`. **Microsoft 365**
+and **Google Calendar** are follow-up child issues that register behind
+the same interface — no merge-layer or API-surface changes needed.
+
+### Setup
+
+1. Generate an at-rest credential key:
+
+       openssl rand -hex 32
+
+   Store it as `CALENDAR_CRED_KEY` in the runtime environment. Until
+   this is set, `/api/health.ok` flips to `false` and
+   `POST /api/calendar-sources` returns 503.
+
+2. Generate an **app-password** for each provider:
+
+       - Nextcloud: Settings → Security → App passwords
+       - Apple iCloud: https://appleid.apple.com → Sign-In and Security
+         → App-Specific Passwords (2FA required)
+
+3. Add the source via the API (the UI is the PHA-1868 follow-up):
+
+       curl -X POST -H 'Content-Type: application/json' \
+         -b cookies.txt \
+         -d '{
+           "provider": "caldav_nextcloud",
+           "account_id": "brandon",
+           "calendar_id": "personal",
+           "base_url": "https://nextcloud.phatt.vip/remote.php/dav",
+           "display_name": "Personal",
+           "color": "#7c9eb8",
+           "app_password": "xxxx-xxxx-xxxx-xxxx"
+         }' \
+         http://homestead.lan:3080/api/calendar-sources
+
+   The app-password is encrypted at rest (AES-256-GCM) and **never
+   returned by any API endpoint**. For a household-shared calendar
+   (e.g. Nextcloud's Shade/Kelly Household), set `shared: true` (admin
+   only).
+
+4. Read merged events via `/api/events/merged?from=YYYY-MM-DD&to=YYYY-MM-DD`.
+   Each event carries `origin` (`native` or `provider:<provider>`) and
+   `stale: bool` so the month grid can paint per-provider pips and
+   per-provider stale badges.
+
+### Operational notes
+
+- **Freshness window is 5 minutes.** The cache is checked on every
+  read; if `last_synced_at` is older than 5 minutes the merge endpoint
+  kicks a background re-sync (errors land on `last_error` and the event
+  keeps its `stale: true` flag).
+- **No credentials reach the browser.** The DTO layer
+  (`lib/calendar-sources.js#publicView`) is the single source of truth
+  for what the client sees; the leak check is a load-bearing
+  acceptance test.
+- **Phase 2 write-back** (createEvent / updateEvent / deleteEvent via
+  CalDAV PUT) is tracked under PHA-1866 — single-VEVENT scope per the
+  work order (recurrence editing deferred).
 
 ## Push notifications
 

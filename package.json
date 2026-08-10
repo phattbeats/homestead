@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node scripts/test-user-model.js && node scripts/test-calendar-sources.js"
+    "test": "node scripts/test-user-model.js && node scripts/test-calendar-sources.js",
+    "test:smoke": "node scripts/smoke-calendar-sources.js"
   },
   "engines": {
     "node": ">=22"
