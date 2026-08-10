@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.1.8 (2026-08-10) — PHA-1617.1/.2
+
+- **Per-user agent PATs for the BYO-harness meta-agent socket.**
+  `lib/agent-tokens.js` adds an `agent_tokens` table — one row per
+  issued token, plaintext never stored (bcrypt hash + non-secret
+  16-char lookup prefix), soft-deletion via `revoked_at`. New
+  endpoints:
+  - `GET /api/agent-tokens` — list own tokens.
+  - `POST /api/agent-tokens` — issue a new token; plaintext shown
+    once.
+  - `DELETE /api/agent-tokens/:id` — revoke own token.
+  - `POST /api/users/:username/agent-tokens` (admin) — issue under
+    another user.
+  - `DELETE /api/users/:username/agent-tokens/:id` (admin) — revoke.
+  `authenticate()` now accepts `Authorization: Bearer homestead_pat_…`
+  ahead of the header-trust and session-cookie layers; a valid PAT
+  synthesizes a request-scoped `req.session.user` for the token's
+  owner (not persisted to the session store — verified fresh on every
+  request). Acceptance: **35 tests** in `scripts/test-agent-tokens.js`
+  covering issue/list/revoke, prefix-collision retry, expired /
+  revoked / tampered rejection, and a live end-to-end Bearer-auth
+  HTTP test against `server.js`. Full `npm test` suite: 60 + 75 + 75 +
+  35 = **245/245 green**.
+
+
 ## v0.1.7 (2026-08-10) — PHA-1874 (PHA-1624 Phase B-2)
 
 - **Kavita sync worker.** New `lib/sync/kavita.js`
@@ -210,7 +235,6 @@
   will see 410 Gone on next push) — keep the file across restarts.
 - **README** updated with push-notification setup, iOS 16.4+ install
   requirements, and a curl-based smoke test against `/api/notify`.
->>>>>>> origin/main
 
 ## v0.1.5 (2026-08-09) — PHA-1873 (PHA-1624 Phase B-1)
 
