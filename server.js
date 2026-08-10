@@ -31,11 +31,14 @@ const fs = require('fs');
 const webpush = require('web-push');
 
 const userModel = require('./lib/user-model');
+const calendarSources = require('./lib/calendar-sources');
+const secretBox = require('./lib/secret-box');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const db = new Database(path.join(DATA_DIR, 'life.db'));
 userModel.migrate(db);
+calendarSources.migrate(db);
 
 // v0.1.0: web push subscriptions (PHA-1619)
 db.exec(`
@@ -246,13 +249,19 @@ app.get('/api/health', (req, res) => {
   } catch (err) {
     dbStatus = 'error';
   }
+  // CALENDAR_CRED_KEY is required for any source with a non-empty
+  // cred_blob. If it's missing, /api/calendar-sources will refuse to
+  // add new sources and decrypt calls will throw; surface that on the
+  // health probe so operators see it in monitoring.
+  const credKeyReady = secretBox.keyReady();
   res.json({
-    ok: dbStatus === 'ok',
+    ok: dbStatus === 'ok' && credKeyReady,
     service: 'homestead',
     version: PKG_VERSION,
     commit: COMMIT_SHA,
     uptime: Math.round((Date.now() - PROCESS_STARTED_AT_MS) / 1000),
     db: dbStatus,
+    calendarCredKeyReady: credKeyReady,
   });
 });
 
@@ -508,6 +517,126 @@ app.put('/api/services/:id', auth, (req, res) => {
 app.delete('/api/services/:id', auth, (req, res) => {
   db.prepare('DELETE FROM services WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
+});
+
+// ---- calendar sources (PHA-1620) ----
+// All routes never return cred_blob. The DTO is built by
+// calendarSources.publicView(). Adding a source requires CALENDAR_CRED_KEY.
+app.get('/api/calendar-sources', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  // Household-shared sources (user_id IS NULL) are visible to
+  // everyone. Per-user sources are visible to the owner + admins.
+  const rows = db.prepare('SELECT * FROM calendar_sources ORDER BY id').all();
+  const visible = rows.filter(r => r.user_id == null || r.user_id === me.id || me.is_admin);
+  res.json(visible.map(calendarSources.publicView));
+});
+
+function parseColor(c) {
+  if (!c) return null;
+  return /^#[0-9a-fA-F]{6}$/.test(String(c)) ? String(c) : null;
+}
+
+app.post('/api/calendar-sources', auth, (req, res) => {
+  if (!secretBox.keyReady()) {
+    return res.status(503).json({ error: 'CALENDAR_CRED_KEY not configured' });
+  }
+  const me = userModel.getMe(db, req.session.user.username);
+  const { provider, account_id, calendar_id, base_url, display_name, color, app_password, shared } = req.body || {};
+  if (!provider || !account_id || !calendar_id || !app_password) {
+    return res.status(400).json({ error: 'provider, account_id, calendar_id, app_password required' });
+  }
+  if (!['caldav_nextcloud', 'caldav_icloud', 'ms365', 'google'].includes(provider)) {
+    return res.status(400).json({ error: 'unsupported provider' });
+  }
+  let userId = me.id;
+  if (shared) {
+    if (!me.is_admin) return res.status(403).json({ error: 'admin only for shared sources' });
+    userId = null;
+  }
+  const credBlob = secretBox.encryptString(JSON.stringify({ app_password }));
+  const row = db.prepare(`INSERT INTO calendar_sources
+    (user_id, provider, account_id, calendar_id, base_url, display_name, color, cred_blob, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    userId, provider, account_id, calendar_id, base_url || null,
+    display_name || null, parseColor(color) || '#7c9eb8', credBlob, me.username
+  );
+  const created = db.prepare('SELECT * FROM calendar_sources WHERE id = ?').get(row.lastInsertRowid);
+  res.json(calendarSources.publicView(created));
+});
+
+app.delete('/api/calendar-sources/:id', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  const src = db.prepare('SELECT * FROM calendar_sources WHERE id = ?').get(req.params.id);
+  if (!src) return res.status(404).json({ error: 'not found' });
+  if (src.user_id != null && src.user_id !== me.id && !me.is_admin) {
+    return res.status(403).json({ error: 'not yours' });
+  }
+  db.prepare('DELETE FROM calendar_sources WHERE id = ?').run(src.id);
+  res.json({ ok: true });
+});
+
+app.post('/api/calendar-sources/:id/refresh', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  const src = db.prepare('SELECT * FROM calendar_sources WHERE id = ?').get(req.params.id);
+  if (!src) return res.status(404).json({ error: 'not found' });
+  if (src.user_id != null && src.user_id !== me.id && !me.is_admin) {
+    return res.status(403).json({ error: 'not yours' });
+  }
+  // Sync is async; the per-source errors are captured on the row.
+  Promise.resolve()
+    .then(() => calendarSources.syncSource(db, src))
+    .catch((e) => {
+      db.prepare(`UPDATE calendar_sources SET last_error = ?, last_error_at = datetime('now') WHERE id = ?`)
+        .run(String(e && e.message || e).slice(0, 1024), src.id);
+    });
+  res.json({ ok: true, status: 'syncing' });
+});
+
+// GET /api/events/merged?from=YYYY-MM-DD&to=YYYY-MM-DD
+// Returns a unified list of native Homestead events + cached
+// provider events, tagged with `origin: 'native' | 'provider:<id>'`
+// so the month grid can paint per-provider pips.
+app.get('/api/events/merged', auth, (req, res) => {
+  const { from, to } = req.query;
+  if (!from || !to) return res.status(400).json({ error: 'from and to required (YYYY-MM-DD)' });
+  const native = db.prepare(
+    'SELECT id, title, date, time, notes, owner FROM events WHERE date >= ? AND date <= ? ORDER BY date, time'
+  ).all(from, to).map(e => ({
+    id: `native-${e.id}`,
+    title: e.title,
+    notes: e.notes,
+    start: e.date + (e.time ? 'T' + e.time + ':00' : 'T00:00:00'),
+    end: null,
+    allDay: !e.time,
+    owner: e.owner,
+    origin: 'native',
+    source_id: null,
+    color: null,
+    stale: false,
+    last_error: null,
+  }));
+  const cached = db.prepare(`
+    SELECT cec.id, cec.title, cec.description, cec.start_at, cec.end_at, cec.all_day, cec.location,
+           cec.source_id, cs.provider, cs.account_id, cs.color, cs.display_name, cs.last_synced_at, cs.last_error
+    FROM calendar_event_cache cec
+    JOIN calendar_sources cs ON cs.id = cec.source_id
+    WHERE cec.start_at >= ? AND cec.start_at <= ?
+  `).all(from + 'T00:00:00Z', to + 'T23:59:59Z').map(e => ({
+    id: `provider-${e.id}`,
+    title: e.title,
+    notes: e.description,
+    start: e.start_at,
+    end: e.end_at,
+    allDay: !!e.all_day,
+    location: e.location,
+    owner: null,
+    origin: `provider:${e.provider}`,
+    source_id: e.source_id,
+    color: e.color,
+    stale: !e.last_synced_at || (Date.now() - new Date(e.last_synced_at + 'Z').getTime()) > calendarSources.FRESHNESS_MS,
+    last_error: e.last_error,
+  }));
+  res.json({ events: [...native, ...cached] });
 });
 
 // ---- push notifications (PHA-1619) ----
