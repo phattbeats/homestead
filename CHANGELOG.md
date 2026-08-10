@@ -1,5 +1,53 @@
 # Changelog
 
+## v0.1.1 (2026-08-09) — PHA-1620
+
+- **Universal calendar read-through.** Homestead now reads events from
+  configured external calendars instead of forcing double-entry. The
+  provider-agnostic `CalendarSource` interface is shipped with its
+  first concrete adapter (`CalDAVSource` — covers both Nextcloud and
+  Apple iCloud via a single implementation parameterized on `base_url`).
+  Microsoft 365 (`GraphSource`) and Google (`GoogleSource`) are
+  follow-up child issues (PHA-1864 / PHA-1865) that register behind
+  the same interface — no merge-layer or API-surface changes needed.
+  Surface area:
+  - `GET /api/calendar-sources` (auth): list sources visible to the
+    caller (their own + admin-managed household-shared sources). Never
+    returns `cred_blob`.
+  - `POST /api/calendar-sources` (auth): create a source. Encrypted at
+    rest (AES-256-GCM, key from `CALENDAR_CRED_KEY`); admin only for
+    `shared: true` sources.
+  - `DELETE /api/calendar-sources/:id` (auth): owner or admin.
+  - `POST /api/calendar-sources/:id/refresh` (auth): kicks a sync.
+    Errors are captured on `last_error` / `last_error_at` so a per-
+    provider stale badge can render in the month grid.
+  - `GET /api/events/merged?from=YYYY-MM-DD&to=YYYY-MM-DD` (auth):
+    unified list of native + cached provider events, each tagged with
+    `origin` (`native` or `provider:<provider>`), `color` (per-source),
+    `stale` (true when `last_synced_at` is older than the 5-min
+    freshness window).
+- **Schema additions.** New tables `calendar_sources` and
+  `calendar_event_cache`. The migration is idempotent and additive
+  against v0.0.x / v0.1.0 deployments; no destructive changes.
+- **At-rest credential encryption.** `lib/secret-box.js` provides
+  AES-256-GCM encrypt/decrypt keyed on `CALENDAR_CRED_KEY` (32 bytes
+  hex, fail-closed — missing or wrong-length key throws on every
+  call). The `/api/health` probe reports `calendarCredKeyReady` so
+  operators see it in monitoring; until the key is set,
+  `/api/health.ok` is `false` and `POST /api/calendar-sources` returns
+  503.
+- **No provider credentials ever reach the browser.** Enforced at the
+  DTO layer (`publicView` in `lib/calendar-sources.js` is the single
+  source of truth for what ships to the client; the leak check is a
+  load-bearing acceptance test in `scripts/test-calendar-sources.js`).
+- **Hand-rolled CalDAV / iCal parser.** No new npm dependencies — the
+  WebDAV/CalDAV XML walker and the iCalendar (RFC 529) parser live in
+  `lib/caldav-source.js`. The HTTP layer is injectable so tests stub
+  the network. Single-VEVENT scope per the work order (recurrence
+  editing deferred).
+- **Frontend merge layer** is out of scope for this slice — see
+  PHA-1867. The server-side merge endpoint is ready to consume.
+
 ## v0.1.0 (2026-08-09) — PHA-1619
 
 - **Web push notifications.** Standard VAPID-based push (no Firebase),
