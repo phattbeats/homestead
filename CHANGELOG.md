@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.6 — 2026-08-10
+
+- **PHA-1624 Phase B-1 (PHA-1873): Plex sync worker merged on top of
+  Phase A.** See the v0.1.5 entry below for the full feature writeup.
+  On merge: dropped the worker's defensive `plexSync.migrate(db)` boot
+  call in favor of Phase A's canonical `entityGraph.migrate(db)` (same
+  underlying schema, `lib/sync/_schema.js`); combined `npm test` to run
+  both `test-entity-graph.js` and `test-sync-plex.js`. Also fixes a
+  boot crash in the PR as originally opened — unrelated calendar-
+  sources/secret-box routes had leaked into `server.js` from another
+  in-flight branch and referenced modules that don't exist here; that
+  code was removed as out of scope for this PR.
+
 ## 0.1.2 — 2026-08-10
 
 - **PHA-1624 Phase A (PHA-1872): entity graph — schema, read API, entity
@@ -148,6 +161,46 @@
   will see 410 Gone on next push) — keep the file across restarts.
 - **README** updated with push-notification setup, iOS 16.4+ install
   requirements, and a curl-based smoke test against `/api/notify`.
+
+## v0.1.5 (2026-08-09) — PHA-1873 (PHA-1624 Phase B-1)
+
+- **Plex sync worker.** New `lib/sync/plex.js` (`syncPlex({db, baseUrl, token})`)
+  walks a Plex Media Server library and reconciles entities + edges in
+  Homestead's entity graph (PHA-1624 design doc §5.1). The worker
+  installs the entity-graph schema on first call (`lib/sync/_schema.js`)
+  so it's boot-ready even before Phase A's standalone migration lands.
+  Acceptance: 65 tests in `scripts/test-sync-plex.js` covering movie +
+  show + season + episode walks, person dedup (lowercased name),
+  concept dedup (slug), tagged_with + directed_by + part_of +
+  available_as edge emission, idempotent re-runs, stale-marking of
+  edges whose upstream record disappeared, cross-library sibling
+  detection via `(title_lower, year)`, and FTS5 index population for
+  the cmd-K search palette (Phase A consumer).
+- **Schema module shared between Phase A and Phase B-1.**
+  `lib/sync/_schema.js` exports the `SCHEMA_SQL` constant + an
+  idempotent `migrate(db)` installer for the entity-graph tables
+  (`entities`, `entity_aliases`, `entity_edges`,
+  `entity_review_queue`, `entities_fts` + triggers). Phase A can
+  either call this directly or mirror the DDL in its own migration;
+  either way the worker boots without a schema dependency.
+- **Admin endpoints for manual sync + status.** `POST /api/admin/sync/plex`
+  kicks the worker asynchronously (admin-only); `GET /api/admin/sync/plex/status`
+  returns the last-run summary + a `running` flag. Both endpoints
+  guard against concurrent triggers with a single-process serialization
+  flag (a fresh sync waits for the in-flight one to drain rather than
+  queueing).
+- **Scheduled cron tick every 6h.** The Plex worker runs from the
+  existing boot scheduler on a separate cadence from the chore digest
+  (which still fires every 30 min). The 6h interval is wall-clock; the
+  first tick happens 10s after boot and then every 30 min *only when
+  the 6h has elapsed*. Skipped silently when `PLEX_TOKEN` is unset so
+  installs without Plex keep working.
+- **PR scope.** One branch (`pha-1624-entity-graph-phase-b1-plex`)
+  off `phattbeats/homestead@main`, one PR, title `PHA-1624 Phase B-1:
+  Plex sync worker`, body references design doc §5.1. **Merge is
+  blocked on Phase A's schema PR (PHA-1872) landing first** — the
+  worker self-installs the schema as a defensive fallback, but the
+  canonical migration should be Phase A's.
 
 ## v0.1.0 (2026-08-09) — PHA-1619
 
