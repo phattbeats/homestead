@@ -484,29 +484,68 @@ app.delete('/api/events/:id', auth, (req, res) => {
 });
 
 // ---- services ----
+// PHA-1863 (v0.1.2): tile visibility is now enforced at the API layer.
+// `GET /api/services` accepts `?visibility=mine|shared|all` (default
+// `mine`, per the issue spec). Every response includes a `visibility`
+// object so the SPA can render the mine+shared+show-all toggle without
+// a second round-trip. Writes that include a `visibility` body field
+// are admin-only (the existing `is_admin` denormalized flag is the gate).
+function servicesWithVisibility(rows) {
+  return rows.map(s => ({
+    ...s,
+    visibility: userModel.getTileVisibility(db, userModel.TILE_KIND_SERVICE, s.id),
+  }));
+}
 app.get('/api/services', auth, (req, res) => {
-  res.json(db.prepare('SELECT * FROM services ORDER BY sort, id').all());
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown user' });
+  const visibility = ['mine', 'shared', 'all'].includes(req.query.visibility) ? req.query.visibility : 'mine';
+  const rows = userModel.getServicesForUser(db, me.id, me.username, visibility);
+  res.json(servicesWithVisibility(rows));
 });
 app.post('/api/services', auth, (req, res) => {
-  const { name, url, icon = '🔗', descr = '', owner = 'all', open_mode = 'frame' } = req.body || {};
+  const { name, url, icon = '🔗', descr = '', owner = 'all', open_mode = 'frame', visibility } = req.body || {};
   if (!name || !url) return res.status(400).json({ error: 'name and url required' });
   if (!userModel.validateAssignee(db, owner)) return res.status(400).json({ error: 'unknown owner' });
+  if (visibility !== undefined && visibility !== null) {
+    const me = userModel.getMe(db, req.session.user.username);
+    if (!me || !me.is_admin) return res.status(403).json({ error: 'admin only' });
+  }
   const max = db.prepare('SELECT COALESCE(MAX(sort),0) m FROM services').get().m;
   const r = db.prepare('INSERT INTO services (name,url,icon,descr,sort,owner,open_mode) VALUES (?,?,?,?,?,?,?)')
     .run(name, url, icon, descr, max + 1, owner, open_mode);
-  res.json(db.prepare('SELECT * FROM services WHERE id = ?').get(r.lastInsertRowid));
+  const id = r.lastInsertRowid;
+  if (visibility && typeof visibility === 'object') {
+    userModel.setTileVisibility(db, userModel.TILE_KIND_SERVICE, id, visibility.groups || [], visibility.users || []);
+  }
+  const tile = db.prepare('SELECT * FROM services WHERE id = ?').get(id);
+  res.json({ ...tile, visibility: userModel.getTileVisibility(db, userModel.TILE_KIND_SERVICE, id) });
 });
 app.put('/api/services/:id', auth, (req, res) => {
   const s = db.prepare('SELECT * FROM services WHERE id = ?').get(req.params.id);
   if (!s) return res.status(404).json({ error: 'not found' });
   const b = { ...s, ...req.body };
   if (!userModel.validateAssignee(db, b.owner)) return res.status(400).json({ error: 'unknown owner' });
+  if (req.body.visibility !== undefined && req.body.visibility !== null && (req.body.visibility.groups || req.body.visibility.users)) {
+    const me = userModel.getMe(db, req.session.user.username);
+    if (!me || !me.is_admin) return res.status(403).json({ error: 'admin only' });
+  }
   db.prepare('UPDATE services SET name=?,url=?,icon=?,descr=?,sort=?,owner=?,open_mode=? WHERE id=?')
     .run(b.name, b.url, b.icon, b.descr, b.sort, b.owner, b.open_mode, s.id);
-  res.json(db.prepare('SELECT * FROM services WHERE id = ?').get(s.id));
+  if (req.body.visibility && typeof req.body.visibility === 'object') {
+    userModel.setTileVisibility(db, userModel.TILE_KIND_SERVICE, s.id, req.body.visibility.groups || [], req.body.visibility.users || []);
+  }
+  const tile = db.prepare('SELECT * FROM services WHERE id = ?').get(s.id);
+  res.json({ ...tile, visibility: userModel.getTileVisibility(db, userModel.TILE_KIND_SERVICE, s.id) });
 });
 app.delete('/api/services/:id', auth, (req, res) => {
-  db.prepare('DELETE FROM services WHERE id = ?').run(req.params.id);
+  const tileKind = userModel.TILE_KIND_SERVICE;
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM tile_visibility_groups WHERE tile_kind = ? AND tile_id = ?').run(tileKind, req.params.id);
+    db.prepare('DELETE FROM tile_visibility_users WHERE tile_kind = ? AND tile_id = ?').run(tileKind, req.params.id);
+    db.prepare('DELETE FROM services WHERE id = ?').run(req.params.id);
+  });
+  tx();
   res.json({ ok: true });
 });
 

@@ -1,5 +1,49 @@
 # Changelog
 
+## v0.1.2 (2026-08-09) — PHA-1863
+
+- **Tile visibility wiring** (PHA-1618 work-order step 3 follow-up). The
+  `tile_visibility_groups` + `tile_visibility_users` schema that landed
+  with v0.0.5 is now enforced at the API layer. Up to now, every
+  authenticated user saw every tile; this release fixes that.
+  - `GET /api/services` accepts `?visibility=mine|shared|all` (default
+    `mine`). The default reflects the issue spec, but the v0.0.2
+    frontend (PHA-1682) renders the "mine + shared default, show-all
+    toggle" UX by passing `?visibility=shared` explicitly on the
+    initial load and `?visibility=all` when the toggle is on.
+  - `POST /api/services` and `PUT /api/services/:id` accept a
+    `visibility` body field (`{ groups: [...], users: [...] }`). The
+    fields are written with clear-then-write semantics against the
+    visibility tables; unknown group names are auto-created via
+    `getOrCreateGroupId`. Writing visibility is **admin-only** (the
+    existing `is_admin` denormalized flag is the gate); non-admins
+    reading the response still see the visibility object so the SPA
+    can render the UX without a second round-trip.
+  - `DELETE /api/services/:id` cascades `tile_visibility_*` rows in the
+    same transaction so old restrictions don't linger on a recycled
+    tile id.
+  - Every tile in the response carries a `visibility: { groups: [...],
+    users: [...] }` object so the frontend can render the UX without a
+    second round-trip.
+- **Helpers in `lib/user-model.js`:** `isTileVisible(db, userId, kind,
+  id)`, `getTileVisibility(db, kind, id)`, `setTileVisibility(db, kind,
+  id, groupNames, usernames)`, `getServicesForUser(db, userId, username,
+  mode)`. All four are pure DB and unit-tested directly.
+- **Acceptance tests:** `scripts/test-tile-visibility.js` (25 cases)
+  covers open-to-all, group-restricted hides, group-restricted shows,
+  per-user override, all three `?visibility=` modes, default mode,
+  delete cascade, constant export, and the no-hardcoded-group-names
+  grep gate against `server.js`. Added to `npm test`.
+- **No npm dependencies added.** All SQL is hand-rolled against the
+  existing `users` / `groups` / `user_groups` / `tile_visibility_*`
+  tables; the new helpers follow the same `db.prepare(...).all(...)`
+  pattern as the rest of the user-model layer.
+- **Versioning note:** the issue body proposed v0.0.6, but main has
+  moved to v0.1.0 (PHA-1619) and v0.1.1 is claimed by PHA-1620
+  (unmerged). This PR bumps to **v0.1.2** as the next sequential patch.
+  If v0.1.1 merges before this, the bump stays v0.1.2; if anything in
+  flight renumbers, the merge-conflict will be trivial to resolve.
+
 ## v0.1.0 (2026-08-09) — PHA-1619
 
 - **Web push notifications.** Standard VAPID-based push (no Firebase),
