@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.1.2 — 2026-08-10
+
+- **PHA-1624 Phase A (PHA-1872): entity graph — schema, read API, entity
+  page, ⌘K search.**
+  The first slice of the "everything app" entity graph (design doc
+  PHA-1624): one node per real-world thing, edges typed and
+  provenance-tagged, and a page every node can point to. This PR ships
+  the read-only spine; sync workers (Plex/Kavita/seerr/…) land in
+  Phase B.
+
+  - **Schema (`lib/sync/_schema.js`):** `entities`, `entity_aliases`,
+    `entity_edges`, `entity_review_queue`, plus an `entities_fts` FTS5
+    virtual table with insert/update/delete triggers. Wired into the
+    boot migration right after `userModel.migrate(db)`. Idempotent —
+    safe to call on every boot, same pattern as PHA-1618.
+  - **Read API:** `GET /api/entities`, `/api/entities/:id`,
+    `/api/entities/:id/edges`, `/api/entities/:id/backlinks`,
+    `/api/entities/search`, `/api/entities/:id/review-queue`, and
+    `/api/review-queue` — all behind the existing `auth` middleware,
+    all 404ing with `{error:'not_found'}` for missing ids to match the
+    rest of the app.
+  - **Entity page:** a vanilla-JS view at `/entity/:id` — header +
+    meta strip, quick-action deep-link buttons, edges grouped by type
+    (collapsible, per the wireframe in design doc §7), backlinks, and
+    an aliases/source-ids footer.
+  - **⌘K / Ctrl+K search palette:** global listener, hits render name +
+    kind + matched alias, Enter/click navigates to the entity page.
+  - **`scripts/seed-dune.js`:** the Dune walkthrough from design doc
+    §11 — book (Kavita), audiobook (Audiobookshelf), film (Plex),
+    Frank Herbert, David Lynch, and a `Dune franchise` concept node
+    tying the three formats together via `available_as` /
+    `tagged_with` / `adaptation_of`. Idempotent, direct-DB, no write
+    API involved (Phase A is read-only by design).
+  - **Tests (`scripts/test-entity-graph.js`):** 38 assertions covering
+    migration idempotency, entity/edge CRUD at the DB layer, edge
+    direction filtering + grouping, backlinks staleness filtering,
+    review-queue scoping, FTS5 name/alias search, and the full Dune
+    walkthrough end-to-end.
+
 ## 0.1.1 — 2026-08-10
 
 - **PHA-1623: per-service health checks — the launcher knows when an
