@@ -1,5 +1,52 @@
 # Changelog
 
+## v0.1.2 (2026-08-09) — PHA-1864
+
+- **Microsoft 365 (`GraphSource`) adapter shipped.** The same
+  `CalendarSource` interface that backed `CalDAVSource` in v0.1.1 now
+  also backs `GraphSource` for Microsoft 365 (PHA-1864 / PHA-1620a).
+  No merge-layer, API-surface, or DTO changes — the second adapter
+  registers behind `registerAdapter('graph', …)` and is reachable
+  through the existing `POST /api/calendar-sources` endpoint with
+  `provider: "ms365"`. Google's `GoogleSource` (PHA-1865) remains the
+  next child issue; the provider name is reserved in the API
+  allow-list but POST returns 501 today.
+- **OAuth2 credentials for MS365.** `cred_blob` for `ms365` sources
+  carries `{ access_token, refresh_token, expires_at, client_id,
+  tenant_id?, scope? }`. The adapter:
+  - sends `Authorization: Bearer <access_token>` on every request,
+  - refreshes proactively when `expires_at` is within the next 60
+    seconds,
+  - refreshes reactively when the provider returns 401,
+  - uses `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token`
+    with `grant_type=refresh_token` (configurable via the
+    `tenant_id` you supplied at source creation; defaults to
+    `common`).
+- **`POST /api/calendar-sources` now validates per-provider credentials.**
+  CalDAV still requires `app_password`; MS365 requires `access_token`
+  (and accepts `refresh_token` + `expires_at` + `client_id` +
+  `tenant_id` + `scope` for the refresh path). The encrypted
+  `cred_blob` shape is provider-specific — adapters parse their own
+  fields.
+- **46 unit tests + 24 smoke assertions.** `scripts/test-graph-source.js`
+  covers factory validation, calendar/event mapping, Bearer auth,
+  refresh-on-401, pre-emptive refresh, and the end-to-end `syncSource`
+  path through `lib/calendar-sources.js`. `scripts/smoke-graph-source.js`
+  boots the real `server.js` against a fake Microsoft Graph and walks
+  the full `/api/login` → `POST /api/calendar-sources` →
+  `/api/calendar-sources/:id/refresh` → `/api/events/merged` flow with
+  the same credential-leak contract checks as the CalDAV smoke.
+- **No new runtime dependencies.** Graph calls go through the same
+  hand-rolled https layer as CalDAV; the Graph ↔ CalendarSource
+  mapping is in `lib/graph-source.js` (`mapEvent` /
+  `graphDateTimeToIso`).
+- **Operational notes.** Refreshed access tokens are NOT yet
+  re-encrypted and persisted to the database; the next sync will
+  re-refresh against the stored refresh token. Re-persistence is the
+  PHA-1866 follow-up. The merge endpoint already exposes the per-
+  source `stale` flag so a temporarily-stale badge surfaces during
+  the refresh round-trip.
+
 ## v0.1.1 (2026-08-09) — PHA-1620
 
 - **Universal calendar read-through.** Homestead now reads events from

@@ -541,19 +541,45 @@ app.post('/api/calendar-sources', auth, (req, res) => {
     return res.status(503).json({ error: 'CALENDAR_CRED_KEY not configured' });
   }
   const me = userModel.getMe(db, req.session.user.username);
-  const { provider, account_id, calendar_id, base_url, display_name, color, app_password, shared } = req.body || {};
-  if (!provider || !account_id || !calendar_id || !app_password) {
-    return res.status(400).json({ error: 'provider, account_id, calendar_id, app_password required' });
+  const body = req.body || {};
+  const { provider, account_id, calendar_id, base_url, display_name, color, shared } = body;
+  if (!provider || !account_id || !calendar_id) {
+    return res.status(400).json({ error: 'provider, account_id, calendar_id required' });
   }
   if (!['caldav_nextcloud', 'caldav_icloud', 'ms365', 'google'].includes(provider)) {
     return res.status(400).json({ error: 'unsupported provider' });
+  }
+  // Per-provider credential validation. CalDAV wants an app-password;
+  // Graph wants an OAuth2 access+refresh token pair. The encrypted
+  // payload is provider-specific — we keep the JSON shape narrow so
+  // lib/graph-source.js / lib/caldav-source.js can require fields
+  // directly without defensive parsing.
+  let credPayload;
+  if (provider === 'caldav_nextcloud' || provider === 'caldav_icloud') {
+    if (!body.app_password) return res.status(400).json({ error: 'app_password required for CalDAV providers' });
+    credPayload = { app_password: body.app_password };
+  } else if (provider === 'ms365') {
+    if (!body.access_token) return res.status(400).json({ error: 'access_token required for ms365' });
+    credPayload = {
+      access_token: body.access_token,
+      refresh_token: body.refresh_token || null,
+      expires_at: body.expires_at || null,
+      client_id: body.client_id || null,
+      tenant_id: body.tenant_id || null,
+      scope: body.scope || null,
+    };
+  } else {
+    // google: deferred to PHA-1865. The provider name is allowed in
+    // the allow-list above so the UI's "add source" form can ship
+    // before that issue lands; POST is rejected here with a 501.
+    return res.status(501).json({ error: 'google provider not implemented (PHA-1865)' });
   }
   let userId = me.id;
   if (shared) {
     if (!me.is_admin) return res.status(403).json({ error: 'admin only for shared sources' });
     userId = null;
   }
-  const credBlob = secretBox.encryptString(JSON.stringify({ app_password }));
+  const credBlob = secretBox.encryptString(JSON.stringify(credPayload));
   const row = db.prepare(`INSERT INTO calendar_sources
     (user_id, provider, account_id, calendar_id, base_url, display_name, color, cred_blob, created_by)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
