@@ -1,6 +1,6 @@
 {
   "name": "homestead",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Shared life app: tasks with take-turns rotation, calendar, and a full-screen iframe app shell for self-hosted services.",
   "main": "server.js",
   "scripts": {

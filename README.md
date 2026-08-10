@@ -158,17 +158,22 @@ POST is rejected with 501 today.
   (`lib/calendar-sources.js#publicView`) is the single source of truth
   for what the client sees; the leak check is a load-bearing
   acceptance test.
-- **Phase 2 write-back** (createEvent / updateEvent / deleteEvent via
-  CalDAV PUT for CalDAV providers and the equivalent for Graph /
-  Google) is tracked under PHA-1866 — single-VEVENT scope per the
-  work order (recurrence editing deferred).
-- **Token refresh (Graph / Google)** happens server-side inside the
-  adapter: a 401 from the provider, or a token whose `expires_at` is
-  within the next 60 seconds, triggers a refresh-token grant at
-  `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token`.
-  Refresh tokens are not currently re-persisted to the database (the
-  next sync will read the original access_token and re-refresh);
-  persisting rotated tokens is the PHA-1866 follow-up.
+- **Phase 2 write-back (v0.1.10, PHA-1866).** Homestead now round-trips
+  events through CalDAV providers (Nextcloud, Apple iCloud) using
+  RFC 4791 PUT/DELETE with `If-None-Match: *` on create and
+  `If-Match: <etag>` on update/delete. Create / update / delete an
+  event on a source via:
+  - `POST   /api/calendar-sources/:id/events`
+  - `PUT    /api/calendar-sources/:id/events/:externalId`
+  - `DELETE /api/calendar-sources/:id/events/:externalId`
+
+  The body shape is the same shape `vevent` has in the adapter
+  contract: `{ title, description?, location?, start, end?, allDay? }`.
+  A successful write returns `{ externalId, href, etag }` and fires
+  a background re-sync so the next `GET /api/events/merged` picks up
+  the change. Provider errors surface as 502 with the upstream status
+  code. Recurrence editing is still deferred to a follow-up (PHA-1620
+  step 4: single-VEVENT only).
 
 ## Push notifications
 
