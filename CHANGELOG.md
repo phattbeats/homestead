@@ -1,5 +1,82 @@
 # Changelog
 
+## v0.1.9 (2026-08-10) — PHA-1620 + PHA-1864
+
+- **Universal calendar read-through (PHA-1620).** Homestead now reads
+  events from configured external calendars instead of forcing
+  double-entry. The provider-agnostic `CalendarSource` interface is
+  shipped with its first concrete adapter (`CalDAVSource` — covers both
+  Nextcloud and Apple iCloud via a single implementation parameterized
+  on `base_url`). Surface area:
+  - `GET /api/calendar-sources` (auth): list sources visible to the
+    caller (their own + admin-managed household-shared sources). Never
+    returns `cred_blob`.
+  - `POST /api/calendar-sources` (auth): create a source. Encrypted at
+    rest (AES-256-GCM, key from `CALENDAR_CRED_KEY`); admin only for
+    `shared: true` sources.
+  - `DELETE /api/calendar-sources/:id` (auth): owner or admin.
+  - `POST /api/calendar-sources/:id/refresh` (auth): kicks a sync.
+    Errors are captured on `last_error` / `last_error_at` so a per-
+    provider stale badge can render in the month grid.
+  - `GET /api/events/merged?from=YYYY-MM-DD&to=YYYY-MM-DD` (auth):
+    unified list of native + cached provider events, each tagged with
+    `origin` (`native` or `provider:<provider>`), `color` (per-source),
+    `stale` (true when `last_synced_at` is older than the 5-min
+    freshness window).
+- **Schema additions.** New tables `calendar_sources` and
+  `calendar_event_cache`. The migration is idempotent and additive
+  against v0.0.x / v0.1.0 deployments; no destructive changes.
+- **At-rest credential encryption.** `lib/secret-box.js` provides
+  AES-256-GCM encrypt/decrypt keyed on `CALENDAR_CRED_KEY` (32 bytes
+  hex, fail-closed — missing or wrong-length key throws on every
+  call). The `/api/health` probe reports `calendarCredKeyReady` so
+  operators see it in monitoring; until the key is set,
+  `/api/health.ok` is `false` and `POST /api/calendar-sources` returns
+  503.
+- **No provider credentials ever reach the browser.** Enforced at the
+  DTO layer (`publicView` in `lib/calendar-sources.js` is the single
+  source of truth for what ships to the client; the leak check is a
+  load-bearing acceptance test in `scripts/test-calendar-sources.js`).
+- **Hand-rolled CalDAV / iCal parser.** No new npm dependencies — the
+  WebDAV/CalDAV XML walker and the iCalendar (RFC 529) parser live in
+  `lib/caldav-source.js`. The HTTP layer is injectable so tests stub
+  the network. Single-VEVENT scope per the work order (recurrence
+  editing deferred).
+- **Microsoft 365 (`GraphSource`) adapter (PHA-1864 / PHA-1620a).**
+  The same `CalendarSource` interface that backed `CalDAVSource` now
+  also backs `GraphSource` for Microsoft 365. No merge-layer,
+  API-surface, or DTO changes — the second adapter registers behind
+  `registerAdapter('graph', …)` and is reachable through the existing
+  `POST /api/calendar-sources` endpoint with `provider: "ms365"`.
+  Google's `GoogleSource` (PHA-1865) remains the next child issue; the
+  provider name is reserved in the API allow-list but POST returns 501
+  today.
+- **OAuth2 credentials for MS365.** `cred_blob` for `ms365` sources
+  carries `{ access_token, refresh_token, expires_at, client_id,
+  tenant_id?, scope? }`. The adapter sends `Authorization: Bearer
+  <access_token>` on every request, refreshes proactively when
+  `expires_at` is within the next 60 seconds, refreshes reactively when
+  the provider returns 401, and uses
+  `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token` with
+  `grant_type=refresh_token`.
+- **Per-provider credential validation.** CalDAV still requires
+  `app_password`; MS365 requires `access_token` (and accepts
+  `refresh_token` + `expires_at` + `client_id` + `tenant_id` + `scope`
+  for the refresh path). The encrypted `cred_blob` shape is
+  provider-specific — adapters parse their own fields.
+- **Tests.** 90 unit tests in `scripts/test-calendar-sources.js` and
+  46 unit tests in `scripts/test-graph-source.js` cover factory
+  validation, calendar/event mapping, Bearer auth, refresh-on-401,
+  pre-emptive refresh, and the end-to-end `syncSource` path through
+  `lib/calendar-sources.js`. Smoke scripts `scripts/smoke-calendar-
+  sources.js` and `scripts/smoke-graph-source.js` boot the real
+  `server.js` against fake providers and walk the full `/api/login`
+  → `POST /api/calendar-sources` → `/api/calendar-sources/:id/refresh`
+  → `/api/events/merged` flow with the same credential-leak contract
+  checks as the CalDAV smoke.
+- **Frontend merge layer** is out of scope for this slice — see
+  PHA-1867. The server-side merge endpoint is ready to consume.
+
 ## v0.1.8 (2026-08-10) — PHA-1617.1/.2
 
 - **Per-user agent PATs for the BYO-harness meta-agent socket.**
