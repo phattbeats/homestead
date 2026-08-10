@@ -16,6 +16,18 @@ dependencies.
   off a recurring task rolls it forward instead of marking it done.
 - **Calendar** — month grid with per-person colour pips. Tap a day to see
   or add events.
+- **Entity graph (v0.1.6)** — Phase B-2 Kavita sync worker
+  (PHA-1624 Phase B-2, PHA-1874) walks your Kavita library every 6h
+  and reconciles manga + book series into Homestead's entity graph.
+  Kavita authors become `person` entities (lowercased-name dedup per
+  design doc §14); Kavita genres + tags become `concept` entities
+  (slug-keyed dedup). Cross-library sibling works (same title +
+  year, different editions or languages) emit `available_as` edges.
+  Edges: `authored_by`, `tagged_with`, `available_as`. Manual
+  trigger: `POST /api/admin/sync/kavita` (admin-only); status:
+  `GET /api/admin/sync/kavita/status`. Set `KAVITA_API_KEY` (and
+  optionally `KAVITA_URL`) in the container env to enable. Skipped
+  silently when unset so installs without Kavita keep working.
 - **Entity graph (v0.1.5)** — Plex sync worker (PHA-1624 Phase B-1)
   walks your Plex library every 6h and reconciles movies / shows /
   seasons / episodes into Homestead's entity graph (`works`, `people`,

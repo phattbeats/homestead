@@ -1,5 +1,51 @@
 # Changelog
 
+## v0.1.6 (2026-08-09) — PHA-1874 (PHA-1624 Phase B-2)
+
+- **Kavita sync worker.** New `lib/sync/kavita.js`
+  (`syncKavita({db, baseUrl, apiKey})`) walks a Kavita library
+  (Manga + Books only; Image + Video are out of scope for v1) and
+  reconciles series + authors + tags into Homestead's entity graph
+  (PHA-1624 design doc §5.1). Reuses the shared
+  `lib/sync/_schema.js` so it boots even before Phase A's standalone
+  migration lands. Acceptance: **75 tests** in
+  `scripts/test-sync-kavita.js` covering manga + book walks,
+  authored_by edge emission (writers / authors / legacy flat fields),
+  tagged_with for genres + tags, person dedup by lowercased name,
+  concept dedup by slug, library-type filtering (image + video
+  excluded), per-library pagination across `PageNum`/`PageSize`,
+  idempotent re-runs, stale-marking of edges whose upstream record
+  disappeared, cross-library sibling detection via
+  `(title_lower, year)`, FTS5 index population, and graceful
+  per-library error handling.
+- **Author → person merge.** Per design doc §14 question #2
+  (defaulted YES by Brandon's approval), `person` entities merge
+  deterministically on lowercased full-name match within `kind=person`.
+  v1 collision risk accepted (Tyler is unique; two people named
+  "Brandon Smith" would collide — Phase C will add fuzzy matching).
+- **Authored_by edges.** `work → person` edges from Kavita writers
+  (design doc §5.1). Writers read from `metadata.writers`
+  (canonical), `metadata.authors` (alternate install), and a legacy
+  flat `writers` field, deduped case-insensitively within a single
+  series entry.
+- **Cross-library siblings.** `available_as` edges emitted in a
+  post-pass for work pairs across libraries with matching
+  `(title_lower, year)` (different editions / languages). Order-
+  independent: same edge set regardless of which library the worker
+  hit first.
+- **Admin endpoints + cron schedule.** `POST /api/admin/sync/kavita`
+  (admin-only async trigger), `GET /api/admin/sync/kavita/status`
+  (admin-only last-run summary). Boot scheduler ticks every 6h,
+  independent from the Plex worker (same cadence, separate guard).
+  Skipped silently when `KAVITA_API_KEY` is unset so installs without
+  Kavita keep working.
+- **PR scope.** One branch (`pha-1624-entity-graph-phase-b2-kavita`)
+  off `phattbeats/homestead@pha-1624-entity-graph-phase-b1-plex`,
+  one PR, title `PHA-1624 Phase B-2: Kavita sync worker`, body
+  references design doc §5.1. **Merge is blocked on Phase A
+  (PHA-1872) landing first** — same defensive self-install pattern as
+  Phase B-1; the worker boots before Phase A's migration lands.
+
 ## v0.1.5 (2026-08-09) — PHA-1873 (PHA-1624 Phase B-1)
 
 - **Plex sync worker.** New `lib/sync/plex.js` (`syncPlex({db, baseUrl, token})`)
