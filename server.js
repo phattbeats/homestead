@@ -33,6 +33,7 @@ const webpush = require('web-push');
 const userModel = require('./lib/user-model');
 const plexSync = require('./lib/sync/plex');
 const kavitaSync = require('./lib/sync/kavita');
+const agentTokens = require('./lib/agent-tokens');
 
 const healthChecker = require('./lib/health-checker');
 const entityGraph = require('./lib/sync/_schema');
@@ -47,6 +48,9 @@ userModel.migrate(db);
 // defensive self-installs (same underlying schema) are dropped now that
 // Phase A owns this.
 entityGraph.migrate(db);
+// PHA-1617.1: PAT tokens table. Migrated after userModel so the FK
+// to users(id) resolves. Same boot-migration pattern as the others.
+agentTokens.migrate(db);
 
 // v0.1.0: web push subscriptions (PHA-1619)
 db.exec(`
@@ -98,14 +102,35 @@ app.use(session({
 }));
 
 // ---- auth middleware ----
-// Three-layer auth:
-//   1. Header-trust (PHA-1574) — when SWAG forwards X-authentik-username
+// Four-layer auth:
+//   1. Bearer PAT (PHA-1617.2) — `Authorization: Bearer homestead_pat_...`
+//      is verified against agent_tokens and, on success, synthesizes a
+//      req.session.user for the token's owner (not persisted to the
+//      session store — checked fresh on every request).
+//   2. Header-trust (PHA-1574) — when SWAG forwards X-authentik-username
 //      AND X-authentik-groups, provisionOrClaim establishes / refreshes
 //      the session row and treats the request as authenticated.
-//   2. Session-cookie — established by /api/login (LAN fallback) or by
+//   3. Session-cookie — established by /api/login (LAN fallback) or by
 //      the header-trust layer above; survives across requests.
-//   3. Unauthenticated → 401.
+//   4. Unauthenticated → 401.
 function authenticate(req, res, next) {
+  const authHeader = req.get('authorization') || '';
+  const bearerMatch = authHeader.match(/^Bearer\s+(\S+)$/i);
+  if (bearerMatch && bearerMatch[1].startsWith(agentTokens.TOKEN_PREFIX_LABEL)) {
+    const tokenRow = agentTokens.verify(db, bearerMatch[1]);
+    if (!tokenRow) return res.status(401).json({ error: 'invalid_token' });
+    const u = db.prepare('SELECT * FROM users WHERE id = ?').get(tokenRow.user_id);
+    if (!u) return res.status(401).json({ error: 'invalid_token' });
+    req.session.user = {
+      username: u.username,
+      display: u.display,
+      color: u.color,
+      isAdmin: !!u.is_admin,
+      authProvider: 'pat',
+      authProviderDetail: { tokenId: tokenRow.id, scopes: tokenRow.scopes },
+    };
+    return next();
+  }
   const headerUser = req.get('x-authentik-username');
   if (headerUser) {
     const groupsHeader = req.get('x-authentik-groups') || '';
@@ -386,6 +411,70 @@ app.post('/api/users/:username/password', auth, (req, res) => {
     return res.status(403).json({ error: 'admin only' });
   }
   db.prepare('UPDATE users SET pass_hash = ? WHERE username = ?').run(bcrypt.hashSync(next, 10), target.username);
+  res.json({ ok: true });
+});
+
+// ---- agent tokens (PHA-1617.1) ----
+// Personal access tokens for BYO-harness meta-agents. A token stands in
+// for its owning user: authenticate() (above) treats a valid Bearer PAT
+// exactly like a session login for that user. Plaintext is shown to the
+// caller exactly once, at issuance.
+function requireAdmin(req, res, next) {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me || !me.is_admin) return res.status(403).json({ error: 'admin only' });
+  next();
+}
+// GET /api/agent-tokens — own tokens, or (admin + ?user=) another user's.
+app.get('/api/agent-tokens', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  if (req.query.user) {
+    if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+    const target = db.prepare('SELECT id FROM users WHERE username = ?').get(userModel.validateUsername(req.query.user) || '');
+    if (!target) return res.status(404).json({ error: 'not found' });
+    return res.json(agentTokens.list(db, target.id));
+  }
+  res.json(agentTokens.list(db, me.id));
+});
+app.post('/api/agent-tokens', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { label, expires_at = null } = req.body || {};
+  if (!label || !label.trim()) return res.status(400).json({ error: 'label required' });
+  try {
+    const issued = agentTokens.issue(db, me.id, { label, expiresAt: expires_at });
+    res.json(issued);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+app.delete('/api/agent-tokens/:id', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const revoked = agentTokens.revoke(db, req.params.id, { ownerUserId: me.id });
+  if (!revoked) return res.status(404).json({ error: 'not found' });
+  res.json({ ok: true });
+});
+// Admin-provisioned tokens under another user's account.
+app.post('/api/users/:username/agent-tokens', auth, requireAdmin, (req, res) => {
+  const clean = userModel.validateUsername(req.params.username);
+  const target = db.prepare('SELECT id FROM users WHERE username = ?').get(clean || '');
+  if (!target) return res.status(404).json({ error: 'not found' });
+  const { label, expires_at = null } = req.body || {};
+  if (!label || !label.trim()) return res.status(400).json({ error: 'label required' });
+  try {
+    const issued = agentTokens.issue(db, target.id, { label, expiresAt: expires_at });
+    res.json(issued);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+app.delete('/api/users/:username/agent-tokens/:id', auth, requireAdmin, (req, res) => {
+  const clean = userModel.validateUsername(req.params.username);
+  const target = db.prepare('SELECT id FROM users WHERE username = ?').get(clean || '');
+  if (!target) return res.status(404).json({ error: 'not found' });
+  const revoked = agentTokens.revoke(db, req.params.id, { ownerUserId: target.id });
+  if (!revoked) return res.status(404).json({ error: 'not found' });
   res.json({ ok: true });
 });
 
