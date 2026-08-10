@@ -31,6 +31,7 @@ const fs = require('fs');
 const webpush = require('web-push');
 
 const userModel = require('./lib/user-model');
+const plexSync = require('./lib/sync/plex');
 
 const healthChecker = require('./lib/health-checker');
 const entityGraph = require('./lib/sync/_schema');
@@ -41,6 +42,9 @@ const db = new Database(path.join(DATA_DIR, 'life.db'));
 userModel.migrate(db);
 // PHA-1872 (design doc PHA-1624 §3): entity graph schema, wired right
 // after userModel.migrate() to match the existing boot-migration pattern.
+// Phase A's canonical migrate() call — Phase B-1's defensive
+// plexSync.migrate(db) (same underlying schema) is dropped now that
+// Phase A owns this.
 entityGraph.migrate(db);
 
 // v0.1.0: web push subscriptions (PHA-1619)
@@ -546,6 +550,71 @@ app.delete('/api/services/:id', auth, (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- Entity-graph sync admin endpoints (PHA-1624 Phase B-1, PHA-1873) ----
+//
+// POST /api/admin/sync/plex           admin-only manual trigger
+// GET  /api/admin/sync/plex/status    admin-only last-run summary
+//
+// The worker is also cron-driven every 6h from the boot scheduler.
+// Manual triggers run async so the HTTP request returns immediately;
+// poll /api/admin/sync/plex/status to see the result.
+
+// Single-process serialization: a sync is in-flight if this flag is set.
+// (We don't try to be cute with promise chains — Plex syncs are slow
+// enough that a debounce is more useful than a queue.)
+let plexSyncRunning = false;
+let plexSyncLastResult = null;
+let plexSyncLastRunAt = null;
+
+async function runPlexSync() {
+  if (plexSyncRunning) return { ok: false, reason: 'already_running' };
+  if (!process.env.PLEX_TOKEN) {
+    const r = { ok: false, reason: 'PLEX_TOKEN not set', errors: [] };
+    plexSyncLastResult = r;
+    plexSyncLastRunAt = new Date().toISOString();
+    return r;
+  }
+  plexSyncRunning = true;
+  try {
+    const result = await plexSync.syncPlex({
+      db,
+      baseUrl: process.env.PLEX_URL || 'https://plex.phatt.vip',
+      token: process.env.PLEX_TOKEN,
+    });
+    plexSyncLastResult = result;
+    plexSyncLastRunAt = new Date().toISOString();
+    return { ok: true, ...result };
+  } catch (e) {
+    const err = { ok: false, error: String(e && e.message || e) };
+    plexSyncLastResult = err;
+    plexSyncLastRunAt = new Date().toISOString();
+    return err;
+  } finally {
+    plexSyncRunning = false;
+  }
+}
+
+app.post('/api/admin/sync/plex', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+  if (plexSyncRunning) return res.status(409).json({ ok: false, reason: 'already_running' });
+  // Fire-and-forget; caller polls /status.
+  runPlexSync();
+  res.json({ ok: true, status: 'syncing' });
+});
+
+app.get('/api/admin/sync/plex/status', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+  res.json({
+    running: plexSyncRunning,
+    lastRunAt: plexSyncLastRunAt,
+    lastResult: plexSyncLastResult,
+  });
+});
+
+
+
 // ---- push notifications (PHA-1619) ----
 // Public VAPID public key — fetched by the service worker at startup so
 // it can build a PushSubscription. No auth required: the public key is
@@ -940,16 +1009,42 @@ if (require.main === module) {
       });
     }
   }
+  // Plex entity-graph sync (PHA-1873): every 6h. Skipped silently when
+  // PLEX_TOKEN is unset (the household might not have Plex yet). The
+  // tick is independent of the chore-digest tick; we use the same
+  // setInterval handle but guard with an "if it's been 6h" check so we
+  // don't run two unrelated intervals.
+  const PLEX_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;     // 6h
+  let plexSyncLastTickAt = 0;
+  async function runPlexSyncTick() {
+    if (!process.env.PLEX_TOKEN) return;       // optional dependency
+    if (plexSyncRunning) return;                // manual trigger in flight
+    const now = Date.now();
+    if (plexSyncLastTickAt && (now - plexSyncLastTickAt) < PLEX_SYNC_INTERVAL_MS) return;
+    plexSyncLastTickAt = now;
+    try {
+      const r = await runPlexSync();
+      if (r && r.ok) {
+        console.log(`[scheduler] plex sync: +${r.added}/~${r.updated} entities, ${r.edges} edges, ${r.stale} stale, ${r.libraries} libs, ${r.items} items (${r.durationMs}ms)`);
+      } else {
+        console.log(`[scheduler] plex sync skipped: ${r && (r.reason || r.error) || 'unknown'}`);
+      }
+    } catch (e) {
+      console.error('[scheduler] plex sync:', e.message);
+    }
+  }
+
   let schedulerHandle = null;
   function startScheduler() {
     if (schedulerHandle) return;
     const tick = async () => {
       try { await runChoreDigest(); } catch (e) { console.error('[scheduler] chore digest:', e.message); }
       try { await runTakeTurnsDigest(); } catch (e) { console.error('[scheduler] take-turns digest:', e.message); }
+      try { await runPlexSyncTick(); } catch (e) { console.error('[scheduler] plex sync tick:', e.message); }
     };
     setTimeout(tick, 10 * 1000);
     schedulerHandle = setInterval(tick, SCHED_TICK_MS);
-    console.log('[scheduler] daily digest started; tick=30min');
+    console.log('[scheduler] daily digest started; tick=30min; plex entity-sync every 6h');
   }
   startScheduler();
   startHealthChecker();
