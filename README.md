@@ -16,6 +16,24 @@ dependencies.
   off a recurring task rolls it forward instead of marking it done.
 - **Calendar** — month grid with per-person colour pips. Tap a day to see
   or add events.
+- **Entity graph (v0.1.7)** — Phase B-3 seerr sync worker
+  (PHA-1624 Phase B-3, PHA-1875) walks your seerr (Jellyseerr /
+  Overseerr) request list every 6h and reconciles media requests
+  into Homestead's entity graph. Each request becomes a
+  `requested_in` edge from the requesting `person` to the
+  `work` (keyed on `tmdb:<id>` from the request). People are
+  matched against the media-club roster (PHA-1618 `users` table)
+  and stamped with `media_club_*` meta; unmatched users become
+  `person` stubs and queue for triage via the review queue.
+  When a request transitions to `status=available`, the worker
+  emits a soft `availability_hint` edge (`weight=0.5`) — the
+  canonical `available_as` ownership stays with Plex B-1 /
+  Kavita B-2. Edges: `requested_in`, `availability_hint`. Manual
+  trigger: `POST /api/admin/sync/seerr` (admin-only); status:
+  `GET /api/admin/sync/seerr/status`. Set `SEERR_API_KEY` (and
+  optionally `SEERR_URL`) in the container env to enable.
+  Skipped silently when unset so installs without seerr keep
+  working.
 - **Entity graph (v0.1.6)** — Phase B-2 Kavita sync worker
   (PHA-1624 Phase B-2, PHA-1874) walks your Kavita library every 6h
   and reconciles manga + book series into Homestead's entity graph.

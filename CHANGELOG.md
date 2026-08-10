@@ -1,5 +1,78 @@
 # Changelog
 
+## v0.1.7 (2026-08-09) — PHA-1875 (PHA-1624 Phase B-3)
+
+- **seerr sync worker.** New `lib/sync/seerr.js`
+  (`syncSeerr({db, baseUrl, apiKey})`) walks the seerr
+  (Jellyseerr / Overseerr) request list and reconciles
+  `requested_in` edges in Homestead's entity graph (PHA-1624 design
+  doc §5.1). Reuses the shared `lib/sync/_schema.js` so it boots
+  even before Phase A's standalone migration lands. Acceptance:
+  **92 tests** in `scripts/test-sync-seerr.js` covering roster match
+  via PHA-1618 `users` table (case-insensitive `COLLATE NOCASE`),
+  unknown-user stub + review-queue entry, work entity keyed on
+  `tmdb:<id>` (with `tvdb:` fallback), canonical `requested_in`
+  edge emission with `meta={status, requested_at,
+  requested_by_username, seerr_request_id, media_type}`,
+  `availability_hint` edge when `status === 'available'` (separate
+  edge type, `weight=0.5`, soft pointer to "seerr just reported
+  this became available" — canonical `available_as` ownership stays
+  with Plex B-1 / Kavita B-2), idempotent re-runs, stale-marking
+  of edges whose upstream request disappeared (covers both
+  `requested_in` and `availability_hint`), pagination across
+  Jellyseerr's `pageInfo.pages` / short-page signals, missing
+  `SEERR_API_KEY` graceful-fail, HTTP error surfacing, FTS5 trigger
+  population (verified by the `_schema.js` insert-trigger firing
+  on every `entities` row), and full-DB schema migration
+  idempotency.
+- **Media-club roster match.** `requested_in` edge's `from_id`
+  resolves to the `person` entity keyed on `requestedBy.username`.
+  Match against the PHA-1618 `users` table (`COLLATE NOCASE` on
+  `username`) — if found, stamp `meta.media_club_user_id` +
+  `meta.media_club_username` + `meta.media_club_display` +
+  `meta.media_club_is_admin` so downstream code can tell the
+  person is roster-confirmed. The confirmed person is keyed on
+  `source_id='user:<username>'` (separate from the plex/kavita
+  workers' lowercased-name person keys — keeps a clear audit
+  trail of who the canonical "Brandon" / "Tyler" person is for
+  seerr).
+- **Unknown-user stub + review queue.** When the seerr user has
+  no match in the `users` table, the worker creates a stub
+  `person` entity keyed on `source_id='unknown:<username>'` with
+  `created_by='sync:seerr'` and `meta.unknown_user=true`, then
+  inserts a row into `entity_review_queue` with
+  `kind='unknown_person'`, `confidence=0.0`,
+  `status='pending'`, and `evidence_json` carrying the original
+  seerr request id. The review queue row is idempotent: re-runs
+  don't pile up duplicates for the same stub.
+- **Availability hint edge.** When a request transitions to
+  `status=available`, the worker emits a second edge with
+  `type='availability_hint'`, `weight=0.5`, `source_id='<id>:hint'`,
+  `meta.hint_kind='available'`, and `meta.reason` pointing at the
+  plex/kavita workers' canonical-availability ownership. The
+  entity-page renderer can flag weight=0.5 edges as non-authoritative.
+- **Pre-PHA-1618 fallback.** When the `users` table is missing
+  (older Homestead installs), every seerr user is treated as
+  unknown + queued for review — the worker never 500s on the
+  roster lookup. Tightening (only users in the `media-club` group
+  are roster-confirmed) is a follow-up; requires a join through
+  `user_groups`.
+- **Admin endpoints + cron schedule.** `POST /api/admin/sync/seerr`
+  (admin-only async trigger), `GET /api/admin/sync/seerr/status`
+  (admin-only last-run summary). Boot scheduler ticks every 6h,
+  independent from the Plex + Kavita workers (same cadence,
+  separate guard, separate tick variable so the three sync workers
+  drift apart across the day instead of firing in lockstep).
+  Skipped silently when `SEERR_API_KEY` is unset so installs
+  without seerr keep working.
+- **PR scope.** One branch (`pha-1875-seerr-sync`) off
+  `phattbeats/homestead@pha-1624-entity-graph-phase-b2-kavita`,
+  one PR, title `PHA-1624 Phase B-3: seerr sync worker`, body
+  references design doc §5.1. **Merge is blocked on Phase A
+  (PHA-1872) landing first** — same defensive self-install pattern
+  as Phase B-1 and B-2; the worker boots before Phase A's
+  migration lands.
+
 ## v0.1.6 (2026-08-09) — PHA-1874 (PHA-1624 Phase B-2)
 
 - **Kavita sync worker.** New `lib/sync/kavita.js`

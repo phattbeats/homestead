@@ -35,6 +35,7 @@ const calendarSources = require('./lib/calendar-sources');
 const secretBox = require('./lib/secret-box');
 const plexSync = require('./lib/sync/plex');
 const kavitaSync = require('./lib/sync/kavita');
+const seerrSync = require('./lib/sync/seerr');
 
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -766,6 +767,71 @@ app.get('/api/admin/sync/kavita/status', auth, (req, res) => {
   });
 });
 
+// ---- Entity-graph sync admin endpoints (PHA-1624 Phase B-3, PHA-1875) ----
+//
+// POST /api/admin/sync/seerr          admin-only manual trigger
+// GET  /api/admin/sync/seerr/status   admin-only last-run summary
+//
+// The worker is also cron-driven every 6h from the boot scheduler.
+// Manual triggers run async so the HTTP request returns immediately;
+// poll /api/admin/sync/seerr/status to see the result.
+//
+// Single-process serialization matches the Plex and Kavita workers: a
+// sync is in-flight if `seerrSyncRunning` is set. One running sync at
+// a time per service. The worker is graceful when SEERR_API_KEY is
+// unset (returns `{ ok: false, reason: 'SEERR_API_KEY not set' }`).
+
+let seerrSyncRunning = false;
+let seerrSyncLastResult = null;
+let seerrSyncLastRunAt = null;
+
+async function runSeerrSync() {
+  if (seerrSyncRunning) return { ok: false, reason: 'already_running' };
+  if (!process.env.SEERR_API_KEY) {
+    const r = { ok: false, reason: 'SEERR_API_KEY not set', errors: [] };
+    seerrSyncLastResult = r;
+    seerrSyncLastRunAt = new Date().toISOString();
+    return r;
+  }
+  seerrSyncRunning = true;
+  try {
+    const result = await seerrSync.syncSeerr({
+      db,
+      baseUrl: process.env.SEERR_URL || 'https://seerr.phatt.vip',
+      apiKey: process.env.SEERR_API_KEY,
+    });
+    seerrSyncLastResult = result;
+    seerrSyncLastRunAt = new Date().toISOString();
+    return { ok: true, ...result };
+  } catch (e) {
+    const err = { ok: false, error: String(e && e.message || e) };
+    seerrSyncLastResult = err;
+    seerrSyncLastRunAt = new Date().toISOString();
+    return err;
+  } finally {
+    seerrSyncRunning = false;
+  }
+}
+
+app.post('/api/admin/sync/seerr', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+  if (seerrSyncRunning) return res.status(409).json({ ok: false, reason: 'already_running' });
+  // Fire-and-forget; caller polls /status.
+  runSeerrSync();
+  res.json({ ok: true, status: 'syncing' });
+});
+
+app.get('/api/admin/sync/seerr/status', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+  res.json({
+    running: seerrSyncRunning,
+    lastRunAt: seerrSyncLastRunAt,
+    lastResult: seerrSyncLastResult,
+  });
+});
+
 // GET /api/events/merged?from=YYYY-MM-DD&to=YYYY-MM-DD
 // Returns a unified list of native Homestead events + cached
 // provider events, tagged with `origin: 'native' | 'provider:<id>'`
@@ -1017,6 +1083,33 @@ if (require.main === module) {
     }
   }
 
+  // seerr entity-graph sync (PHA-1875): every 6h. Skipped silently
+  // when SEERR_API_KEY is unset. Same 6h cadence + same in-flight
+  // guard pattern as the Plex + Kavita workers. Stagger is implicit:
+  // the scheduler tick runs every 30min and we only fire when the
+  // 6h interval has elapsed since the last tick, so on a cold boot
+  // the three sync workers fire near-simultaneously and then drift
+  // apart across the day.
+  const SEERR_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;     // 6h
+  let seerrSyncLastTickAt = 0;
+  async function runSeerrSyncTick() {
+    if (!process.env.SEERR_API_KEY) return;   // optional dependency
+    if (seerrSyncRunning) return;             // manual trigger in flight
+    const now = Date.now();
+    if (seerrSyncLastTickAt && (now - seerrSyncLastTickAt) < SEERR_SYNC_INTERVAL_MS) return;
+    seerrSyncLastTickAt = now;
+    try {
+      const r = await runSeerrSync();
+      if (r && r.ok) {
+        console.log(`[scheduler] seerr sync: +${r.added}/~${r.updated} entities, ${r.edges} edges, ${r.hintEdges} hint, ${r.stale} stale, ${r.reviewQueue} review, ${r.requests} reqs (${r.durationMs}ms)`);
+      } else {
+        console.log(`[scheduler] seerr sync skipped: ${r && (r.reason || r.error) || 'unknown'}`);
+      }
+    } catch (e) {
+      console.error('[scheduler] seerr sync:', e.message);
+    }
+  }
+
   let schedulerHandle = null;
   function startScheduler() {
     if (schedulerHandle) return;
@@ -1025,10 +1118,11 @@ if (require.main === module) {
       try { await runTakeTurnsDigest(); } catch (e) { console.error('[scheduler] take-turns digest:', e.message); }
       try { await runPlexSyncTick(); } catch (e) { console.error('[scheduler] plex sync tick:', e.message); }
       try { await runKavitaSyncTick(); } catch (e) { console.error('[scheduler] kavita sync tick:', e.message); }
+      try { await runSeerrSyncTick(); } catch (e) { console.error('[scheduler] seerr sync tick:', e.message); }
     };
     setTimeout(tick, 10 * 1000);
     schedulerHandle = setInterval(tick, SCHED_TICK_MS);
-    console.log('[scheduler] daily digest started; tick=30min; plex+kavita entity-sync every 6h');
+    console.log('[scheduler] daily digest started; tick=30min; plex+kavita+seerr entity-sync every 6h');
   }
   startScheduler();
   app.listen(PORT, () => console.log(`Homestead on :${PORT}`));
