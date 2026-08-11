@@ -37,6 +37,7 @@ const agentTokens = require('./lib/agent-tokens');
 
 const healthChecker = require('./lib/health-checker');
 const entityGraph = require('./lib/sync/_schema');
+const dedupMatcher = require('./lib/dedup/matcher');
 const calendarSources = require('./lib/calendar-sources');
 const secretBox = require('./lib/secret-box');
 
@@ -778,6 +779,16 @@ app.get('/api/admin/sync/kavita/status', auth, (req, res) => {
   });
 });
 
+// PHA-1876: manual trigger for the sibling_detector cron. Same
+// shape as /api/admin/sync/plex — admin-only, synchronous (the
+// detector is pure DB and returns in <1s on a typical library).
+app.post('/api/admin/sync/sibling-detector', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+  const r = dedupMatcher.siblingDetector(db);
+  res.json({ ok: true, ...r });
+});
+
 
 // ---- calendar sources (PHA-1620) ----
 // All routes never return cred_blob. The DTO is built by
@@ -1360,6 +1371,30 @@ app.get('/api/review-queue', auth, (req, res) => {
   res.json({ items });
 });
 
+// ---- Phase C — dedup + review-queue UI (PHA-1876 / PHA-1624 §11) ----
+// Merge is the ONLY path that collapses two entities into one. The
+// matcher itself never merges (it emits edges, aliases, and review
+// rows); this endpoint resolves a queued review by either merging B
+// into A or rejecting the pair. Admin-only — merging is destructive.
+app.post('/api/review-queue/:id/merge', auth, requireAdmin, (req, res) => {
+  const reviewId = req.params.id;
+  const intoEntityId = req.body && req.body.into;
+  if (!intoEntityId) return res.status(400).json({ error: 'into required' });
+  const decidedBy = (req.session && req.session.user && req.session.user.username) || 'manual';
+  const r = dedupMatcher.mergeEntities(db, { reviewId, intoEntityId, decidedBy });
+  if (!r.ok) return res.status(400).json(r);
+  res.json(r);
+});
+
+app.post('/api/review-queue/:id/reject', auth, requireAdmin, (req, res) => {
+  const reviewId = req.params.id;
+  const reason = req.body && req.body.reason;
+  const decidedBy = (req.session && req.session.user && req.session.user.username) || 'manual';
+  const r = dedupMatcher.rejectReviewItem(db, { reviewId, reason, decidedBy });
+  if (!r.ok) return res.status(400).json(r);
+  res.json(r);
+});
+
 // 404 JSON for unknown /api/* paths.
 app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 
@@ -1518,10 +1553,29 @@ if (require.main === module) {
       try { await runTakeTurnsDigest(); } catch (e) { console.error('[scheduler] take-turns digest:', e.message); }
       try { await runPlexSyncTick(); } catch (e) { console.error('[scheduler] plex sync tick:', e.message); }
       try { await runKavitaSyncTick(); } catch (e) { console.error('[scheduler] kavita sync tick:', e.message); }
+      // sibling_detector (PHA-1876): every 6h, scan for same-title
+      // + same-author work entities that aren't linked via
+      // adaptation_of and queue a review item. Cheap — pure DB.
+      try { runSiblingDetectorTick(); } catch (e) { console.error('[scheduler] sibling detector tick:', e.message); }
     };
     setTimeout(tick, 10 * 1000);
     schedulerHandle = setInterval(tick, SCHED_TICK_MS);
-    console.log('[scheduler] daily digest started; tick=30min; plex+kavita entity-sync every 6h');
+    console.log('[scheduler] daily digest started; tick=30min; plex+kavita entity-sync + sibling_detector every 6h');
+  }
+
+  // sibling_detector (PHA-1876) — see lib/dedup/matcher.js. Runs
+  // inside the same 6h gate as the plex/kavita sync ticks. Pure DB,
+  // no I/O, returns synchronously.
+  const SIBLING_DETECT_INTERVAL_MS = 6 * 60 * 60 * 1000;
+  let siblingDetectorLastTickAt = 0;
+  function runSiblingDetectorTick() {
+    const now = Date.now();
+    if (siblingDetectorLastTickAt && (now - siblingDetectorLastTickAt) < SIBLING_DETECT_INTERVAL_MS) return;
+    siblingDetectorLastTickAt = now;
+    const r = dedupMatcher.siblingDetector(db);
+    if (r.queued > 0) {
+      console.log(`[scheduler] sibling_detector: +${r.queued} queued (${r.scanned} scanned)`);
+    }
   }
   startScheduler();
   startHealthChecker();
