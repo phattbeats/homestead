@@ -32,6 +32,21 @@ dependencies.
   `GET /api/admin/sync/kavita/status`. Set `KAVITA_API_KEY` (and
   optionally `KAVITA_URL`) in the container env to enable. Skipped
   silently when unset so installs without Kavita keep working.
+- **Entity dedup + review queue (v0.1.11)** — Phase C (PHA-1624 /
+  PHA-1876) decision layer. `lib/dedup/matcher.js` runs a 3-tier
+  identity check on every new `work` candidate: (1) deterministic
+  ID match across `isbn / tmdb_id / audible_id / plex_guid /
+  kavita_id`, (2) shared TMDB collection + same year, (3) fuzzy
+  title + author (`0.6 * title_sim + 0.3 * author_sim +
+  0.1 * year_proximity`). Tier 1/2 emit `adaptation_of` edges
+  between siblings (never merge); Tier 3 ≥ 0.9 auto-aliases;
+  Tier 3 0.7..0.9 emits a row in `entity_review_queue` for human
+  review. The entity page shows a "⚠️ Needs review" badge +
+  Merge/Don't merge buttons when there are pending items; the
+  manual merge endpoint (`POST /api/review-queue/:id/merge`) is
+  the **only** path that collapses two entities. A 6h cron
+  (`POST /api/admin/sync/sibling-detector`) catches same-title +
+  same-author works that aren't linked via `adaptation_of`.
 - **Entity graph (v0.1.5)** — Plex sync worker (PHA-1624 Phase B-1)
   walks your Plex library every 6h and reconciles movies / shows /
   seasons / episodes into Homestead's entity graph (`works`, `people`,
