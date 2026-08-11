@@ -18,7 +18,9 @@ dependencies.
   or add events. **Universal read-through (v0.1.9):** events created
   in any configured external calendar (Nextcloud / Apple iCloud /
   MS365 / Google) appear in the grid without a Homestead-side entry.
-  See [Calendar read-through](#calendar-read-through-universal-caldav--graph--google)
+  **Per-user source config UI (v0.1.13):** avatar menu → Calendar
+  sources to add / edit / delete / refresh any provider source. See
+  [Calendar read-through](#calendar-read-through-universal-caldav--graph--google)
   below for setup.
 - **Entity graph (v0.1.6)** — Phase B-2 Kavita sync worker
   (PHA-1624 Phase B-2, PHA-1874) walks your Kavita library every 6h
@@ -81,7 +83,7 @@ dependencies.
 ## Calendar read-through (universal: CalDAV / Graph / Google)
 
 Homestead reads events from configured external calendars through a
-provider-agnostic `CalendarSource` interface. **v0.1.2** ships two
+provider-agnostic `CalendarSource` interface. **v0.1.13** ships three
 adapters behind the same contract:
 
   * **`CalDAVSource`** — Nextcloud and Apple iCloud, one implementation
@@ -94,7 +96,9 @@ adapters behind the same contract:
 
 `GoogleSource` (PHA-1865) is the next child issue — the provider name
 is reserved in the API allow-list so the UI can ship before that lands;
-POST is rejected with 501 today.
+POST is rejected with 501 today. The PHA-1868 per-user source config
+UI lists google in the add-source picker but marks it as
+**coming soon** until PHA-1865 merges.
 
 ### Setup
 
@@ -117,7 +121,15 @@ POST is rejected with 501 today.
          `access_token` + `refresh_token` pair (the adapter refreshes
          on 401 / `expires_at`)
 
-3. Add the source via the API (the UI is the PHA-1868 follow-up):
+3. **Add the source via the UI** (avatar menu → Calendar sources →
+   + Add source, v0.1.13). The sheet is provider-aware: CalDAV
+   sources need an app-password; Microsoft 365 sources need an
+   access token + refresh token + client_id (Azure app registration).
+   For a household-shared calendar (e.g. Nextcloud's Shade/Kelly
+   Household), tick the **Shared** checkbox (admin only).
+
+   For scripted / bulk setups the curl payload is the same JSON the
+   UI submits:
 
    CalDAV:
 
@@ -154,9 +166,12 @@ POST is rejected with 501 today.
          http://homestead.lan:3080/api/calendar-sources
 
    The credentials are encrypted at rest (AES-256-GCM) and **never
-   returned by any API endpoint**. For a household-shared calendar
-   (e.g. Nextcloud's Shade/Kelly Household), set `shared: true` (admin
-   only).
+   returned by any API endpoint**. To rename, recolor, or pause a
+   source without re-prompting the credential, the UI uses
+   `PATCH /api/calendar-sources/:id` (display_name / color /
+   enabled). Disabling a source removes its events from the merged
+   feed immediately; re-enabling brings them back the next time
+   the merge endpoint runs a sync.
 
 4. Read merged events via `/api/events/merged?from=YYYY-MM-DD&to=YYYY-MM-DD`.
    Each event carries `origin` (`native` or `provider:<provider>`) and
