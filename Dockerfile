@@ -22,6 +22,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY server.js ./
+COPY lib ./lib
 COPY public ./public
 ENV DATA_DIR=/data PORT=3080 NODE_ENV=production
 VOLUME /data
