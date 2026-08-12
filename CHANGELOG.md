@@ -1,5 +1,54 @@
 # Changelog
 
+## v0.1.13 (2026-08-11) — PHA-1868 (PHA-1620e)
+
+- **Per-user source config UI.** Adds the add/edit/delete/refresh
+  sheet for `calendar_sources` rows so users (not just admins with
+  curl) can connect Nextcloud / iCloud / Microsoft 365 / Google
+  calendars and see them flow into the household calendar grid. The
+  sheet is reachable from the avatar menu and is the canonical
+  source-config counterpart to `lib/calendar-sources.js`. Every
+  authenticated user can manage their own per-user sources; admins
+  additionally see shared sources and can edit/delete them.
+- **Two new API surfaces that back the UI.**
+  - `GET  /api/calendar-sources/kinds` — provider metadata for the
+    add/edit form: provider labels, credential field schemas with
+    `secret` / `required` flags, placeholder text, and a `disabled`
+    flag for providers reserved in the allow-list but not yet
+    shipped (google until PHA-1865 merges). The endpoint describes
+    field shapes only — no credential VALUES cross the wire.
+  - `PATCH /api/calendar-sources/:id` — edit `display_name`,
+    `color`, and `enabled` without forcing a credential re-prompt.
+    Provider / account_id / calendar_id / base_url / credentials
+    stay immutable from PATCH (delete + re-add if you need to
+    change them). Bogus color strings are normalised to the default
+    hex; an empty body is a no-op returning the current row.
+- **Provider-aware form** with per-provider credential fields:
+  - **Nextcloud / Apple iCloud** — `app_password` (the existing
+    CalDAV path; UI pre-fills the standard `base_url` placeholder).
+  - **Microsoft 365** — `access_token` (required),
+    `refresh_token` / `expires_at` / `client_id` / `tenant_id` /
+    `scope` (optional, mirrors the GraphSource contract).
+  - **Google** — listed but disabled in the UI until the
+    `GoogleSource` adapter (PHA-1865) merges.
+- **Disabled-source gating in the merged feed** (cross-checks PHA-1867):
+  flipping `enabled=false` via PATCH causes the source's cached
+  events to disappear from `/api/events/merged` immediately,
+  giving the user a per-provider pause switch without deleting the
+  source.
+- **Tests:**
+  - `scripts/smoke-calendar-sources-ui.js` (new, 64 checks) — boots
+    server.js in-process against a fake CalDAV sandbox, exercises
+    `/kinds`, POST (caldav + ms365), GET (leak check on
+    `cred_blob` / `app_password` / `access_token` /
+    `refresh_token`), PATCH (display_name / color / enabled
+    round-trip + bogus color normalised + 404 + no-op), refresh,
+    merged-feed round-trip, disabled-source exclusion, DELETE,
+    DELETE-404. Hooked into `npm run test:smoke`.
+- **No new runtime deps.** The PHA-1868 deliverable is the UI + the
+  two new endpoints. The CalDAV + GraphSource adapters registered at
+  server boot in v0.1.10 / v0.1.2 are the providers the UI surfaces.
+
 ## v0.1.12 (2026-08-10) — PHA-1876 (PHA-1624 Phase C)
 
 - **Entity dedup + review queue.** `lib/dedup/matcher.js` exposes
