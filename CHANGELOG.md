@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.1.14 (2026-08-11) — PHA-1624 Phase D (PHA-1877)
+
+- **`[[entity-name]]` cross-references in text fields.** Reference
+  parser (`lib/refs/parser.js`) detects `[[name]]` patterns in task
+  titles/notes and event titles/notes. The resolver
+  (`lib/refs/resolver.js`) walks every text container, applies a
+  3-tier ladder (deterministic name/alias → fuzzy ≥ 0.9 via trigram
+  Jaccard → stub creation with `meta.unresolved=true`), and emits
+  `mentioned_in` edges from a per-container sentinel entity to the
+  target. Re-runs are idempotent; same (container, entity) pair
+  always resolves to one edge via the existing UNIQUE constraint.
+- **Sync worker (`lib/sync/refs.js`)** with admin endpoints
+  `POST /api/admin/sync/refs` (manual trigger) and
+  `GET /api/admin/sync/refs/status` (last-run summary). Cron-driven
+  every 1h from the boot scheduler alongside the existing Plex /
+  Kavita / sibling-detector ticks. Skipped silently while a manual
+  trigger is in flight (single-process serialization).
+- **New read API for the "create or link" picker.**
+  - `GET  /api/refs/unresolved?kind=<>&limit=N` — list of unresolved
+    stubs sorted by mention-count (so the picker surfaces the refs
+    that affect the most text first).
+  - `POST /api/refs/resolve-batch { names: [...] }` — batch resolver
+    used by the client-side chip renderer to classify each ref
+    before paint. Mirrors the same 3-tier ladder as the cron worker.
+- **Render rewrite in `public/index.html`.** `[[Dune]]` renders as
+  `<a class="ref-chip" href="/entity/dune-book">Dune</a>` for
+  resolved refs and a dashed chip linking to the review-queue
+  picker for unresolved. The renderer mirrors the server parser
+  algorithm exactly so the two stay in sync. CSS for `.ref-chip` /
+  `.ref-chip.unresolved` is appended at the bottom of the task
+  styles block.
+- **Tests:** 35 parser + 51 resolver assertions (35 + 51 = 86 new
+  assertions, all green). Wired into `npm test`. Full suite:
+  100 (user-model) + 35 (refs-parser) + 51 (refs-resolver) + 38
+  (calendar-sources) + 28 (graph-source) + 18 (health-checker) +
+  42 (entity-graph) + ~50 (dedup-matcher) + 65 (sync-plex) + 75
+  (sync-kavita) + 18 (agent-tokens) + 32 (merge-layer) = 552+.
+
 ## v0.1.13 (2026-08-11) — PHA-1868 (PHA-1620e)
 
 - **Per-user source config UI.** Adds the add/edit/delete/refresh

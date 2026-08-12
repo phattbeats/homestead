@@ -78,6 +78,13 @@ main{padding:14px 18px;max-width:680px;margin:0 auto}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
 .overdue{color:#b3453a;font-weight:600}
 .x{color:var(--muted);font-size:18px;padding:6px;opacity:.5}
+/* PHA-1877: cross-reference chips. Resolved refs render as solid chips
+   linking to the entity page; unresolved refs render as dashed chips
+   linking to the "create or link" picker. */
+.ref-chip{display:inline-block;padding:1px 7px;border-radius:10px;background:var(--surface);border:1px solid var(--line);color:var(--ink);font-size:13px;text-decoration:none;margin:0 1px}
+.ref-chip:hover{background:var(--surface-2, var(--surface));border-color:var(--accent,#7c9eb8)}
+.ref-chip.unresolved{border-style:dashed;color:var(--muted)}
+.ref-chip[data-ref-pending]{opacity:.75;font-style:italic}
 
 /* calendar */
 .cal-head{display:flex;justify-content:space-between;align-items:center;padding:4px 6px 12px}
@@ -343,6 +350,103 @@ function today(){const d=new Date();return d.toISOString().slice(0,10)}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function fmtDate(s){const d=new Date(s+'T00:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}
 
+// PHA-1877 — client-side reference renderer. Mirrors the server-side
+// lib/refs/parser.js algorithm: scan for `[[name]]` patterns, hand each
+// one to the resolver cache, emit `<a class="ref-chip">` chips. The
+// resolver cache is a Map<lowercased name, { entityId, slug, resolved }>
+// populated lazily from `/api/refs/resolve-batch` (POST {names: [...]})
+// or, on first paint, from `/api/refs/unresolved` so chips are not
+// rendered as "unresolved" by default. The server already resolved
+// refs into `mentioned_in` edges; the chip is just the visual layer.
+const REF_CACHE = new Map();
+let _refCacheLoaded = false;
+async function ensureRefCacheLoaded() {
+  if (_refCacheLoaded) return;
+  try {
+    // Pull a generous batch of unresolved stubs so the picker has
+    // something to show even before any user input. Resolved refs are
+    // fetched on-demand via /api/refs/resolve-batch.
+    const r = await fetch('/api/refs/unresolved?limit=200', { credentials: 'same-origin' });
+    if (r.ok) {
+      const body = await r.json();
+      for (const item of (body.items || [])) {
+        REF_CACHE.set(String(item.name || '').toLowerCase(), {
+          entityId: item.id, slug: item.slug, name: item.name, resolved: false,
+        });
+      }
+    }
+  } catch (_) { /* offline / not yet authed — fall through */ }
+  _refCacheLoaded = true;
+}
+async function resolveRefBatch(names) {
+  // POST a batch of unresolved names to the server, get back the
+  // {resolved, unresolved} map. Caches into REF_CACHE.
+  const want = Array.from(new Set(names.map(n => String(n || '').toLowerCase()).filter(Boolean)));
+  if (!want.length) return;
+  try {
+    const r = await fetch('/api/refs/resolve-batch', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ names: want }),
+    });
+    if (!r.ok) return;
+    const body = await r.json();
+    for (const item of (body.items || [])) {
+      REF_CACHE.set(String(item.name || '').toLowerCase(), {
+        entityId: item.entityId, slug: item.slug, name: item.name,
+        resolved: !!item.resolved,
+      });
+    }
+  } catch (_) { /* ignore */ }
+}
+function renderRefLinks(text, containerKind) {
+  if (!text || typeof text !== 'string') return esc(text || '');
+  const out = [];
+  let cursor = 0;
+  let i = 0;
+  while (i < text.length - 1) {
+    if (text[i] === '[' && text[i + 1] === '[') {
+      // Find matching ]]
+      let j = i + 2;
+      let closed = false;
+      let nameBuf = '';
+      while (j < text.length) {
+        if (text[j] === '\\' && j + 1 < text.length && text[j + 1] === ']') {
+          nameBuf += ']'; j += 2; continue;
+        }
+        if (text[j] === ']' && text[j + 1] === ']') { closed = true; break; }
+        nameBuf += text[j]; j++;
+      }
+      if (closed) {
+        const name = nameBuf.replace(/\s+/g, ' ').trim();
+        const length = (j + 2) - i;
+        if (cursor < i) out.push(esc(text.slice(cursor, i)));
+        if (name) {
+          const key = name.toLowerCase();
+          const cached = REF_CACHE.get(key);
+          if (cached && cached.resolved) {
+            out.push(`<a class="ref-chip" href="/entity/${esc(cached.slug)}" data-ref-name="${esc(name)}">${esc(name)}</a>`);
+          } else if (cached) {
+            out.push(`<a class="ref-chip unresolved" href="/review-queue?ref=${esc(encodeURIComponent(name))}" data-ref-name="${esc(name)}" data-ref-unresolved="1">${esc(name)}</a>`);
+          } else {
+            // Not in cache — render as a neutral link to the picker; the
+            // server's resolver may already have classified it.
+            out.push(`<a class="ref-chip" href="/review-queue?ref=${esc(encodeURIComponent(name))}" data-ref-name="${esc(name)}" data-ref-pending="1">${esc(name)}</a>`);
+          }
+        }
+        cursor = i + length;
+        i = j + 2;
+        continue;
+      }
+      i += 2; continue;
+    }
+    i++;
+  }
+  if (cursor < text.length) out.push(esc(text.slice(cursor)));
+  return out.join('');
+}
+
 /* ---- user helpers (generic N-user) ---- */
 function userName(u){
   if(u==='all'||!u)return 'Everyone';
@@ -435,6 +539,11 @@ async function boot(user){
   const d=new Date();calY=d.getFullYear();calM=d.getMonth();
   await refreshUsersFromServer();
   await refresh();
+  // PHA-1877: kick off the reference resolver cache load so chips
+  // (resolved + unresolved) paint correctly on the first re-render.
+  // Best-effort — the cache will populate on the first /api/refs/resolve-batch
+  // call when the user types a ref into a task title.
+  ensureRefCacheLoaded();
   // PHA-1619: if the browser already has permission + a subscription,
   // re-register it against this session so a returning user on a fresh
   // device doesn't have to click "Enable" again. Best-effort: any error
@@ -478,7 +587,7 @@ function taskRow(t){
   return `<div class="task ${t.done?'done':''}">
     <button class="chk" onclick="toggleTask(${t.id})">${t.done?'✓':''}</button>
     <div class="t-body" onclick="openTaskSheet(${t.id})">
-      <div class="t-title">${esc(t.title)}${t.recur?' 🔁':''}</div>
+      <div class="t-title">${renderRefLinks(t.title, 'task')}${t.recur?' 🔁':''}</div>
       <div class="t-meta">
         <span class="dot" style="background:${userColorVar(t.assignee)}"></span>${esc(userName(t.assignee))}
         ${t.alt_assignee?`<span class="dot" style="background:${userColorVar(t.alt_assignee)};opacity:.55"></span><span>↔ ${esc(userName(t.alt_assignee))}</span>`:''}
@@ -505,8 +614,8 @@ function evRow(e){
   return `<div class="ev" onclick="openEventSheet(${e.id})">
     <div class="ev-time">${e.time||'all day'}</div>
     <div class="ev-bar" style="background:${userColorVar(e.owner)}"></div>
-    <div class="t-body"><div class="t-title">${esc(e.title)}</div>
-    ${e.notes?`<div class="t-meta">${esc(e.notes)}</div>`:''}</div>
+    <div class="t-body"><div class="t-title">${renderRefLinks(e.title, 'event')}</div>
+    ${e.notes?`<div class="t-meta">${renderRefLinks(e.notes, 'event')}</div>`:''}</div>
     <button class="x" onclick="event.stopPropagation();delEvent(${e.id})">✕</button></div>`;
 }
 // PHA-1867: provider events are read-only in v1 (Phase 2 write-back lives
@@ -527,8 +636,8 @@ function providerEvRow(e){
     <div class="ev-time">${esc(time)}${range}</div>
     <div class="ev-bar" style="background:${color}"></div>
     <div class="t-body">
-      <div class="t-title">${esc(e.title)}${stale}</div>
-      <div class="t-meta"><span class="src-chip" style="background:${color}">${esc(label)}</span>${e.location?` · 📍 ${esc(e.location)}`:''}${e.notes?` · ${esc(e.notes)}`:''}</div>
+      <div class="t-title">${renderRefLinks(e.title, 'event')}${stale}</div>
+      <div class="t-meta"><span class="src-chip" style="background:${color}">${esc(label)}</span>${e.location?` · 📍 ${esc(e.location)}`:''}${e.notes?` · ${renderRefLinks(e.notes, 'event')}`:''}</div>
     </div>
   </div>`;
 }

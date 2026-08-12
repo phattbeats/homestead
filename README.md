@@ -34,6 +34,21 @@ dependencies.
   `GET /api/admin/sync/kavita/status`. Set `KAVITA_API_KEY` (and
   optionally `KAVITA_URL`) in the container env to enable. Skipped
   silently when unset so installs without Kavita keep working.
+- **Cross-references in text fields (v0.1.14)** — Phase D
+  (PHA-1624 Phase D, PHA-1877) reference parser. Tasks and events
+  with `[[entity-name]]` cross-references in their titles or notes
+  resolve to entity-page chips on render. The cron-driven resolver
+  (`lib/refs/resolver.js`) walks all text containers every 1h,
+  applies the same 3-tier ladder as the dedup matcher, emits
+  `mentioned_in` edges from a per-container sentinel entity to the
+  target, and creates unresolved stubs (with `meta.unresolved=true`)
+  when confidence < 0.9. Resolved refs render as solid `<a>`
+  chips linking to the entity; unresolved render as dashed chips
+  linking to the review-queue picker. The picker is populated
+  from `GET /api/refs/unresolved`; manual sync trigger
+  `POST /api/admin/sync/refs` (admin-only); status
+  `GET /api/admin/sync/refs/status`. The resolver is idempotent on
+  re-run (re-running never duplicates edges).
 - **Entity dedup + review queue (v0.1.11)** — Phase C (PHA-1624 /
   PHA-1876) decision layer. `lib/dedup/matcher.js` runs a 3-tier
   identity check on every new `work` candidate: (1) deterministic
