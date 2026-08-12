@@ -74,6 +74,15 @@ dependencies.
   the full per-service state for agents and monitoring.
 - **Session auth** — `bcrypt`-hashed passwords, signed session cookies,
   90-day rolling expiry.
+- **Per-user personal access tokens (v0.1.15, PHA-1617.3)** — avatar
+  menu → **🔌 Connected agents** opens the token manager. Mint a PAT
+  to give your own agent (OpenClaw, scripts, anything MCP-speaking)
+  bearer-token access with exactly your session's powers. Plaintext is
+  shown **once** in a copy-once modal (navigator.clipboard + manual-
+  select fallback); Homestead only stores the bcrypt hash. List, view
+  the 16-char non-secret prefix, revoke. The PAT layer is the
+  contract for the upcoming chat drawer (PHA-1617.5/.6) and the
+  MCP server (PHA-1617.8). See [Personal access tokens](#personal-access-tokens-pha-16173) below.
 - **Push notifications** — web-push reminders for chores due today,
   overdue chores, and rotating "your turn" handoffs. Per-user quiet hours
   and per-category on/off toggles. No Firebase — standard VAPID keys
@@ -263,6 +272,55 @@ curl -s -b /tmp/c.txt \
 The endpoint returns `{ userId, username, delivered, skipped, errors }`
 so a CI smoke test can assert on `delivered > 0` once the test client
 has a real subscription.
+
+## Personal access tokens (PHA-1617.3)
+
+The token manager is the SPA-side of the per-user PAT backend shipped in
+PHA-1617.1. The user-facing flow lives behind the avatar menu → **🔌
+Connected agents** entry. From there, a user can:
+
+1. **List** every token they own. Each row shows the label, a 16-char
+   non-secret prefix chip (`homestead_pat_Xxxxxxxx…` — the prefix is
+   stored in plaintext so the lookup index works without a bcrypt scan;
+   the secret portion is hashed), the scope (`active` / `admin` /
+   `revoked` / `expired`), and the created / expires / last-used
+   metadata.
+2. **Mint** a new token by hitting **+ New token**. The issue sheet
+   takes a label (required, ≤ 64 chars) and an optional expiry date.
+   On submit it `POST`s to `/api/agent-tokens`, then opens a
+   **copy-once reveal modal** showing the plaintext in a dark
+   monospace card. The plaintext is the only time the user will ever
+   see it — the server only stores the bcrypt hash. The "I've stored
+   it — close" acknowledgement button stays disabled until the user
+   either fires the Copy button (which uses `navigator.clipboard.writeText`
+   with a manual-select fallback for insecure origins) OR ticks the
+   manual acknowledgement checkbox.
+3. **Revoke** any token they own via the per-row action. Revocation
+   is immediate — `DELETE /api/agent-tokens/:id` sets `revoked_at`,
+   the prefix is removed from the partial unique index, and any
+   subsequent `Bearer homestead_pat_…` request with that plaintext
+   fails at the prefix lookup. There is no undo.
+
+The UI is a pure SPA consumer of three endpoints that already exist on
+`main`:
+
+- `GET    /api/agent-tokens` — list the signed-in user's tokens
+  (admin can pass `?user=<username>` to view another user's tokens;
+  the v0 UI hides this behind the avatar menu and only shows own).
+- `POST   /api/agent-tokens` — `{ label, expires_at? }` →
+  `{ id, label, token_prefix, token_plaintext, expires_at, … }`.
+  Returns the plaintext **once**; the row on disk never contains it.
+- `DELETE /api/agent-tokens/:id` — revoke (owner-scoped;
+  admin-only routes via `/api/users/:username/agent-tokens` are out
+  of scope for this UI; the cross-household admin view belongs to
+  the agent_endpoints surface planned for PHA-1617.4).
+
+The full design contract lives in the PHA-1617 design doc (`doc
+'meta-agent-socket-design' rev 1`), specifically §4 (PAT auth) and
+§9.1 (this user settings UI). The PAT layer is the foundation for the
+chat drawer (PHA-1617.5/.6), the events webhook (PHA-1617.7), and the
+MCP server wrapper (PHA-1617.8); minting a token here is the only
+thing the user has to do to unlock all four.
 
 ## Stack
 
