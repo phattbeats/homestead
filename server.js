@@ -40,6 +40,7 @@ const entityGraph = require('./lib/sync/_schema');
 const dedupMatcher = require('./lib/dedup/matcher');
 const calendarSources = require('./lib/calendar-sources');
 const secretBox = require('./lib/secret-box');
+const snapshot = require('./lib/snapshot');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -357,6 +358,25 @@ app.get('/api/me', (req, res) => {
     return res.json({ user: req.session.user });
   }
   res.json({ user: req.session.user || null });
+});
+
+// PHA-1902 (PHA-1617.9): the `homestead_get_user_context` snapshot
+// endpoint. Single-call morning-brief context: today's tasks/events/
+// overdue, upcoming week, groups, recent activity. Backs both the
+// MCP tool (PHA-1617.8) and the drawer POST `snapshot` field
+// (PHA-1617.5/.6). Same builder under the hood so the three callers
+// can never drift apart on envelope shape.
+app.get('/api/me/snapshot', auth, (req, res) => {
+  const username = req.session.user && req.session.user.username;
+  if (!username) return res.status(401).json({ error: 'unauthorized' });
+  try {
+    const tz = snapshot.resolveTz(req);
+    const payload = snapshot.build(db, username, { tz });
+    res.json(payload);
+  } catch (err) {
+    console.error('[snapshot] build failed', err);
+    res.status(500).json({ error: 'snapshot_build_failed' });
+  }
 });
 app.post('/api/password', auth, (req, res) => {
   const { current, next } = req.body || {};
