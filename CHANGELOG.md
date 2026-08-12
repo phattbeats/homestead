@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.1.17 (2026-08-12) — PHA-1898 (PHA-1617.5)
+
+- **Meta-agent chat drawer UI shell (design doc §6.3).**
+  Slide-in drawer (right side on desktop, full-screen on mobile) with a
+  message composer. The composer POSTs `{message, endpoint_id,
+  conversation_id}` to `/api/drawer` and the SSE/JSON consumer renders
+  the reply as it streams. FAB trigger above the bottom nav; harness
+  selector loads the caller's enabled `drawer` endpoints from
+  `/api/agent-endpoints`. Empty-state CTA when no endpoints are
+  configured.
+- **SSE consumer (`consumeSseStream` + `parseSseBlock`).** Reads the
+  response body via `ReadableStream` and parses `event:` / `data:`
+  blocks separated by double newlines. Pipes `event: chunk` text into
+  the streaming agent bubble, terminates on `event: done`. Handles
+  comment lines (`:keepalive`) and multi-line `data:` correctly.
+- **JSON consumer fallback.** If the harness returns `application/json`
+  (single-shot stateless endpoint), renders `{text, ...}` into the
+  agent bubble. The composer picks the right path per response
+  Content-Type.
+- **Stub `/api/drawer` POST endpoint.** Accepts the composer's payload,
+  validates the caller owns an enabled `drawer` endpoint (returns 404
+  on cross-user / events-kind / disabled endpoints without leaking
+  existence), records dispatch bookkeeping (`last_used_at`,
+  `last_status_code`, `last_error`), and returns either a synthetic
+  `text/event-stream` reply (default) or an `application/json` reply
+  (when `Accept: application/json` is set). The HMAC-signed outbound
+  forwarder to the user's harness URL arrives in PHA-1617.6; the wire
+  shape is stable so the frontend won't change.
+- **Tests.** `scripts/test-drawer.js` (64 checks) wired into
+  `npm test`: SSE reply shape + bookkeeping, JSON reply path, 401/400/404
+  error paths, cross-user endpoint refusal, events-kind/disabled refusal,
+  HTML smoke (drawer markup + JS wiring present), and the SSE block-parser
+  contract.
+
 ## v0.1.16 (2026-08-12) — PHA-1897 (PHA-1617.4)
 
 - **`agent_endpoints` table + library (design doc §6.1).** New
