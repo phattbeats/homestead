@@ -38,6 +38,7 @@ const agentTokens = require('./lib/agent-tokens');
 const healthChecker = require('./lib/health-checker');
 const entityGraph = require('./lib/sync/_schema');
 const dedupMatcher = require('./lib/dedup/matcher');
+const refsSync = require('./lib/sync/refs');
 const calendarSources = require('./lib/calendar-sources');
 const secretBox = require('./lib/secret-box');
 
@@ -787,6 +788,127 @@ app.post('/api/admin/sync/sibling-detector', auth, (req, res) => {
   if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
   const r = dedupMatcher.siblingDetector(db);
   res.json({ ok: true, ...r });
+});
+
+// ---- Entity-graph cross-reference resolver (PHA-1624 Phase D, PHA-1877) ----
+//
+// POST /api/admin/sync/refs            admin-only manual trigger
+// GET  /api/admin/sync/refs/status     admin-only last-run summary
+//
+// The worker walks every text container (tasks, events; list items and
+// activity feed bodies when those tables land) and resolves any
+// `[[entity-name]]` references to entities in the graph. It is also
+// cron-driven every 1h from the boot scheduler.
+//
+// Single-process serialization matches the Plex worker: a sync is
+// in-flight if `refsSyncRunning` is set. One running sync at a time
+// (the resolver is pure DB and returns in <1s for typical graphs).
+
+async function runRefsSyncAdmin() {
+  if (refsSync.refsSyncInFlight()) return { ok: false, reason: 'already_running' };
+  return await refsSync.runRefsSync({ db });
+}
+
+app.post('/api/admin/sync/refs', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+  if (refsSync.refsSyncInFlight()) return res.status(409).json({ ok: false, reason: 'already_running' });
+  // Fire-and-forget; caller polls /status.
+  runRefsSyncAdmin();
+  res.json({ ok: true, status: 'syncing' });
+});
+
+app.get('/api/admin/sync/refs/status', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+  const last = refsSync.lastRefsSyncSummary();
+  res.json({
+    running: refsSync.refsSyncInFlight(),
+    lastSummary: last,
+  });
+});
+
+// GET /api/refs/unresolved — admin/any-user view of unresolved stubs
+// the user can act on via the "create or link" picker. Each entry is a
+// concept entity flagged `meta.unresolved=true`; the picker UI in
+// public/index.html calls this endpoint to populate the dropdown.
+//
+// Optional query: ?kind=<entity kind> filters by entity kind.
+// Optional: ?limit=N (default 50, max 200).
+app.get('/api/refs/unresolved', auth, (req, res) => {
+  const kind = (req.query.kind || '').trim() || null;
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+  const whereKind = kind ? 'AND e.kind = ?' : '';
+  const params = kind ? [kind, limit] : [limit];
+  const rows = db.prepare(`
+    SELECT e.id, e.kind, e.name, e.slug, e.meta_json, e.created_at, e.updated_at,
+           (SELECT COUNT(*) FROM entity_edges ee
+              WHERE ee.to_id = e.id AND ee.type = 'mentioned_in') AS mention_count
+    FROM entities e
+    WHERE e.created_by = 'refs:resolver'
+      AND json_extract(e.meta_json, '$.unresolved') = 1
+      ${whereKind}
+    ORDER BY mention_count DESC, e.updated_at DESC
+    LIMIT ?
+  `).all(...params);
+  res.json({
+    items: rows.map(r => ({
+      id: r.id,
+      kind: r.kind,
+      name: r.name,
+      slug: r.slug,
+      mentionCount: r.mention_count,
+      meta: (() => { try { return JSON.parse(r.meta_json); } catch (_) { return {}; } })(),
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    })),
+    total: rows.length,
+  });
+});
+
+// POST /api/refs/resolve-batch — auth-required. Body:
+//   { names: string[] }
+// Returns: { items: [{ name, entityId, slug, resolved }] }
+// The client renders `[[name]]` chips and uses this to populate the
+// client-side cache. Resolved names are entity hits; unresolved are
+// stubs or "no match" (entityId=null). Mirrors the resolver's 3-tier
+// ladder so the client sees the same answer as the cron worker.
+app.post('/api/refs/resolve-batch', auth, (req, res) => {
+  const body = req.body || {};
+  const names = Array.isArray(body.names) ? body.names.filter(n => typeof n === 'string') : [];
+  if (!names.length) return res.json({ items: [] });
+  const refs = require('./lib/refs/resolver');
+  const items = [];
+  for (const raw of names) {
+    const name = raw.trim();
+    if (!name) continue;
+    // Tier 1
+    let entityId = refs.tier1Deterministic(db, name);
+    let tier = entityId ? 1 : null;
+    // Tier 2
+    if (!entityId) {
+      const t2 = refs.tier2Fuzzy(db, name);
+      if (t2) { entityId = t2.entityId; tier = 2; }
+    }
+    // Tier 3 — create or fetch stub
+    if (!entityId) {
+      const stub = refs.ensureStub(db, name);
+      if (stub && stub.id) { entityId = stub.id; tier = 3; }
+    }
+    let slug = null;
+    if (entityId) {
+      const row = db.prepare('SELECT slug FROM entities WHERE id = ?').get(entityId);
+      slug = row ? row.slug : null;
+    }
+    items.push({
+      name,
+      entityId,
+      slug,
+      resolved: tier === 1 || tier === 2,
+      tier,
+    });
+  }
+  res.json({ items });
 });
 
 
@@ -1665,10 +1787,14 @@ if (require.main === module) {
       // + same-author work entities that aren't linked via
       // adaptation_of and queue a review item. Cheap — pure DB.
       try { runSiblingDetectorTick(); } catch (e) { console.error('[scheduler] sibling detector tick:', e.message); }
+      // references_resolver (PHA-1877): every 1h, scan text containers
+      // for `[[entity-name]]` refs and resolve to entities / stubs.
+      // Pure DB, fast even on the full household library.
+      try { await runRefsResolverTick(); } catch (e) { console.error('[scheduler] refs resolver tick:', e.message); }
     };
     setTimeout(tick, 10 * 1000);
     schedulerHandle = setInterval(tick, SCHED_TICK_MS);
-    console.log('[scheduler] daily digest started; tick=30min; plex+kavita entity-sync + sibling_detector every 6h');
+    console.log('[scheduler] daily digest started; tick=30min; plex+kavita entity-sync + sibling_detector every 6h; refs_resolver every 1h');
   }
 
   // sibling_detector (PHA-1876) — see lib/dedup/matcher.js. Runs
@@ -1683,6 +1809,27 @@ if (require.main === module) {
     const r = dedupMatcher.siblingDetector(db);
     if (r.queued > 0) {
       console.log(`[scheduler] sibling_detector: +${r.queued} queued (${r.scanned} scanned)`);
+    }
+  }
+
+  // refs_resolver (PHA-1877) — see lib/sync/refs.js. Runs every 1h
+  // (per issue acceptance). Pure DB, async-only because the cron tick
+  // gate is `async`. Skipped silently when a manual admin trigger is
+  // in flight (same pattern as plex/kavita sync).
+  const REFS_RESOLVER_INTERVAL_MS = 60 * 60 * 1000;   // 1h
+  let refsResolverLastTickAt = 0;
+  async function runRefsResolverTick() {
+    if (refsSync.refsSyncInFlight()) return;
+    const now = Date.now();
+    if (refsResolverLastTickAt && (now - refsResolverLastTickAt) < REFS_RESOLVER_INTERVAL_MS) return;
+    refsResolverLastTickAt = now;
+    const r = await refsSync.runRefsSync({ db });
+    if (r && r.ok) {
+      if (r.refs > 0) {
+        console.log(`[scheduler] refs_resolver: ${r.containers} containers, ${r.refs} refs, ${r.resolved} resolved, ${r.edges} edges, ${r.stubs} new stubs (${r.durationMs}ms)`);
+      }
+    } else {
+      console.log(`[scheduler] refs_resolver skipped: ${r && (r.reason || (r.errors && r.errors[0] && r.errors[0].message)) || 'unknown'}`);
     }
   }
   startScheduler();
