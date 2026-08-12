@@ -1,5 +1,51 @@
 # Changelog
 
+## v0.1.16 (2026-08-12) — PHA-1897 (PHA-1617.4)
+
+- **`agent_endpoints` table + library (design doc §6.1).** New
+  per-user, per-harness endpoint config schema with HMAC secret
+  generation on insert. Fields: `user_id` (FK users), `harness_label`,
+  `kind` (`drawer` | `events`), `url`, `secret` (HMAC-SHA256 shared
+  secret, server-generated `homestead_aes_<43-char-base64url>`,
+  plaintext returned exactly once), `enabled` (default 1), `event_filter`
+  (JSON, default `{}`), `created_at`, `last_used_at`,
+  `last_status_code`, `last_error`. Index on `(user_id, kind, enabled)`
+  for dispatch-side lookups. A user may own multiple harnesses of the
+  same kind (each gets its own URL + secret).
+- **HMAC signing helper (`signPayload(secret, ts, rawBody)`).**
+  Implements design doc §6.4: `sha256=<hex>` where `<hex> =
+  HMAC_SHA256(secret, timestamp + "." + raw_body)`. The dispatch
+  helpers (`listEnabledForDispatch` + `recordDispatch`) are the entry
+  points the PHA-1617.6 drawer POST and PHA-1617.7 events webhook
+  outbound dispatchers will share.
+- **CRUD API at `/api/agent-endpoints`** (plus
+  `/api/users/:username/agent-endpoints` admin cross-household view):
+  - `GET` — own endpoints (or `?user=` for admin), metadata only,
+    secret never broadcast.
+  - `POST` — create, returns the row *plus* the one-time
+    `secret_plaintext`.
+  - `PATCH` — partial update. `rotate_secret=true` returns a fresh
+    `secret_plaintext`; otherwise the secret is not exposed.
+  - `DELETE` — remove.
+  - Admin PATCH path (cross-household) strips `rotate_secret` so admins
+    can flip the `enabled` flag but cannot read or rotate the secret —
+    preserves the "user owns their endpoint" trust model from §2 of the
+    design doc.
+- **Trust boundary matches design doc §2.** The plaintext secret is
+  exposed only when the caller is the row owner; admin cross-household
+  reads never see the secret. Server validates `kind` against the
+  `drawer|events` enum, normalises `event_filter` to a JSON object, and
+  rejects malformed URLs. Each user harness keeps its own secret so a
+  compromised or rotated secret on one harness does not invalidate the
+  others.
+- **Tests.** `scripts/test-agent-endpoints.js` (79 checks) wired into
+  `npm test`: create/list/get/update/remove including rotate-secret,
+  validation, owner-scoping, dispatch bookkeeping, HMAC contract
+  verification against an independent computation, and full HTTP
+  integration through the live `server.js` (login → POST → PATCH
+  enabled=false → PATCH rotate_secret → DELETE → 400 on bad inputs →
+  401 on unauthenticated POST). Full suite: **666 / 666 pass, 0 fail.
+
 ## v0.1.13 (2026-08-11) — PHA-1868 (PHA-1620e)
 
 - **Per-user source config UI.** Adds the add/edit/delete/refresh

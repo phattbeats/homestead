@@ -34,6 +34,7 @@ const userModel = require('./lib/user-model');
 const plexSync = require('./lib/sync/plex');
 const kavitaSync = require('./lib/sync/kavita');
 const agentTokens = require('./lib/agent-tokens');
+const agentEndpoints = require('./lib/agent-endpoints');
 
 const healthChecker = require('./lib/health-checker');
 const entityGraph = require('./lib/sync/_schema');
@@ -54,6 +55,11 @@ entityGraph.migrate(db);
 // PHA-1617.1: PAT tokens table. Migrated after userModel so the FK
 // to users(id) resolves. Same boot-migration pattern as the others.
 agentTokens.migrate(db);
+// PHA-1617.4: per-user, per-harness endpoint config (drawer POST +
+// events webhook URLs). HMAC secret generated on insert. FK to users;
+// migrated after userModel so the FK resolves, same pattern as
+// agent_tokens / calendar_sources.
+agentEndpoints.migrate(db);
 // PHA-1620: calendar_sources + calendar_event_cache schema. Migrated
 // last so the FK to users(id) resolves, same boot-migration pattern.
 calendarSources.migrate(db);
@@ -487,6 +493,111 @@ app.delete('/api/users/:username/agent-tokens/:id', auth, requireAdmin, (req, re
   if (!target) return res.status(404).json({ error: 'not found' });
   const revoked = agentTokens.revoke(db, req.params.id, { ownerUserId: target.id });
   if (!revoked) return res.status(404).json({ error: 'not found' });
+  res.json({ ok: true });
+});
+
+// ---- agent endpoints (PHA-1617.4) ----
+// Per-user, per-harness config rows. The HMAC secret is the trust key
+// used to sign Homestead -> user-harness outbound POSTs (drawer + events
+// webhook, PHA-1617.6/.7). Plaintext is shown ONCE on insert / rotate.
+// Admin cross-household view is read-only (NO secret exposure) — admins
+// can disable other users' endpoints but cannot read or rotate their
+// secrets (the "user owns their endpoint" model).
+// GET /api/agent-endpoints — own endpoints, or (admin + ?user=) another user's.
+app.get('/api/agent-endpoints', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  if (req.query.user) {
+    if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+    const target = db.prepare('SELECT id FROM users WHERE username = ?').get(userModel.validateUsername(req.query.user) || '');
+    if (!target) return res.status(404).json({ error: 'not found' });
+    return res.json(agentEndpoints.list(db, target.id));
+  }
+  res.json(agentEndpoints.list(db, me.id));
+});
+// POST /api/agent-endpoints — create a new endpoint. Returns the row
+// plus the one-time plaintext secret.
+app.post('/api/agent-endpoints', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { harness_label, kind, url, enabled = 1, event_filter = {} } = req.body || {};
+  try {
+    const created = agentEndpoints.create(db, me.id, {
+      harnessLabel: harness_label,
+      kind,
+      url,
+      enabled,
+      eventFilter: event_filter,
+    });
+    res.json(created);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+// PATCH /api/agent-endpoints/:id — partial update. `rotate_secret=true`
+// generates a fresh HMAC secret and returns the plaintext once.
+app.patch('/api/agent-endpoints/:id', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { harness_label, kind, url, enabled, event_filter, rotate_secret = false } = req.body || {};
+  try {
+    const updated = agentEndpoints.update(db, req.params.id, {
+      harnessLabel: harness_label,
+      kind,
+      url,
+      enabled,
+      eventFilter: event_filter,
+    }, { ownerUserId: me.id, rotateSecret: !!rotate_secret });
+    if (!updated) return res.status(404).json({ error: 'not found' });
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+// DELETE /api/agent-endpoints/:id — remove own endpoint.
+app.delete('/api/agent-endpoints/:id', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const removed = agentEndpoints.remove(db, req.params.id, { ownerUserId: me.id });
+  if (!removed) return res.status(404).json({ error: 'not found' });
+  res.json({ ok: true });
+});
+// Admin paths (cross-household) — read-only cross-household view + the
+// admin disable-only / delete powers. Admins can NEVER read the secret
+// (that's the user-owned trust boundary).
+app.get('/api/users/:username/agent-endpoints', auth, requireAdmin, (req, res) => {
+  const clean = userModel.validateUsername(req.params.username);
+  const target = db.prepare('SELECT id FROM users WHERE username = ?').get(clean || '');
+  if (!target) return res.status(404).json({ error: 'not found' });
+  res.json(agentEndpoints.list(db, target.id));
+});
+app.patch('/api/users/:username/agent-endpoints/:id', auth, requireAdmin, (req, res) => {
+  const clean = userModel.validateUsername(req.params.username);
+  const target = db.prepare('SELECT id FROM users WHERE username = ?').get(clean || '');
+  if (!target) return res.status(404).json({ error: 'not found' });
+  // Admins may flip the `enabled` flag and delete, but not rotate secret
+  // or read it. Strip rotate_secret out of the body before forwarding.
+  const { harness_label, kind, url, event_filter, enabled } = req.body || {};
+  try {
+    const updated = agentEndpoints.update(db, req.params.id, {
+      harnessLabel: harness_label,
+      kind,
+      url,
+      eventFilter: event_filter,
+      enabled,
+    }, { ownerUserId: target.id, rotateSecret: false });
+    if (!updated) return res.status(404).json({ error: 'not found' });
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+app.delete('/api/users/:username/agent-endpoints/:id', auth, requireAdmin, (req, res) => {
+  const clean = userModel.validateUsername(req.params.username);
+  const target = db.prepare('SELECT id FROM users WHERE username = ?').get(clean || '');
+  if (!target) return res.status(404).json({ error: 'not found' });
+  const removed = agentEndpoints.remove(db, req.params.id, { ownerUserId: target.id });
+  if (!removed) return res.status(404).json({ error: 'not found' });
   res.json({ ok: true });
 });
 
