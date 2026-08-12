@@ -271,6 +271,18 @@ has a real subscription.
 - better-sqlite3 (single-file DB at `/data/life.db`, WAL mode)
 - Plain HTML/CSS/JS frontend (no build step)
 
+## Agent context (PHA-1617 — BYO-harness meta-agent socket)
+
+- **`GET /api/me/snapshot`** (v0.1.18) — single-call morning-brief
+  context for the connected harness. Returns the user's profile +
+  groups, today's tasks/events/overdue, upcoming week, and recent
+  activity in one round-trip. Auth required (session cookie, PAT, or
+  header-trust). Send `X-Homestead-Tz: <IANA name>` to pin `today`
+  to the user's wall clock. The same builder backs the future MCP
+  tool (`homestead_get_user_context`) and the drawer POST `snapshot`
+  field, so the envelope can't drift between callers. See the
+  meta-agent-socket design doc §7 for the full schema.
+
 ## Quick start (Docker)
 
 ```bash
