@@ -238,6 +238,18 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 .palette-hit:hover,.palette-hit.sel{background:#f4f2ee}
 .palette-hit .kind{color:var(--muted);font-size:12px}
 .palette-empty{padding:16px;color:var(--muted);font-size:13px}
+
+/* ---- PHA-1868: calendar sources management ---- */
+.src-list{display:flex;flex-direction:column;gap:8px}
+.src-row{display:flex;gap:12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--surface);align-items:center}
+.src-color{width:8px;align-self:stretch;border-radius:4px;background:var(--uc,var(--muted));flex-shrink:0}
+.src-info{flex:1;min-width:0}
+.src-title{font-weight:600;font-size:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.src-title .pill{font-size:11px;font-weight:600;color:#fff;padding:2px 7px;border-radius:8px;background:var(--muted)}
+.src-meta{font-size:12px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.src-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.src-actions .link{padding:8px 10px;border-radius:8px;background:var(--bg);border:1px solid var(--line);color:var(--ink);font-weight:600}
+.src-actions .link.danger{color:#b3453a;border-color:rgba(179,69,58,.3)}
 </style>
 </head>
 <body>
@@ -805,6 +817,7 @@ $('#addSvc').onclick=()=>openSvcSheet();
 $('#avatarBtn').onclick=()=>{
   const isAdmin=!!(ME&&ME.isAdmin);
   openSheet(`<h2>${esc(ME.display)}</h2>
+    <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-calendar-sources">📅 Calendar sources</button>
     ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-settings">⚙️ Settings · manage household</button>`:''}
     <h3>Push notifications</h3>
     <p style="font-size:13px;color:var(--muted);margin:-4px 0 10px">Get reminders for chores due today and your turn to take a rotating chore. iPhone users: add Homestead to your Home Screen first (iOS 16.4+ required for push).</p>
@@ -819,6 +832,7 @@ $('#avatarBtn').onclick=()=>{
   if(isAdmin){
     $('#f-settings').onclick=()=>openSettingsSheet();
   }
+  $('#f-calendar-sources').onclick=()=>openCalendarSourcesSheet();
   pushRenderButton('#f-push');
   renderPushPrefs();
   $('#f-pw').onclick=async()=>{
@@ -941,6 +955,196 @@ function openUserEditSheet(username){
       setTimeout(()=>{$('#f-err').textContent='';$('#f-err').style.color=''},1500);
     }catch(e){$('#f-err').textContent=(e&&e.error)||'Failed'}
   };
+}
+
+/* ---- PHA-1868: per-user calendar source config UI ----
+// The sheet is reachable from the avatar menu. Every authenticated
+// user can manage their own per-user sources; admins additionally see
+// shared sources and can edit/delete them. POST /api/calendar-sources
+// is the only path that takes credentials — this sheet is the
+// source-config counterpart to lib/calendar-sources.js. The DTO
+// (publicView) is the single source of truth for what the client sees;
+// no cred_blob ever crosses the network here.
+*/
+async function openCalendarSourcesSheet(){
+  const [sources, kindsRes] = await Promise.all([
+    api('GET','/api/calendar-sources'),
+    api('GET','/api/calendar-sources/kinds'),
+  ]);
+  openCalendarSourcesSheetWith(sources, kindsRes.kinds || []);
+}
+
+function openCalendarSourcesSheetWith(sources, kinds){
+  const myId = ME ? ME.id : null;
+  const myAdmin = !!(ME && ME.isAdmin);
+  const sourceRows = sources.map(s => {
+    const owned = s.user_id == null ? myAdmin : (s.user_id === myId || myAdmin);
+    const kind = kinds.find(k => k.id === s.provider) || { label: s.provider };
+    const errChip = s.last_error ? `<span class="pill" style="background:#b3453a" title="${esc(s.last_error)}">⚠ sync error</span>` : '';
+    const stale = !s.last_synced_at || (Date.now() - new Date(s.last_synced_at + 'Z').getTime() > 5*60*1000);
+    const syncLabel = s.last_synced_at ? new Date(s.last_synced_at + 'Z').toLocaleString() : 'never';
+    const offChip = !s.enabled ? `<span class="pill" style="background:var(--muted)">disabled</span>` : '';
+    const staleChip = stale && s.enabled ? `<span class="pill" style="background:#a78b3a">stale</span>` : '';
+    const sharedChip = s.user_id == null ? `<span class="pill" style="background:var(--accent)">shared</span>` : '';
+    return `<div class="src-row" data-id="${esc(s.id)}" style="--uc:${esc(s.color || '#7c9eb8')}">
+      <div class="src-color"></div>
+      <div class="src-info">
+        <div class="src-title">${esc(s.display_name || kind.label || s.calendar_id)}${sharedChip}${offChip}${staleChip}${errChip}</div>
+        <div class="src-meta">${esc(kind.label || s.provider)} · @${esc(s.account_id)} · ${esc(s.calendar_id)}${s.base_url ? ' · ' + esc(s.base_url) : ''}</div>
+        <div class="src-meta">last sync: ${esc(syncLabel)}</div>
+      </div>
+      <div class="src-actions">
+        <button class="link" data-act="refresh" title="Sync now">↻</button>
+        ${owned?`<button class="link" data-act="edit">Edit</button>`:''}
+        ${owned?`<button class="link danger" data-act="del">Delete</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+
+  openSheet(`<h2>Calendar sources</h2>
+    <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">Connect Nextcloud, iCloud, Microsoft 365, or Google Calendar so events flow into the household calendar grid. Credentials are encrypted at rest and never leave the server.</p>
+    <div class="src-list">${sourceRows || '<div class="empty" style="padding:24px 4px">No calendar sources yet — add one to start pulling events.</div>'}</div>
+    <button class="btn" id="cs-add" style="margin-top:14px">+ Add source</button>
+    <button class="link" style="margin-top:14px;width:100%;text-align:center" onclick="closeSheet()">Done</button>`);
+
+  document.querySelectorAll('.src-row').forEach(row => {
+    const id = row.dataset.id;
+    const refreshBtn = row.querySelector('[data-act="refresh"]');
+    if (refreshBtn) refreshBtn.onclick = async () => {
+      try { await api('POST',`/api/calendar-sources/${id}/refresh`); }
+      catch (e) { alert((e && e.error) || 'Sync failed'); }
+    };
+    const editBtn = row.querySelector('[data-act="edit"]');
+    if (editBtn) editBtn.onclick = () => {
+      const s = sources.find(x => String(x.id) === id);
+      openCalendarSourceEditSheet(s, kinds, async () => {
+        await refresh();
+        await openCalendarSourcesSheet();
+      });
+    };
+    const delBtn = row.querySelector('[data-act="del"]');
+    if (delBtn) delBtn.onclick = async () => {
+      if (!confirm('Delete this calendar source? Cached events will be removed.')) return;
+      try {
+        await api('DELETE',`/api/calendar-sources/${id}`);
+        await refresh();
+        await openCalendarSourcesSheet();
+      } catch (e) { alert((e && e.error) || 'Failed'); }
+    };
+  });
+
+  $('#cs-add').onclick = () => openCalendarSourceEditSheet(null, kinds, async () => {
+    await refresh();
+    await openCalendarSourcesSheet();
+  });
+}
+
+// Provider-aware add/edit form. Edit is restricted to display_name,
+// color, and enabled (provider / account / calendar / credentials are
+// immutable from PATCH — the user can delete + re-add to change those).
+function openCalendarSourceEditSheet(src, kinds, afterSave){
+  const isEdit = !!src;
+  const initialKind = isEdit ? kinds.find(k => k.id === src.provider) : kinds.find(k => !k.disabled);
+  const state = {
+    provider: initialKind ? initialKind.id : (kinds[0] && kinds[0].id),
+    account_id: src ? src.account_id : '',
+    calendar_id: src ? src.calendar_id : '',
+    base_url: src ? (src.base_url || '') : (initialKind ? (initialKind.baseUrlPlaceholder || '') : ''),
+    display_name: src ? (src.display_name || '') : '',
+    color: src ? (src.color || '#7c9eb8') : '#7c9eb8',
+    enabled: src ? !!src.enabled : true,
+    shared: src ? (src.user_id == null) : false,
+  };
+
+  function render(){
+    const kind = kinds.find(k => k.id === state.provider) || kinds.find(k => !k.disabled);
+    if (!kind) {
+      openSheet('<h2>No providers available</h2><button class="link" onclick="closeSheet()">Close</button>');
+      return;
+    }
+    const credFields = (kind.credentialFields || []).map(f => {
+      const inputType = f.secret ? 'password' : (f.type === 'datetime' ? 'datetime-local' : 'text');
+      const ph = f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : '';
+      return `<div><label>${esc(f.label)}${f.required ? ' *' : ''}</label>
+        <input class="field" type="${inputType}" id="cred-${esc(f.id)}" autocomplete="off"${ph}></div>`;
+    }).join('');
+    const providerOpts = kinds.filter(k => !k.disabled).map(k =>
+      `<button type="button" data-v="${esc(k.id)}" class="${k.id===state.provider?'sel':''}">${esc(k.label)}</button>`
+    ).join('');
+    const disabledOpts = kinds.filter(k => k.disabled).map(k =>
+      `<button type="button" disabled style="opacity:.45">${esc(k.label)} <small>(coming soon)</small></button>`
+    ).join('');
+    const kindHint = kind.comingSoon ? `<p style="font-size:12px;color:var(--muted);margin-top:6px">${esc(kind.comingSoon)}</p>` : '';
+
+    openSheet(`<h2>${isEdit ? 'Edit calendar source' : 'Add calendar source'}</h2>
+      ${isEdit ? '' : `<label>Provider</label><div class="seg" id="prov-seg">${providerOpts}${disabledOpts}</div>${kindHint}`}
+      <label>${esc(kind.accountIdLabel || 'Account ID')}</label>
+      <input class="field" id="f-acct" value="${esc(state.account_id)}" placeholder="${esc(kind.accountIdPlaceholder || '')}" ${isEdit ? 'readonly style="opacity:.6;cursor:not-allowed"' : ''}>
+      <label>${esc(kind.calendarIdLabel || 'Calendar ID')}</label>
+      <input class="field" id="f-calid" value="${esc(state.calendar_id)}" placeholder="${esc(kind.calendarIdPlaceholder || '')}" ${isEdit ? 'readonly style="opacity:.6;cursor:not-allowed"' : ''}>
+      <label>Base URL ${isEdit ? '' : '(optional)'}</label>
+      <input class="field" id="f-base" value="${esc(state.base_url)}" placeholder="${esc(kind.baseUrlPlaceholder || '')}" ${isEdit ? 'readonly style="opacity:.6;cursor:not-allowed"' : ''}>
+      <label>Display name</label>
+      <input class="field" id="f-name" value="${esc(state.display_name)}" placeholder="Personal, Work, Family…">
+      <label>Color</label>
+      <input class="field" type="color" id="f-color" value="${esc(state.color)}">
+      ${isEdit ? '' : `<h3>Credentials</h3>${credFields}`}
+      ${!isEdit && ME && ME.isAdmin ? `<label class="checkbox"><input type="checkbox" id="f-shared" ${state.shared?'checked':''}> Shared (visible to everyone in the household)</label>` : ''}
+      ${isEdit ? `<label class="checkbox"><input type="checkbox" id="f-enabled" ${state.enabled?'checked':''}> Enabled (uncheck to pause syncing without deleting)</label>` : ''}
+      <button class="btn" style="margin-top:16px" id="f-save">${isEdit ? 'Save' : 'Add it'}</button>
+      ${!isEdit ? `<p style="font-size:12px;color:var(--muted);margin-top:10px">Credentials are encrypted with AES-256-GCM (key from <code>CALENDAR_CRED_KEY</code>) and never leave the server.</p>` : ''}
+      <button class="link" style="margin-top:14px;width:100%;text-align:center" onclick="openCalendarSourcesSheet()">← Back to sources</button>
+      <div class="err" id="f-err"></div>`);
+
+    if (!isEdit) {
+      segWire('prov-seg');
+      document.querySelectorAll('#prov-seg button[data-v]').forEach(b => {
+        b.addEventListener('click', () => {
+          state.provider = b.dataset.v;
+          const newKind = kinds.find(k => k.id === state.provider);
+          if (newKind && newKind.baseUrlPlaceholder && !state.base_url) {
+            state.base_url = newKind.baseUrlPlaceholder;
+          }
+          render();
+        }, { once: true });
+      });
+    }
+    $('#f-save').onclick = async () => {
+      const body = {
+        display_name: $('#f-name').value.trim() || null,
+        color: $('#f-color').value,
+      };
+      if (!isEdit) {
+        body.provider = state.provider;
+        body.account_id = $('#f-acct').value.trim();
+        body.calendar_id = $('#f-calid').value.trim();
+        body.base_url = $('#f-base').value.trim() || null;
+        if (!body.account_id || !body.calendar_id) {
+          $('#f-err').textContent = 'Account ID and Calendar ID are required';
+          return;
+        }
+        const k = kinds.find(k => k.id === state.provider);
+        for (const f of (k.credentialFields || [])) {
+          const v = $('#cred-' + f.id).value.trim();
+          if (f.required && !v) {
+            $('#f-err').textContent = f.label + ' is required';
+            return;
+          }
+          if (v) body[f.id] = v;
+        }
+        if (ME && ME.isAdmin && $('#f-shared').checked) body.shared = true;
+      } else {
+        body.enabled = $('#f-enabled').checked;
+      }
+      try {
+        if (isEdit) await api('PATCH',`/api/calendar-sources/${src.id}`,body);
+        else await api('POST','/api/calendar-sources',body);
+        closeSheet();
+        if (afterSave) await afterSave();
+      } catch (e) { $('#f-err').textContent = (e && e.error) || 'Failed'; }
+    };
+  }
+  render();
 }
 
 /* ---- init ---- */

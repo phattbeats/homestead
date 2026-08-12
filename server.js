@@ -872,6 +872,114 @@ app.delete('/api/calendar-sources/:id', auth, (req, res) => {
   res.json({ ok: true });
 });
 
+// PHA-1868: edit display metadata for an existing calendar source. Only
+// display_name / color / enabled are mutable here — provider, account_id,
+// calendar_id, base_url, and credentials are immutable (re-add if you
+// need to change them). The endpoint exists so the per-user source config
+// UI can rename a source, recolor it, or pause it without forcing a
+// credential re-prompt.
+app.patch('/api/calendar-sources/:id', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  const src = db.prepare('SELECT * FROM calendar_sources WHERE id = ?').get(req.params.id);
+  if (!src) return res.status(404).json({ error: 'not found' });
+  if (src.user_id != null && src.user_id !== me.id && !me.is_admin) {
+    return res.status(403).json({ error: 'not yours' });
+  }
+  const body = req.body || {};
+  const updates = [];
+  const params = [];
+  if ('display_name' in body) {
+    updates.push('display_name = ?');
+    params.push(body.display_name ? String(body.display_name).slice(0, 128) : null);
+  }
+  if ('color' in body) {
+    updates.push('color = ?');
+    params.push(parseColor(body.color) || '#7c9eb8');
+  }
+  if ('enabled' in body) {
+    updates.push('enabled = ?');
+    params.push(body.enabled ? 1 : 0);
+  }
+  if (!updates.length) {
+    return res.json(calendarSources.publicView(src));
+  }
+  params.push(src.id);
+  db.prepare(`UPDATE calendar_sources SET ${updates.join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(...params);
+  const updated = db.prepare('SELECT * FROM calendar_sources WHERE id = ?').get(src.id);
+  res.json(calendarSources.publicView(updated));
+});
+
+// PHA-1868: provider metadata for the per-user source config UI.
+// Returns the list of providers the SPA can render an add form for, with
+// their credential-field schemas. The `disabled` flag lets the UI show
+// a "coming soon" placeholder for providers that are reserved in the
+// allow-list but not yet shipped (e.g. google until PHA-1865 merges).
+//
+// The endpoint never echoes any credential — it only describes the shape
+// the UI should render. The actual POST /api/calendar-sources path stays
+// the single mutation surface for credentials.
+app.get('/api/calendar-sources/kinds', auth, (req, res) => {
+  res.json({
+    kinds: [
+      {
+        id: 'caldav_nextcloud',
+        label: 'Nextcloud (CalDAV)',
+        kind: 'caldav',
+        baseUrlPlaceholder: 'https://nextcloud.example.com/remote.php/dav',
+        accountIdLabel: 'Nextcloud username',
+        accountIdPlaceholder: 'brandon',
+        calendarIdLabel: 'Calendar ID / href',
+        calendarIdPlaceholder: 'personal',
+        credentialFields: [
+          { id: 'app_password', label: 'App password', secret: true, required: true },
+        ],
+      },
+      {
+        id: 'caldav_icloud',
+        label: 'Apple iCloud (CalDAV)',
+        kind: 'caldav',
+        baseUrlPlaceholder: 'https://caldav.icloud.com',
+        accountIdLabel: 'Apple ID (email)',
+        accountIdPlaceholder: 'you@icloud.com',
+        calendarIdLabel: 'Calendar ID / href',
+        calendarIdPlaceholder: 'home',
+        credentialFields: [
+          { id: 'app_password', label: 'App-specific password', secret: true, required: true },
+        ],
+      },
+      {
+        id: 'ms365',
+        label: 'Microsoft 365 (Graph)',
+        kind: 'graph',
+        accountIdLabel: 'UPN / email',
+        accountIdPlaceholder: 'you@phatt.vip',
+        calendarIdLabel: 'Graph calendar ID',
+        calendarIdPlaceholder: 'AAMkAGRiYW5kb24tY2Fs',
+        credentialFields: [
+          { id: 'access_token', label: 'Access token', secret: true, required: true },
+          { id: 'refresh_token', label: 'Refresh token', secret: true, required: false },
+          { id: 'expires_at', label: 'Expires at (ISO 8601)', secret: false, required: false, type: 'datetime' },
+          { id: 'client_id', label: 'Azure app client ID', secret: false, required: false },
+          { id: 'tenant_id', label: 'Azure tenant ID (or "common")', secret: false, required: false },
+          { id: 'scope', label: 'OAuth scope', secret: false, required: false, placeholder: 'Calendars.Read offline_access' },
+        ],
+      },
+      {
+        id: 'google',
+        label: 'Google Calendar',
+        kind: 'google',
+        disabled: true,
+        accountIdLabel: 'Google account email',
+        accountIdPlaceholder: 'you@gmail.com',
+        calendarIdLabel: 'Calendar ID',
+        calendarIdPlaceholder: 'primary',
+        credentialFields: [],
+        comingSoon: 'PHA-1865 (GoogleSource) ships in a parallel branch.',
+      },
+    ],
+  });
+});
+
 app.post('/api/calendar-sources/:id/refresh', auth, (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
   const src = db.prepare('SELECT * FROM calendar_sources WHERE id = ?').get(req.params.id);
