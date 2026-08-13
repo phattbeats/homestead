@@ -302,6 +302,35 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 .src-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
 .src-actions .link{padding:8px 10px;border-radius:8px;background:var(--bg);border:1px solid var(--line);color:var(--ink);font-weight:600}
 .src-actions .link.danger{color:#b3453a;border-color:rgba(179,69,58,.3)}
+
+/* PHA-1896 (PHA-1617.3): connected-agents / token-manager UI.
+   Mirrors the calendar-sources row pattern but with a `token` chip
+   (the 16-char non-secret prefix shown as a label) and a special
+   secret-issuance modal (copy-once plaintext reveal). */
+.tok-list{display:flex;flex-direction:column;gap:8px}
+.tok-row{display:flex;gap:12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--surface);align-items:center}
+.tok-mark{width:36px;height:36px;border-radius:50%;background:var(--accent-soft);color:var(--accent);flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700}
+.tok-info{flex:1;min-width:0;min-width:0}
+.tok-label{font-weight:700;font-size:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tok-prefix{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:11px;
+  background:var(--bg);border:1px solid var(--line);padding:2px 6px;border-radius:6px;color:var(--muted);letter-spacing:-.02em}
+.tok-meta{font-size:12px;color:var(--muted);margin-top:3px}
+.tok-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.tok-actions .link{padding:8px 10px;border-radius:8px;background:var(--bg);border:1px solid var(--line);color:var(--ink);font-weight:600}
+.tok-actions .link.danger{color:#b3453a;border-color:rgba(179,69,58,.3)}
+
+/* PHA-1896: copy-once plaintext reveal modal. The plaintext is shown
+   in a monospace block inside a bordered card. The "I've stored it"
+   acknowledgement button is disabled until the user has either
+   clicked "Copy" or manually toggled the checkbox. This is a UX guard
+   against dismissing the modal without saving the token somewhere. */
+.secret-card{background:var(--ink);color:#fff;border-radius:14px;padding:14px 16px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12px;line-height:1.5;word-break:break-all;border:1px solid var(--ink);position:relative}
+.secret-card .copy-row{display:flex;justify-content:flex-end;margin-top:10px;gap:8px}
+.secret-card .copy-row .link{color:#FFFBF5;background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18);font-family:'Plus Jakarta Sans',sans-serif;font-size:13px}
+.secret-card .copy-row .link:active{background:rgba(255,255,255,.18)}
+.secret-card .copied{color:#9eb48a;font-size:12px;font-weight:700;font-family:'Plus Jakarta Sans',sans-serif;align-self:center;display:none}
+.secret-card .copied.on{display:inline-block}
 </style>
 </head>
 <body>
@@ -888,6 +917,7 @@ $('#avatarBtn').onclick=()=>{
   const isAdmin=!!(ME&&ME.isAdmin);
   openSheet(`<h2>${esc(ME.display)}</h2>
     <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-calendar-sources">📅 Calendar sources</button>
+    <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-connected-agents">🔌 Connected agents</button>
     ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-settings">⚙️ Settings · manage household</button>`:''}
     <h3>Push notifications</h3>
     <p style="font-size:13px;color:var(--muted);margin:-4px 0 10px">Get reminders for chores due today and your turn to take a rotating chore. iPhone users: add Homestead to your Home Screen first (iOS 16.4+ required for push).</p>
@@ -903,6 +933,7 @@ $('#avatarBtn').onclick=()=>{
     $('#f-settings').onclick=()=>openSettingsSheet();
   }
   $('#f-calendar-sources').onclick=()=>openCalendarSourcesSheet();
+  $('#f-connected-agents').onclick=()=>openConnectedAgentsSheet();
   pushRenderButton('#f-push');
   renderPushPrefs();
   $('#f-pw').onclick=async()=>{
@@ -1215,6 +1246,226 @@ function openCalendarSourceEditSheet(src, kinds, afterSave){
     };
   }
   render();
+}
+
+/* ---- connected agents / token manager (PHA-1896 / PHA-1617.3) ----
+//
+// Surfaces the /api/agent-tokens endpoints added in PHA-1617.1 (.1 ships
+// the schema + routes; this is .3, the user-facing UI).
+//
+// Design-doc reference: PHA-1617 doc 'meta-agent-socket-design' rev 1,
+// §9.1 (User settings UI) — and §4.3 for the REST contract the sheets
+// consume. Copy-once plaintext modal follows §4.2 (token format /
+// `homestead_pat_<43-char base64url>`).
+//
+// Three sheets:
+//   1. openConnectedAgentsSheet() — top-level list. Shows the user's
+//      PAT rows (label, 16-char prefix chip, scopes, created, last_used,
+//      revoked state). "+ New token" button opens the issue flow.
+//   2. openTokenIssueSheet() — label entry. POSTs to /api/agent-tokens,
+//      then opens the copy-once reveal modal with the returned plaintext.
+//   3. openTokenRevealSheet(token) — copy-once modal. Plaintext is shown
+//      in a dark monospace card with a Copy button. The "I've stored it,
+//      close" acknowledge button is enabled only after Copy fires (or the
+//      user toggles a checkbox fallback for browsers that block
+//      clipboard writes). Closes on acknowledge; the plaintext is gone
+//      for good once the modal is dismissed (the server only stored the
+//      bcrypt hash).
+*/
+async function openConnectedAgentsSheet(){
+  const tokens = await api('GET','/api/agent-tokens');
+  openConnectedAgentsSheetWith(tokens);
+}
+
+function openConnectedAgentsSheetWith(tokens){
+  const myAdmin = !!(ME && ME.isAdmin);
+  const rows = tokens.map(t => {
+    const isRevoked = !!t.revoked_at;
+    const isExpired = t.expires_at && new Date(t.expires_at + 'Z').getTime() < Date.now();
+    const stateChip = isRevoked
+      ? '<span class="pill" style="background:var(--muted)">revoked</span>'
+      : isExpired
+        ? '<span class="pill" style="background:#a78b3a">expired</span>'
+        : (t.scopes === 'admin'
+            ? '<span class="pill" style="background:var(--accent)">admin</span>'
+            : '<span class="pill" style="background:#7c9a72">active</span>');
+    const lastUsed = t.last_used_at
+      ? `last used ${esc(new Date(t.last_used_at + 'Z').toLocaleString())}`
+      : 'never used';
+    const expiresAt = t.expires_at
+      ? ` · expires ${esc(new Date(t.expires_at + 'Z').toLocaleDateString())}`
+      : '';
+    const createdAt = t.created_at
+      ? `created ${esc(new Date(t.created_at + 'Z').toLocaleDateString())}`
+      : '';
+    return `<div class="tok-row" data-id="${esc(t.id)}">
+      <div class="tok-mark" aria-hidden="true">🔑</div>
+      <div class="tok-info">
+        <div class="tok-label">${esc(t.label)}${stateChip}</div>
+        <div class="tok-meta"><span class="tok-prefix">${esc(t.token_prefix)}…</span> · ${createdAt}${expiresAt}</div>
+        <div class="tok-meta">${lastUsed}</div>
+      </div>
+      <div class="tok-actions">
+        ${isRevoked ? '' : `<button class="link danger" data-act="revoke">Revoke</button>`}
+      </div>
+    </div>`;
+  }).join('');
+
+  openSheet(`<h2>Connected agents</h2>
+    <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">Personal access tokens let your own agent (OpenClaw, scripts, anything MCP-speaking) call Homestead with the same powers your session has. The plaintext is shown <b>once</b> at creation &mdash; store it in your password manager. Revoking a token is immediate.</p>
+    <div class="tok-list">${rows || '<div class="empty" style="padding:24px 4px">No tokens yet &mdash; mint one to wire up your harness.</div>'}</div>
+    <button class="btn" id="tok-add" style="margin-top:14px">+ New token</button>
+    <button class="link" style="margin-top:14px;width:100%;text-align:center" onclick="closeSheet()">Done</button>`);
+
+  document.querySelectorAll('.tok-row').forEach(row => {
+    const id = row.dataset.id;
+    const revokeBtn = row.querySelector('[data-act="revoke"]');
+    if (revokeBtn) revokeBtn.onclick = async () => {
+      const token = tokens.find(x => String(x.id) === id);
+      if (!token) return;
+      if (!confirm(`Revoke "${token.label}"?\n\nAny harness using this token will lose access immediately. This cannot be undone.`)) return;
+      try {
+        await api('DELETE', `/api/agent-tokens/${id}`);
+        await openConnectedAgentsSheet();
+      } catch (e) {
+        alert((e && e.error) || 'Revoke failed');
+      }
+    };
+  });
+
+  $('#tok-add').onclick = () => openTokenIssueSheet(async () => {
+    await openConnectedAgentsSheet();
+  });
+}
+
+function openTokenIssueSheet(afterIssue){
+  openSheet(`<h2>New agent token</h2>
+    <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">Pick a label that tells future-you what this token is <em>for</em> (e.g. <code>Laptop OpenClaw</code>, <code>Phone automation</code>, <code>MCP test</code>). The plaintext is shown <b>once</b> on the next screen &mdash; Homestead never stores it.</p>
+    <label>Label</label>
+    <input class="field" id="tok-label" placeholder="e.g. Laptop OpenClaw" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="64">
+    <label>Expires <span style="color:var(--muted);font-weight:500">(optional, ISO 8601 date)</span></label>
+    <input class="field" id="tok-expires" type="date" autocomplete="off">
+    <button class="btn" id="tok-issue" style="margin-top:14px">Generate token</button>
+    <button class="link" style="margin-top:14px;width:100%;text-align:center" onclick="closeSheet()">Cancel</button>
+    <div class="err" id="tok-err"></div>`);
+
+  // Suggest a label based on User-Agent / platform (small touch, but
+  // shaves a step off the most common case: "Laptop OpenClaw").
+  if (!$('#tok-label').value) {
+    const guess = platformTokenLabel();
+    if (guess) $('#tok-label').value = guess;
+  }
+
+  $('#tok-issue').onclick = async () => {
+    const label = ($('#tok-label').value || '').trim();
+    if (!label) { $('#tok-err').textContent = 'Label is required'; return; }
+    if (label.length > 64) { $('#tok-err').textContent = 'Label is too long (max 64 chars)'; return; }
+    const expiresRaw = $('#tok-expires').value || '';
+    let expires_at = null;
+    if (expiresRaw) {
+      const d = new Date(expiresRaw + 'T23:59:59');
+      if (isNaN(d.getTime())) { $('#tok-err').textContent = 'Invalid expiry date'; return; }
+      expires_at = d.toISOString();
+    }
+    try {
+      const issued = await api('POST', '/api/agent-tokens', { label, expires_at });
+      // Open the copy-once reveal modal. The label round-trips back so
+      // the modal can echo "Stored under: <label>" as a confirmation
+      // breadcrumb.
+      openTokenRevealSheet({ label: issued.label, token_prefix: issued.token_prefix, token_plaintext: issued.token_plaintext }, async () => {
+        if (afterIssue) await afterIssue();
+        else closeSheet();
+      });
+    } catch (e) {
+      $('#tok-err').textContent = (e && e.error) || 'Failed to issue token';
+    }
+  };
+}
+
+function openTokenRevealSheet(token, onAcknowledge){
+  // Copy-once modal. The plaintext lives in a dark monospace block;
+  // the Copy button fires navigator.clipboard.writeText() and toggles a
+  // green ✓ for ~2s. The acknowledge button is enabled only after the
+  // user has copied OR manually checked the fallback checkbox (covers
+  // browsers that block programmatic clipboard writes on insecure
+  // origins). Once acknowledged, the modal closes — the plaintext is
+  // gone for good (server only stored the bcrypt hash, per design doc
+  // §4.1 / §4.2).
+  const plaintext = token.token_plaintext || '';
+  let copied = false;
+  let acknowledged = false;
+  openSheet(`<h2>Save your new token</h2>
+    <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">Homestead only stored a hash, so this is the <b>only time</b> you'll see the plaintext. Copy it now into your password manager or paste it into your harness config. Prefix <span class="tok-prefix">${esc(token.token_prefix)}…</span> identifies this row in the list.</p>
+    <div class="secret-card" id="tok-secret">
+      <div id="tok-secret-text">${esc(plaintext)}</div>
+      <div class="copy-row">
+        <span class="copied" id="tok-copied">✓ Copied</span>
+        <button class="link" id="tok-copy" type="button">Copy</button>
+      </div>
+    </div>
+    <label class="checkbox" style="margin-top:18px"><input type="checkbox" id="tok-ack"> I've stored this token somewhere safe. I understand Homestead cannot show it again.</label>
+    <button class="btn" id="tok-done" disabled style="margin-top:10px;opacity:.5">I've stored it &mdash; close</button>
+    <button class="link" style="margin-top:14px;width:100%;text-align:center" onclick="closeSheet()">Cancel</button>`);
+
+  const refreshEnabled = () => {
+    const ok = copied || ($('#tok-ack') && $('#tok-ack').checked);
+    const btn = $('#tok-done');
+    btn.disabled = !ok;
+    btn.style.opacity = ok ? '1' : '.5';
+  };
+
+  const flashCopied = () => {
+    const el = $('#tok-copied');
+    el.classList.add('on');
+    setTimeout(() => el.classList.remove('on'), 2200);
+  };
+
+  $('#tok-copy').onclick = async () => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(plaintext);
+      } else {
+        // Fallback for older browsers / insecure origins: select the
+        // text in the secret block so the user can hit Cmd/Ctrl+C.
+        const range = document.createRange();
+        range.selectNodeContents($('#tok-secret-text'));
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      copied = true;
+      flashCopied();
+      refreshEnabled();
+    } catch (e) {
+      // Clipboard rejected (permission denied / insecure origin).
+      // User can still tick the ack checkbox to proceed.
+      alert('Clipboard write blocked — please select the text manually or tick the acknowledgement below.');
+    }
+  };
+
+  $('#tok-ack').addEventListener('change', refreshEnabled);
+
+  $('#tok-done').onclick = async () => {
+    acknowledged = true;
+    if (onAcknowledge) await onAcknowledge();
+    else closeSheet();
+  };
+}
+
+// Best-effort label guess based on UA hints. Just a tiny UX touch —
+// keeps the field empty if no guess fits.
+function platformTokenLabel(){
+  try {
+    const ua = (navigator.userAgent || '').toLowerCase();
+    const plat = (navigator.platform || '').toLowerCase();
+    if (/iphone|ipad|ipod/.test(ua)) return 'iPhone';
+    if (/android/.test(ua)) return 'Android phone';
+    if (/mac/.test(plat)) return 'Mac';
+    if (/win/.test(plat)) return 'Windows';
+    if (/linux/.test(plat)) return 'Linux';
+    if (/cros/.test(ua)) return 'Chromebook';
+  } catch {}
+  return '';
 }
 
 /* ---- init ---- */
