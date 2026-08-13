@@ -1,5 +1,60 @@
 # Changelog
 
+## v0.1.18 (2026-08-12) — PHA-1902 (PHA-1617.9)
+
+- **`homestead_get_user_context` snapshot endpoint** — single-call
+  morning-brief context shape from the BYO-harness Meta-Agent Socket
+  design doc §7. The harness (or the drawer, or the future MCP tool)
+  makes one GET and gets everything it needs to render or reason about
+  the user's day. Same builder backs all three callers so the envelope
+  can't drift.
+- **New endpoint**: `GET /api/me/snapshot` (auth required — session
+  cookie, PAT, or header-trust). Returns:
+  ```json
+  {
+    "user":      { "id", "username", "display", "groups", "isAdmin", "tz" },
+    "now":       "<ISO 8601>",
+    "today":     "YYYY-MM-DD",
+    "today_tasks":    [native tasks due today, assignee IN (user, 'all')],
+    "today_events":   [native + provider-cached events for today],
+    "overdue_tasks":  [native tasks overdue, not done],
+    "upcoming": {
+      "events_next_7_days":     [merged events through today+7],
+      "chores_due_next_7_days": [tasks due tomorrow through today+7]
+    },
+    "lists":            {},
+    "activity_recent":  [last 25 notification_log rows for the user]
+  }
+  ```
+- **Tz override via header**: `X-Homestead-Tz: <IANA name>` — the SPA
+  can pin the snapshot's `today` boundary to the user's wall clock
+  even when the server is in a different timezone. Defaults to the
+  host's resolved timezone.
+- **`lib/snapshot.js`** — the snapshot builder. Exposes `build(db,
+  username, {tz, now})` plus the helpers `isoDateLocal`, `resolveTz`,
+  `mergedEventsFor`, `recentActivity`. No LLM in the loop; server-side
+  assembly only. No data truncation at the data layer; size caps are
+  HTTP/transport concerns.
+- **Activity-recent v0 source = `notification_log`**. PHA-1622
+  (activity feed) will replace it with a richer audit trail once that
+  ships; the envelope shape is forward-compatible so the swap is a
+  one-file change in `lib/snapshot.js`.
+- **`lists` is `{}` for v0** — there is no `lists` table yet. The
+  design doc's `groceries` example will land under a separate
+  follow-up; the snapshot endpoint returns an empty object so the
+  §7 contract is "empty object" not "missing key".
+- **Tests**: 41 unit assertions in `scripts/test-snapshot.js` + 31
+  smoke checks in `scripts/smoke-snapshot.js`, both wired into
+  `npm test` and `npm run test:smoke`. The smoke exercises the
+  end-to-end flow against a live `server.js`: auth, scoping,
+  today/upcoming windows, done-vs-open filtering, and the
+  `X-Homestead-Tz` override.
+- **Test-only credential-scanning**: the snapshot payload never
+  contains `cred_blob`, `app_password`, `access_token`,
+  `refresh_token`, or `client_secret` substrings. Defended both in
+  the unit test (response body scan) and the smoke (response body
+  scan).
+
 ## v0.1.17 (2026-08-12) — PHA-1898 (PHA-1617.5)
 
 - **Meta-agent chat drawer UI shell (design doc §6.3).**
