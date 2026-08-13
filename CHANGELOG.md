@@ -1,5 +1,45 @@
 # Changelog
 
+## v0.1.19 (2026-08-12) — PHA-1896 (PHA-1617.3)
+
+- **Connected-agents sheet (token manager).** Avatar menu → **🔌
+  Connected agents** opens the user-facing token manager for the
+  PAT (personal access token) backend shipped in PHA-1617.1. Lists
+  every active token for the signed-in user as a row: label,
+  16-char non-secret prefix chip (`homestead_pat_Xxxxxxxx…`),
+  scopes chip (active / admin / revoked / expired), created /
+  expires / last-used metadata, and a per-row **Revoke** action
+  that hits `DELETE /api/agent-tokens/:id`. Empty-state copy nudges
+  the user toward the **+ New token** button.
+- **Token-issue flow with copy-once plaintext reveal.** The issue
+  sheet accepts a label (required, 64-char cap, pre-filled with a
+  best-effort UA-derived guess like "Mac" / "iPhone") and an
+  optional expiry date. On `POST /api/agent-tokens` the new
+  modal opens with the plaintext rendered in a dark monospace
+  card, a **Copy** button (`navigator.clipboard.writeText` with a
+  manual-select fallback for browsers that block programmatic
+  clipboard writes), and a green ✓ Copied flash for ~2.2s. The
+  **"I've stored it — close"** acknowledgement button stays
+  disabled until the user either copies OR ticks the manual
+  acknowledgement checkbox. Closes only on acknowledgement; once
+  dismissed, the plaintext is gone for good (the server only
+  stored the bcrypt hash, per design doc §4.1 / §4.2).
+- **No new server-side endpoints.** Pure SPA work — consumes the
+  three `/api/agent-tokens` routes (`GET` / `POST` /
+  `DELETE /:id`) shipped in PHA-1617.1. Admin-provisioned tokens
+  via `POST /api/users/:username/agent-tokens` are out of scope
+  for v0 of this UI; the admin cross-household view belongs to
+  PHA-1617.4 (agent_endpoints) which will land its own settings
+  surface.
+- **Tests:** `scripts/smoke-token-manager-ui.js` (new) — exercises
+  the full SPA-facing lifecycle against a live `server.js`: list
+  empty, issue token, confirm plaintext format (`homestead_pat_`
+  + 43-char base64url), confirm the stored row carries the right
+  prefix + bcrypt hash + no plaintext anywhere on disk, revoke
+  the token, confirm subsequent list filters it out and a
+  Bearer auth attempt with the now-revoked plaintext returns
+  401. Wired into `npm run test:smoke`.
+
 ## v0.1.18 (2026-08-12) — PHA-1902 (PHA-1617.9)
 
 - **`homestead_get_user_context` snapshot endpoint** — single-call
