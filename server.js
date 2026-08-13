@@ -601,6 +601,99 @@ app.delete('/api/users/:username/agent-endpoints/:id', auth, requireAdmin, (req,
   res.json({ ok: true });
 });
 
+// ---- PHA-1617.5: chat drawer stub ----
+// Frontend-only shell for the meta-agent chat drawer (design doc §6.3).
+// The composer POSTs {message, endpoint_id, conversation_id} here and the
+// response is rendered by the SSE/JSON consumer in public/index.html.
+//
+// This is the STUB layer for the UI shell sub-task (PHA-1617.5). It does
+// not yet HMAC-sign or forward to the user's harness URL — that's
+// PHA-1617.6's job. The wire shape (SSE chunks OR single JSON reply) is
+// stable and intentionally matches §6.3 so the .6 backend can swap in
+// without any frontend changes.
+app.post('/api/drawer', auth, async (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const b = req.body || {};
+  const message = typeof b.message === 'string' ? b.message.trim() : '';
+  const endpointId = Number(b.endpoint_id);
+  const conversationId = typeof b.conversation_id === 'string' && b.conversation_id
+    ? b.conversation_id
+    : 'c-stub-' + Date.now().toString(36);
+  if (!message) return res.status(400).json({ error: 'message required' });
+  if (!Number.isInteger(endpointId) || endpointId <= 0) {
+    return res.status(400).json({ error: 'endpoint_id required' });
+  }
+
+  // Scope to the caller's enabled drawer endpoints. We never read the
+  // secret here — the .6 dispatcher is the only place that handles the
+  // HMAC signing.
+  const ep = db.prepare(
+    `SELECT id, harness_label, url FROM agent_endpoints
+       WHERE id = ? AND user_id = ? AND kind = 'drawer' AND enabled = 1`
+  ).get(endpointId, me.id);
+  if (!ep) return res.status(404).json({ error: 'endpoint_not_found' });
+
+  // Honour `Accept: application/json` to return a single-shot reply; SSE
+  // is the default. The frontend consumer supports both per §6.3.
+  const accept = String(req.headers.accept || '').toLowerCase();
+  const wantsJson = accept.includes('application/json');
+
+  // Record dispatch bookkeeping (last_used_at + last_status_code) so the
+  // settings UI can show "last contacted" without a separate query. The
+  // stub always succeeds; .6 will record real status / errors.
+  agentEndpoints.recordDispatch(db, ep.id, { statusCode: 200, error: null });
+
+  if (wantsJson) {
+    return res.json({
+      request_id: conversationId,
+      text: `Stub reply from Homestead (PHA-1617.5). Your message was "${message.slice(0, 80)}". ` +
+            `Endpoint "${ep.harness_label}" accepted it. The real HMAC-signed forwarder ` +
+            `arrives in PHA-1617.6.`,
+      tokens_in: message.length,
+      tokens_out: 0,
+    });
+  }
+
+  // SSE reply. Stream a small synthetic agent response in chunks so the
+  // frontend's `event: chunk` consumer visibly exercises the streaming
+  // path. Chunks are flushed individually with a small delay so the UI
+  // shows the typewriter effect.
+  res.status(200);
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders && res.flushHeaders();
+
+  const writeSse = (event, data) => {
+    if (res.writableEnded) return;
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  // Surface the harness label so the UI can show "via <harness>" if it wants.
+  writeSse('chunk', { text: `Stub reply via "${ep.harness_label}":\n\n` });
+  const lines = [
+    `Heard: "${message.slice(0, 120)}${message.length > 120 ? '…' : ''}"`,
+    ``,
+    `PHA-1617.5 ships the drawer UI shell (composer + SSE/JSON consumer).`,
+    `The HMAC-signed outbound forwarder to your harness lands in PHA-1617.6.`,
+  ];
+  for (const line of lines) {
+    if (res.writableEnded) break;
+    await new Promise(r => setTimeout(r, 90));
+    writeSse('chunk', { text: line + '\n' });
+  }
+  writeSse('done', {
+    request_id: conversationId,
+    tokens_in: message.length,
+    tokens_out: 0,
+    duration_ms: 90 * lines.length,
+  });
+  res.end();
+});
+
 // ---- groups ----
 // Read-only view (PHA-1618: authentik owns the group lifecycle). The
 // `?mine=1` query param returns just the authenticated user's groups so

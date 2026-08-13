@@ -141,6 +141,58 @@ nav button{display:flex;flex-direction:column;align-items:center;gap:3px;font-si
 nav button.on{color:var(--accent)}
 nav .ico{font-size:20px}
 
+/* ---- PHA-1898: meta-agent chat drawer (design doc §6.3) ---- */
+#drawerFab{position:fixed;right:20px;bottom:calc(env(safe-area-inset-bottom) + 156px);
+  width:52px;height:52px;border-radius:50%;background:var(--ink);color:#fff;font-size:22px;
+  box-shadow:0 8px 24px rgba(43,38,34,.32);transition:transform .35s var(--ease),opacity .35s var(--ease);
+  z-index:35;display:flex;align-items:center;justify-content:center;opacity:.95}
+#drawerFab:active{transform:scale(.92)}
+#drawerFab.off{opacity:0;pointer-events:none;transform:scale(.7)}
+#drawer{position:fixed;top:0;right:0;bottom:0;width:min(420px,100vw);background:var(--bg);
+  border-left:1px solid var(--line);box-shadow:-12px 0 40px rgba(0,0,0,.08);
+  transform:translateX(100%);transition:transform .42s var(--ease);z-index:80;
+  display:flex;flex-direction:column;min-height:0;visibility:hidden}
+#drawer.on{transform:none;visibility:visible}
+@media(max-width:540px){#drawer{width:100vw;border-left:none}}
+.drawer-head{padding:18px 18px 12px;display:flex;align-items:center;gap:12px;
+  border-bottom:1px solid var(--line);background:var(--surface);flex-shrink:0}
+.drawer-head .title{font-weight:800;font-size:15px;letter-spacing:-.01em;flex:1;min-width:0}
+.drawer-head .harness{font-size:11px;font-weight:700;color:var(--muted);
+  display:flex;gap:6px;align-items:center}
+.drawer-head .harness label{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin:0}
+.drawer-head .harness select{font-size:12px;font-weight:600;color:var(--ink);
+  background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:3px 6px;outline:none;cursor:pointer}
+.drawer-close{width:32px;height:32px;border-radius:10px;font-size:18px;color:var(--muted);flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.drawer-close:hover{background:var(--line)}
+.drawer-msgs{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px;min-height:0}
+.drawer-msg{max-width:88%;padding:10px 14px;border-radius:16px;font-size:14px;line-height:1.45;
+  white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word}
+.drawer-msg.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+.drawer-msg.agent{align-self:flex-start;background:var(--surface);color:var(--ink);
+  border:1px solid var(--line);border-bottom-left-radius:4px}
+.drawer-msg.system{align-self:center;background:var(--accent-soft);color:var(--accent);
+  font-size:12px;font-weight:600;border-radius:10px;padding:6px 12px}
+.drawer-msg.error{align-self:center;background:#F5E4E4;color:#9B3A3A;font-size:13px;border-radius:10px;padding:8px 12px;border:1px solid #E5C9C9}
+.drawer-typing{display:inline-flex;gap:4px;padding:2px 0;align-items:center}
+.drawer-typing span{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:typeBounce 1.2s infinite}
+.drawer-typing span:nth-child(2){animation-delay:.15s}
+.drawer-typing span:nth-child(3){animation-delay:.3s}
+@keyframes typeBounce{0%,80%,100%{opacity:.3;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+.drawer-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:24px;text-align:center;color:var(--muted);font-size:13px;gap:10px;min-height:0}
+.drawer-empty .ico{font-size:36px;opacity:.55}
+.drawer-empty .hint{font-size:12px;line-height:1.5;max-width:280px}
+.drawer-composer{padding:12px 14px calc(env(safe-area-inset-bottom) + 14px);
+  border-top:1px solid var(--line);background:var(--surface);display:flex;gap:8px;align-items:flex-end;flex-shrink:0}
+.drawer-composer textarea{flex:1;resize:none;border:1px solid var(--line);border-radius:14px;
+  padding:10px 12px;background:var(--bg);outline:none;font-family:inherit;font-size:14px;
+  line-height:1.4;max-height:140px;min-height:40px;transition:border-color .25s var(--ease)}
+.drawer-composer textarea:focus{border-color:var(--accent)}
+.drawer-composer textarea:disabled{opacity:.6;cursor:not-allowed}
+.drawer-send{width:42px;height:42px;border-radius:14px;background:var(--accent);color:#fff;
+  font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .2s var(--ease)}
+.drawer-send:disabled{background:var(--line);color:var(--muted);cursor:not-allowed}
+
 /* modal */
 #modal{position:fixed;inset:0;background:rgba(43,38,34,.4);display:none;align-items:flex-end;
   justify-content:center;z-index:50;backdrop-filter:blur(4px)}
@@ -314,6 +366,24 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 <div id="shell"><iframe id="shellFrame" src="about:blank" allow="fullscreen; autoplay; clipboard-write"></iframe></div>
 <div id="dot">🏡</div>
+
+<!-- PHA-1898: meta-agent chat drawer (design doc §6.3). Frontend-only shell:
+     composer + SSE/JSON consumer. POSTs to /api/drawer; the actual HMAC-signed
+     outbound forwarding to the user's harness URL is wired in PHA-1617.6. -->
+<button id="drawerFab" type="button" title="Open chat" aria-label="Open chat drawer">💬</button>
+<div id="drawer" role="dialog" aria-label="Chat drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <div class="title">Chat</div>
+    <div class="harness" id="drawerHarness"></div>
+    <button class="drawer-close" id="drawerClose" type="button" aria-label="Close drawer">×</button>
+  </div>
+  <div class="drawer-msgs" id="drawerMsgs"></div>
+  <form class="drawer-composer" id="drawerForm" autocomplete="off">
+    <textarea id="drawerInput" placeholder="Type a message…" rows="1" maxlength="8000"
+      aria-label="Message"></textarea>
+    <button class="drawer-send" id="drawerSend" type="submit" title="Send" aria-label="Send">↑</button>
+  </form>
+</div>
 
 <!-- PHA-1872: entity page (design doc PHA-1624 §7) -->
 <div id="entityPage">
@@ -1463,6 +1533,264 @@ $('#paletteInput').addEventListener('keydown',e=>{
     if(ME){clearInterval(check);openEntityPage(decodeURIComponent(m[1]),false)}
   },150);
 })();
+
+/* ---- PHA-1898: meta-agent chat drawer (design doc §6.3) ----
+   Frontend-only shell: composer + SSE/JSON consumer. Talks to the
+   stub /api/drawer backend (PHA-1617.6 will replace the stub with the
+   HMAC-signed outbound forwarder; the wire shape stays the same). */
+const DRAWER = {
+  open: false,
+  endpoints: [],
+  selectedId: null,
+  conversationId: null,
+  busy: false,
+  loaded: false,
+};
+
+function openDrawer() {
+  DRAWER.open = true;
+  $('#drawer').classList.add('on');
+  $('#drawer').setAttribute('aria-hidden', 'false');
+  $('#drawerFab').classList.add('off');
+  // Always refresh the endpoint list on open (cheap, in case the user added
+  // a new harness in another tab or after re-login).
+  loadDrawerEndpoints();
+  setTimeout(() => $('#drawerInput').focus(), 380);
+}
+function closeDrawer() {
+  DRAWER.open = false;
+  $('#drawer').classList.remove('on');
+  $('#drawer').setAttribute('aria-hidden', 'true');
+  $('#drawerFab').classList.remove('off');
+}
+$('#drawerFab').onclick = openDrawer;
+$('#drawerClose').onclick = closeDrawer;
+// ESC closes the drawer — standard dialog UX.
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && DRAWER.open) closeDrawer();
+});
+
+async function loadDrawerEndpoints() {
+  DRAWER.loaded = true;
+  try {
+    const res = await fetch('/api/agent-endpoints', { credentials: 'same-origin' });
+    if (res.ok) {
+      const data = await res.json().catch(() => []);
+      DRAWER.endpoints = (data || []).filter(e => e.kind === 'drawer' && e.enabled);
+    } else {
+      DRAWER.endpoints = [];
+    }
+  } catch (_) {
+    DRAWER.endpoints = [];
+  }
+  renderDrawerHarness();
+  renderDrawerEmpty();
+}
+
+function renderDrawerHarness() {
+  const slot = $('#drawerHarness');
+  const eps = DRAWER.endpoints;
+  if (!eps.length) { slot.innerHTML = ''; return; }
+  if (!DRAWER.selectedId || !eps.find(e => e.id === DRAWER.selectedId)) {
+    DRAWER.selectedId = eps[0].id;
+  }
+  slot.innerHTML = `<label for="drawerHarnessSel">Harness</label>
+    <select id="drawerHarnessSel" aria-label="Harness">
+      ${eps.map(e => `<option value="${e.id}" ${e.id===DRAWER.selectedId?'selected':''}>${esc(e.harness_label)}</option>`).join('')}
+    </select>`;
+  const sel = $('#drawerHarnessSel');
+  if (sel) sel.onchange = (ev) => { DRAWER.selectedId = Number(ev.target.value); };
+}
+
+function renderDrawerEmpty() {
+  const slot = $('#drawerMsgs');
+  // Don't clobber an existing conversation.
+  if (slot.querySelector('.drawer-msg')) {
+    $('#drawerForm').style.display = '';
+    return;
+  }
+  if (!DRAWER.endpoints.length) {
+    slot.innerHTML = `<div class="drawer-empty">
+      <div class="ico">💬</div>
+      <div>No drawer endpoint configured yet.</div>
+      <div class="hint">Add one via <code>POST /api/agent-endpoints</code> with <code>kind: "drawer"</code> to point this drawer at your harness.</div>
+    </div>`;
+    $('#drawerForm').style.display = 'none';
+  } else {
+    slot.innerHTML = `<div class="drawer-empty">
+      <div class="ico">👋</div>
+      <div>Ask your agent anything.</div>
+    </div>`;
+    $('#drawerForm').style.display = '';
+  }
+}
+
+function appendDrawerMsg(role, text) {
+  const slot = $('#drawerMsgs');
+  const empty = slot.querySelector('.drawer-empty');
+  if (empty) empty.remove();
+  const div = document.createElement('div');
+  div.className = `drawer-msg ${role}`;
+  div.textContent = text;
+  slot.appendChild(div);
+  slot.scrollTop = slot.scrollHeight;
+  return div;
+}
+
+function appendDrawerStreaming(role) {
+  const slot = $('#drawerMsgs');
+  const empty = slot.querySelector('.drawer-empty');
+  if (empty) empty.remove();
+  const div = document.createElement('div');
+  div.className = `drawer-msg ${role}`;
+  div.innerHTML = '<span class="drawer-typing"><span></span><span></span><span></span></span>';
+  slot.appendChild(div);
+  slot.scrollTop = slot.scrollHeight;
+  return div;
+}
+
+function finalizeStreaming(el, text) {
+  // textContent so user input never gets interpreted as HTML (defense in depth).
+  el.textContent = text || '';
+  const slot = $('#drawerMsgs');
+  slot.scrollTop = slot.scrollHeight;
+}
+
+function drawerUid() {
+  return 'c-' + Math.random().toString(36).slice(2, 10) + '-' + Date.now().toString(36);
+}
+
+async function sendDrawerMessage(text) {
+  if (DRAWER.busy) return;
+  if (!DRAWER.selectedId) { appendDrawerMsg('system', 'Pick a harness to chat with.'); return; }
+  if (!DRAWER.conversationId) DRAWER.conversationId = drawerUid();
+
+  appendDrawerMsg('user', text);
+  DRAWER.busy = true;
+  $('#drawerInput').value = '';
+  autosizeDrawerInput();
+  $('#drawerSend').disabled = true;
+  $('#drawerInput').disabled = true;
+
+  const streaming = appendDrawerStreaming('agent');
+  let acc = '';
+
+  try {
+    const res = await fetch('/api/drawer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        message: text,
+        endpoint_id: DRAWER.selectedId,
+        conversation_id: DRAWER.conversationId,
+      }),
+    });
+    if (!res.ok) {
+      let err = '';
+      try { err = (await res.json()).error || ''; } catch (_) { err = `HTTP ${res.status}`; }
+      streaming.remove();
+      appendDrawerMsg('error', `Failed to send: ${err || res.status}`);
+      return;
+    }
+    const ct = (res.headers.get('content-type') || '').toLowerCase();
+    if (ct.includes('text/event-stream')) {
+      await consumeSseStream(res, streaming, acc);
+    } else if (ct.includes('application/json')) {
+      const data = await res.json().catch(() => ({}));
+      finalizeStreaming(streaming, data.text || JSON.stringify(data));
+    } else {
+      const raw = await res.text();
+      finalizeStreaming(streaming, raw);
+    }
+  } catch (err) {
+    streaming.remove();
+    appendDrawerMsg('error', `Network error: ${err && err.message ? err.message : err}`);
+  } finally {
+    DRAWER.busy = false;
+    $('#drawerSend').disabled = false;
+    $('#drawerInput').disabled = false;
+    $('#drawerInput').focus();
+  }
+}
+
+// SSE consumer (design doc §6.3A): reads chunks from the response stream,
+// parses `event:` / `data:` lines separated by double-newlines, and pipes
+// `event: chunk` data into the streaming agent bubble.
+async function consumeSseStream(res, el, acc) {
+  if (!res.body || !res.body.getReader) {
+    // Browser without ReadableStream (very old) — fall back to text().
+    const raw = await res.text();
+    finalizeStreaming(el, raw);
+    return;
+  }
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  let text = acc;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let idx;
+    while ((idx = buf.indexOf('\n\n')) !== -1) {
+      const block = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      const ev = parseSseBlock(block);
+      if (!ev) continue;
+      if (ev.event === 'done') return;
+      if (ev.event === 'chunk' && ev.data && typeof ev.data.text === 'string') {
+        text += ev.data.text;
+        finalizeStreaming(el, text);
+      } else if (ev.event === 'message' && typeof ev.data === 'string') {
+        text += ev.data;
+        finalizeStreaming(el, text);
+      }
+    }
+  }
+}
+
+function parseSseBlock(block) {
+  let event = 'message';
+  const dataLines = [];
+  for (const rawLine of block.split('\n')) {
+    const line = rawLine.replace(/\r$/, '');
+    if (!line) continue;
+    if (line.startsWith(':')) continue; // SSE comment
+    const colon = line.indexOf(':');
+    const field = colon === -1 ? line : line.slice(0, colon);
+    let val = colon === -1 ? '' : line.slice(colon + 1);
+    if (val.startsWith(' ')) val = val.slice(1);
+    if (field === 'event') event = val;
+    else if (field === 'data') dataLines.push(val);
+  }
+  if (!dataLines.length) return null;
+  let parsed = null;
+  const joined = dataLines.join('\n');
+  try { parsed = JSON.parse(joined); } catch (_) { parsed = joined; }
+  return { event, data: parsed };
+}
+
+function autosizeDrawerInput() {
+  const el = $('#drawerInput');
+  el.style.height = 'auto';
+  el.style.height = Math.min(140, el.scrollHeight) + 'px';
+}
+
+$('#drawerForm').onsubmit = (e) => {
+  e.preventDefault();
+  const input = $('#drawerInput');
+  const text = (input.value || '').trim();
+  if (!text || DRAWER.busy) return;
+  sendDrawerMessage(text);
+};
+$('#drawerInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    $('#drawerForm').requestSubmit();
+  }
+});
+$('#drawerInput').addEventListener('input', autosizeDrawerInput);
 </script>
 </body>
 </html>
