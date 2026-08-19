@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.1.20 (2026-08-13) — PHA-1899 (PHA-1617.6)
+## v0.1.21 (2026-08-19) — PHA-1899 (PHA-1617.6)
 
 - **Drawer backend — HMAC-signed outbound forwarder.** `POST /api/drawer`
   no longer returns a stub: it looks up the caller's enabled drawer
@@ -37,6 +37,18 @@
   kind/disabled refusal, endpoint-offline path, and the snapshot
   envelope. Replaces the old `test-drawer.js` (which targeted the
   stub and would hang against the real dispatcher).
+## v0.1.20 (2026-08-15) — PHA-2001
+
+- **CRASH-LOOP HOTFIX: include `lib/` in the runtime image.** The
+  runtime stage of the Dockerfile was missing `COPY lib ./lib`, so
+  the built container had an empty `/app/lib/` directory and Node
+  crashed on boot with `Error: Cannot find module './lib/user-model'`
+  at `server.js:33`. PHA-1618 (v0.0.5) introduced the `lib/`
+  directory but the runtime-stage COPY list was never updated to
+  pull it in. This release adds the missing `COPY lib ./lib` line;
+  no other code or config changes are required. `life.phatt.vip`
+  was offline until this landed; once Brandon's Docker pulls
+  `:latest` it will be back. (PHA-2001.)
 
 ## v0.1.19 (2026-08-12) — PHA-1896 (PHA-1617.3)
 
