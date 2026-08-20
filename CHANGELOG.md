@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased — PHA-2149 (PHA-2147.1) — media storage primitive
+
+- **`lib/media.js`.** General-purpose content-addressed media store —
+  the foundation Porch walls (PHA-2147.2), entity-graph covers,
+  list-item photos, and Popcorn Vote (PHA-2052) build on.
+  - `media_uploads` table, migrated in the same boot-migration chain
+    as `entityGraph`/`agentTokens`/`calendarSources`.
+  - `POST /api/media` (auth, multipart `file` field): `sharp`
+    downscales images over 2048px and generates a 320px JPEG thumb;
+    videos pass through raw (transcoding is out of scope). Size caps
+    `image 10MB / video 50MB`, mime allowlist (jpeg/png/webp,
+    mp4/webm/quicktime). Uploads are deduped by sha256 — a
+    byte-identical re-upload returns the existing row's id instead of
+    writing a second copy.
+  - `GET /api/media/:id` / `/api/media/:id/thumb` — `res.sendFile`
+    with `Cache-Control: private, max-age=3600`. Video thumb requests
+    fall back to the original file (no video thumbnailing yet).
+  - `DELETE /api/media/:id` (owner or admin) — soft-delete
+    (`deleted_at`), 24h grace window before the retention sweep reaps
+    the file + row so posts referencing the media don't 404
+    mid-transition.
+  - Retention sweep (`cleanupSweep`) piggybacks on the existing
+    30-minute scheduler tick — reaps expired (`expires_at`) and
+    grace-expired soft-deleted rows.
+  - Storage path: `DATA_DIR/media/{yyyy-mm}/{sha256-prefix}/{sha256}.{ext}`.
+- New deps: `sharp`, `multer`. Both resolve via prebuilt binaries on
+  `node:22-bookworm-slim` (Dockerfile stage 1) — no libvips apt
+  package needed.
+- Tests: `scripts/test-media.js` (happy path, dedupe, mime allowlist,
+  oversized rejection, retention expiry, soft-delete + grace window),
+  `scripts/smoke-media.js` (end-to-end upload/fetch/thumb against a
+  live server, `Cache-Control` header check). Both wired into
+  `npm test` / `npm run test:smoke`.
+- Fixed `scripts/smoke-push.js`, which required a hardcoded
+  contributor-local absolute path to `server.js` and broke the
+  `npm run test:smoke` chain for anyone else.
+
 ## v0.1.20 (2026-08-15) — PHA-2001
 
 - **CRASH-LOOP HOTFIX: include `lib/` in the runtime image.** The
