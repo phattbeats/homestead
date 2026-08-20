@@ -44,6 +44,24 @@ while ((m = orderByRe.exec(wallsSrc))) {
 }
 assert(!badOrderBy, 'no ORDER BY sorts by anything other than created_at', badOrderBy);
 
+// ---- Guard (PHA-2153): the activity-feed query (recentActivity, backing
+// activity_recent in lib/snapshot.js) is held to the same chronological-
+// only contract as the wall itself. Scoped to that one function — the rest
+// of snapshot.js legitimately sorts tasks/events by due_date/date.
+console.log('Guard: activity-feed ORDER BY defensive grep');
+const snapshotSrc = fs.readFileSync(path.join(__dirname, '..', 'lib', 'snapshot.js'), 'utf8');
+const activityFnMatch = snapshotSrc.match(/function recentActivity\([^)]*\)\s*{[\s\S]*?\n}/);
+assert(!!activityFnMatch, 'recentActivity() found in lib/snapshot.js');
+const activityFnSrc = activityFnMatch ? activityFnMatch[0] : '';
+const snapshotOrderByRe = /ORDER BY\s+([^\n]+?)(?:LIMIT|`|\n)/gi;
+let sm;
+let badSnapshotOrderBy = null;
+while ((sm = snapshotOrderByRe.exec(activityFnSrc))) {
+  const clause = sm[1].trim();
+  if (!/created_at/i.test(clause)) { badSnapshotOrderBy = clause; break; }
+}
+assert(!badSnapshotOrderBy, 'recentActivity() ORDER BY sorts by created_at only', badSnapshotOrderBy);
+
 (async () => {
   const tmpDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-walls-test-'));
   process.env.DATA_DIR = tmpDataDir;
@@ -167,6 +185,30 @@ assert(!badOrderBy, 'no ORDER BY sorts by anything other than created_at', badOr
   assertEq(exactly1k.body.length, 1000, 'exactly-1k comment accepted');
 
   assertThrowsStatus(() => walls.createComment(p2.id, stranger.id, 'nope'), 404, 'non-member cannot comment');
+
+  // ---- Test 7: activity-feed wiring (PHA-2153) ----
+  console.log('\nTest 7: activity-feed wiring');
+  const snapshot = require('../lib/snapshot');
+
+  // emily is a media-club member too (added alongside brandon above minus
+  // the dup-group insert — give emily membership explicitly here).
+  db.prepare('INSERT OR IGNORE INTO user_groups (user_id, group_id) VALUES (?, ?)').run(emily.id, mcGroup.id);
+
+  const activityPost = walls.createPost('media-club', brandon.id, { kind: 'text', text_body: 'activity feed check' });
+
+  // recentActivity() is the exact function GET /api/me/snapshot's
+  // activity_recent field is built from — same source, same shape.
+  const emilyActivity = snapshot.recentActivity(db, emily.id, 25);
+  const activityRow = emilyActivity.find((a) => a.tag === `wall_post:media-club:${activityPost.id}`);
+  assert(!!activityRow, 'wall post surfaces in a fellow member\'s activity_recent');
+  assert(!!activityRow && activityRow.url.includes('wall=media-club'), 'activity row url carries the wall slug');
+  assert(!!activityRow && activityRow.url.includes(activityPost.id), 'activity row url carries the post id');
+  assertEq(activityRow && activityRow.category, 'wall_post', 'activity row category is wall_post');
+  assertEq(activityRow && activityRow.created_at, activityPost.createdAt, 'activity row created_at matches the post created_at');
+
+  const brandonActivity = snapshot.recentActivity(db, brandon.id, 25);
+  const selfRow = brandonActivity.find((a) => a.tag === `wall_post:media-club:${activityPost.id}`);
+  assert(!selfRow, 'author does not get an activity row for their own post');
 
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
