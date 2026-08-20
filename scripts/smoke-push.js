@@ -43,7 +43,7 @@ webpush.sendNotification = async function(sub, payload, opts) {
 process.env.DATA_DIR = '/tmp/hs-smoke';
 process.env.PORT = '3099';
 process.env.ADMIN_PASSWORD = 'test';
-const app = require('/root/.openclaw/workspace/repos/homestead/server.js');
+const app = require('../server.js');
 
 (async () => {
   await new Promise(r => fakeServer.listen(fakePort, r));

@@ -43,6 +43,8 @@ const calendarSources = require('./lib/calendar-sources');
 const secretBox = require('./lib/secret-box');
 const snapshot = require('./lib/snapshot');
 const drawerDispatch = require('./lib/drawer-dispatch');
+const media = require('./lib/media');
+const walls = require('./lib/walls');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -65,6 +67,13 @@ agentEndpoints.migrate(db);
 // PHA-1620: calendar_sources + calendar_event_cache schema. Migrated
 // last so the FK to users(id) resolves, same boot-migration pattern.
 calendarSources.migrate(db);
+// PHA-2149: media_uploads table. Same boot-migration pattern; FK to
+// users(id) so it runs after userModel.migrate.
+media.migrate(db);
+// PHA-2150: walls/posts/reactions/comments. FKs to users(id) and
+// media_uploads(id), so it runs after userModel.migrate and media.migrate.
+walls.migrate(db);
+walls.seed(db);
 
 // v0.1.0: web push subscriptions (PHA-1619)
 db.exec(`
@@ -780,6 +789,87 @@ app.post('/api/drawer', auth, async (req, res) => {
     duration_ms: result.durationMs,
   });
   res.end();
+});
+
+// ---- media (PHA-2149) ----
+// General-purpose content-addressed media store. Walls (PHA-2147.2) and
+// future consumers (entity-graph covers, list-item photos, Popcorn Vote)
+// build on this rather than rolling their own upload handling.
+app.post('/api/media', auth, media.upload);
+app.get('/api/media/:id', auth, (req, res) => media.fetch(req.params.id, res, false));
+app.get('/api/media/:id/thumb', auth, (req, res) => media.fetch(req.params.id, res, true));
+app.delete('/api/media/:id', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const result = media.remove(req.params.id, me.id);
+  if (result.error === 'not_found') return res.status(404).json({ error: 'not found' });
+  if (result.error === 'forbidden') return res.status(403).json({ error: 'owner or admin only' });
+  res.json({ ok: true });
+});
+
+// ---- walls (PHA-2150) ----
+// Group-scoped and direct-share walls of chronological posts. Every
+// route below resolves the caller's local user id first, then delegates
+// straight to lib/walls.js, which runs assertMember() before touching
+// any row. Wall-not-found and not-a-member both surface as 404 — wall
+// existence is private to its members.
+function wallsErr(res, e) {
+  if (e && e.status) return res.status(e.status).json({ error: e.code || 'error' });
+  return res.status(500).json({ error: 'internal_error', detail: e && e.message });
+}
+app.get('/api/walls', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  res.json({ walls: walls.listForUser(me.id) });
+});
+app.get('/api/walls/:slug/posts', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json({ posts: walls.postsForWall(req.params.slug, me.id, req.query.cursor, req.query.limit) });
+  } catch (e) { wallsErr(res, e); }
+});
+app.post('/api/walls/:slug/posts', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json(walls.createPost(req.params.slug, me.id, req.body || {}));
+  } catch (e) { wallsErr(res, e); }
+});
+app.delete('/api/walls/:slug/posts/:postId', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json(walls.deletePost(req.params.slug, req.params.postId, me.id));
+  } catch (e) { wallsErr(res, e); }
+});
+app.post('/api/walls/:slug/posts/:postId/reactions', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json(walls.toggleReaction(req.params.slug, req.params.postId, me.id, req.body && req.body.emoji));
+  } catch (e) { wallsErr(res, e); }
+});
+app.delete('/api/walls/:slug/posts/:postId/reactions/:emoji', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json(walls.removeReaction(req.params.slug, req.params.postId, me.id, req.params.emoji));
+  } catch (e) { wallsErr(res, e); }
+});
+app.get('/api/walls/:slug/posts/:postId/comments', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json({ comments: walls.listComments(req.params.slug, req.params.postId, me.id) });
+  } catch (e) { wallsErr(res, e); }
+});
+app.post('/api/walls/posts/:postId/comments', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json(walls.createComment(req.params.postId, me.id, req.body && req.body.body));
+  } catch (e) { wallsErr(res, e); }
 });
 
 // ---- groups ----
@@ -1957,10 +2047,17 @@ if (require.main === module) {
       // + same-author work entities that aren't linked via
       // adaptation_of and queue a review item. Cheap — pure DB.
       try { runSiblingDetectorTick(); } catch (e) { console.error('[scheduler] sibling detector tick:', e.message); }
+      // media retention sweep (PHA-2149): cheap, runs every tick — soft-
+      // deleted rows past their 24h grace window + expired rows get
+      // reaped (file unlink + row delete).
+      try {
+        const r = media.cleanupSweep(db);
+        if (r.reaped > 0) console.log(`[scheduler] media sweep: reaped ${r.reaped}`);
+      } catch (e) { console.error('[scheduler] media sweep:', e.message); }
     };
     setTimeout(tick, 10 * 1000);
     schedulerHandle = setInterval(tick, SCHED_TICK_MS);
-    console.log('[scheduler] daily digest started; tick=30min; plex+kavita entity-sync + sibling_detector every 6h');
+    console.log('[scheduler] daily digest started; tick=30min; plex+kavita entity-sync + sibling_detector + media sweep every 6h/30min');
   }
 
   // sibling_detector (PHA-1876) — see lib/dedup/matcher.js. Runs
