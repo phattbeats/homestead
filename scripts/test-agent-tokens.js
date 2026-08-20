@@ -259,6 +259,59 @@ console.log('PHA-1617.1/.2 agent-tokens tests\n');
   });
 }
 
+// ---- Test 8: PHA-2228 — agent_tokens.app_id + installed_apps migration ----
+{
+  console.log('\nTest 8: app_id column + installed_apps table (PHA-2228)');
+  const { db, tmpDir } = freshDb();
+  const brandon = db.prepare('SELECT id FROM users WHERE username = ?').get('brandon');
+
+  const tokenCols = db.prepare('PRAGMA table_info(agent_tokens)').all().map(c => c.name);
+  assert(tokenCols.includes('app_id'), 'agent_tokens gains an app_id column');
+
+  const appsCols = db.prepare('PRAGMA table_info(installed_apps)').all().map(c => c.name);
+  assertEq(
+    appsCols,
+    ['key', 'name', 'manifest_url', 'manifest_json', 'installed_by_user_id', 'installed_at', 'revoked_at'],
+    'installed_apps has the columns from the PHA-2201 §5 design note'
+  );
+
+  // Existing user-level PATs (PHA-1617 behavior) are untouched: app_id
+  // defaults NULL, no data loss on re-running migrate() over live data.
+  const existing = agentTokens.issue(db, brandon.id, { label: 'user-level' });
+  const existingRow = db.prepare('SELECT app_id FROM agent_tokens WHERE id = ?').get(existing.id);
+  assertEq(existingRow.app_id, null, 'user-level PAT defaults app_id to NULL');
+
+  let rerunThrew = false;
+  try { agentTokens.migrate(db); } catch (_) { rerunThrew = true; }
+  assert(!rerunThrew, 're-running migrate() over live data is a no-op');
+  const stillThere = db.prepare('SELECT app_id FROM agent_tokens WHERE id = ?').get(existing.id);
+  assertEq(stillThere.app_id, null, 'app_id still NULL after re-running migrate()');
+
+  // App-scoped PAT: one row per (user, app), FK'd to installed_apps.key.
+  db.prepare(`
+    INSERT INTO installed_apps (key, name, manifest_url, installed_by_user_id)
+    VALUES ('dune-tracker', 'Dune Tracker', 'https://example.test/manifest.json', ?)
+  `).run(brandon.id);
+  const scopedInfo = db.prepare(`
+    INSERT INTO agent_tokens (user_id, label, token_hash, token_prefix, app_id)
+    VALUES (?, 'app-scoped', 'fake-hash', 'homestead_pat_scoped', 'dune-tracker')
+  `).run(brandon.id);
+  const scopedRow = db.prepare('SELECT app_id FROM agent_tokens WHERE id = ?').get(scopedInfo.lastInsertRowid);
+  assertEq(scopedRow.app_id, 'dune-tracker', 'app-scoped PAT stores app_id = installed_apps.key');
+
+  // The partial index must be the one the planner picks for app-scoped
+  // token lookups (the acceptance criterion from PHA-2228).
+  const plan = db.prepare(`
+    EXPLAIN QUERY PLAN
+    SELECT * FROM agent_tokens
+    WHERE user_id = ? AND app_id = ? AND revoked_at IS NULL
+  `).all(brandon.id, 'dune-tracker');
+  const usesIndex = plan.some(p => String(p.detail).includes('idx_agent_tokens_app'));
+  assert(usesIndex, 'app-scoped token lookup uses idx_agent_tokens_app', JSON.stringify(plan));
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+}
+
 function finish() {
   console.log(`\nResults: ${pass} pass, ${fail} fail`);
   process.exit(fail === 0 ? 0 : 1);
