@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Install app — Homestead</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#FFFBF5">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/consent.css">
+</head>
+<body>
+
+<div id="app">
+  <div id="demoBanner" class="demo-banner" hidden>Demo preview — no pending install (PHA-2229 install flow lands separately)</div>
+
+  <div class="app-preview">
+    <div class="app-icon" id="appIcon"></div>
+    <div class="app-meta">
+      <div id="appName"></div>
+      <div id="appAuthorVersion"></div>
+    </div>
+  </div>
+  <div id="appDescription"></div>
+
+  <p id="consentIntro"></p>
+
+  <div class="scope-card will">
+    <h2>This app will be able to:</h2>
+    <ul class="scope-list" id="willList"></ul>
+  </div>
+
+  <div class="scope-card will-not">
+    <h2>This app will NOT be able to:</h2>
+    <ul class="scope-list" id="willNotList"></ul>
+  </div>
+
+  <p id="consentFooter"></p>
+
+  <div class="consent-actions">
+    <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
+    <button type="button" class="btn" id="installBtn"></button>
+  </div>
+</div>
+
+<script src="/lib/scope-display.js"></script>
+<script src="/consent.js"></script>
+</body>
+</html>
