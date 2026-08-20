@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.3.0 (TBD) — Modular Homestead: user_modules (PHA-2202)
+
+- **Per-user module enablement.** New `user_modules(user_id, module_key,
+  enabled_at)` table with `(user_id, module_key)` PK and FK cascade on
+  user delete. CHECK constraint enforces the canonical module whitelist
+  (`wall`, `lists`, `calendar`, `chores`, `apps`, `agent`). `enabled_at
+  NULL` = disabled, timestamp = enabled. Toggle is `UPDATE
+  user_modules SET enabled_at = ...`; rows are never deleted, so
+  disabling the `chores` module does NOT wipe the `tasks` rows that
+  chores wrote. Idempotent backfill runs on every boot and uses
+  `INSERT OR IGNORE` so user-toggled state is preserved across
+  re-migrations.
+- **API helpers.** `lib/user-model.js` exports `USER_MODULE_KEYS`,
+  `isUserModuleKey(key)`, `getUserModules(db, userId)` (returns full
+  keyed map), and `setUserModule(db, userId, key, enabled)` (upsert
+  via `INSERT ... ON CONFLICT DO UPDATE`). The HTTP surface
+  (`/api/me/modules`, `/api/me/layout`) lands in PHA-2200.3.
+- **Tests.** `scripts/test-user-modules.js` covers 44 assertions:
+  schema creation, index, backfill row count = users * 6, idempotent
+  re-migration, disable+re-enable preserves data tables (tasks /
+  events), unknown module_key rejection in JS + by CHECK constraint,
+  new user picked up on next boot, deterministic
+  `getUserModules` shape, `ON DELETE CASCADE` purge.
+- **Schema note.** The PHA-2202 spec uses the `VALUES (...) AS
+  alias(col)` syntax from the issue body; the runtime uses the
+  equivalent portable `SELECT ... UNION ALL` subquery because the
+  better-sqlite3 prebuilt ships a SQLite build that does not accept
+  `VALUES (...) AS alias` via `db.exec`. Semantically identical,
+  supported on every SQLite since 3.7.
+
 ## v0.2.0 (2026-08-19) — Porch Wall (PHA-2147)
 
 - **Media storage primitive.** Content-addressed uploads at `/data/media/...`,
