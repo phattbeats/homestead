@@ -804,6 +804,49 @@ app.post('/api/walls/posts/:postId/comments', auth, (req, res) => {
   } catch (e) { wallsErr(res, e); }
 });
 
+// ---- link preview (PHA-2151) ----
+// Best-effort server-side fetch + lightweight <title>/description scrape
+// for the Porch Wall's "link" post composer. No new dependency (no
+// cheerio/jsdom) — a couple of forgiving regexes over the raw HTML.
+// Never throws a 500 for a bad/slow remote page: any failure just comes
+// back as empty strings so the composer can still let the post through.
+function extractMeta(html) {
+  let title = '';
+  let description = '';
+  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (titleMatch) title = titleMatch[1].trim();
+  const metaRe = /<meta\s+[^>]*>/gi;
+  let m;
+  while ((m = metaRe.exec(html))) {
+    const tag = m[0];
+    const nameMatch = tag.match(/\b(?:name|property)\s*=\s*["']([^"']+)["']/i);
+    const contentMatch = tag.match(/\bcontent\s*=\s*["']([^"']*)["']/i);
+    if (!nameMatch || !contentMatch) continue;
+    const name = nameMatch[1].toLowerCase();
+    if (name === 'og:title' && !titleMatch) title = contentMatch[1].trim();
+    if ((name === 'og:description' || name === 'description') && !description) description = contentMatch[1].trim();
+  }
+  const decode = (s) => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  return { title: decode(title).slice(0, 300), description: decode(description).slice(0, 500) };
+}
+app.get('/api/link-preview', auth, async (req, res) => {
+  const url = req.query.url;
+  if (!url || typeof url !== 'string') return res.json({ title: '', description: '' });
+  let parsed;
+  try { parsed = new URL(url); } catch (_) { return res.json({ title: '', description: '' }); }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return res.json({ title: '', description: '' });
+  try {
+    const r = await fetch(parsed.toString(), {
+      signal: AbortSignal.timeout(2000),
+      headers: { 'User-Agent': 'Homestead-LinkPreview/1.0' },
+    });
+    const html = await r.text();
+    res.json(extractMeta(html));
+  } catch (e) {
+    res.json({ title: '', description: '' });
+  }
+});
+
 // ---- groups ----
 // Read-only view (PHA-1618: authentik owns the group lifecycle). The
 // `?mine=1` query param returns just the authenticated user's groups so
