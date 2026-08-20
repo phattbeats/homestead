@@ -136,8 +136,8 @@ main{padding:14px 18px;max-width:680px;margin:0 auto}
 nav{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:space-around;
   padding:10px 16px calc(env(safe-area-inset-bottom) + 12px);
   background:rgba(255,251,245,.85);backdrop-filter:blur(18px);border-top:1px solid var(--line);z-index:30}
-nav button{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:600;
-  color:var(--muted);padding:4px 14px;border-radius:14px;transition:color .3s var(--ease)}
+nav button,nav a{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:600;
+  color:var(--muted);padding:4px 14px;border-radius:14px;transition:color .3s var(--ease);text-decoration:none}
 nav button.on{color:var(--accent)}
 nav .ico{font-size:20px}
 
@@ -389,6 +389,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
     <button data-p="tasks"><span class="ico">✓</span>Tasks</button>
     <button data-p="cal"><span class="ico">📅</span>Calendar</button>
     <button data-p="svc"><span class="ico">🛰️</span>Apps</button>
+    <a href="/porch.html" data-tile="porch" id="navPorch" style="display:none"><span class="ico">📸</span>Porch</a>
   </nav>
 </div>
 
@@ -534,6 +535,12 @@ async function boot(user){
   const d=new Date();calY=d.getFullYear();calM=d.getMonth();
   await refreshUsersFromServer();
   await refresh();
+  // PHA-2151: Porch tile is hidden unless the user is a member of at
+  // least one wall (GET /api/walls returns {walls:[]} otherwise).
+  try{
+    const {walls}=await api('GET','/api/walls');
+    if(walls&&walls.length)$('#navPorch').style.display='';
+  }catch(_){}
   // PHA-1619: if the browser already has permission + a subscription,
   // re-register it against this session so a returning user on a fresh
   // device doesn't have to click "Enable" again. Best-effort: any error
