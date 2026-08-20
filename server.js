@@ -42,6 +42,7 @@ const dedupMatcher = require('./lib/dedup/matcher');
 const calendarSources = require('./lib/calendar-sources');
 const secretBox = require('./lib/secret-box');
 const snapshot = require('./lib/snapshot');
+const media = require('./lib/media');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -64,6 +65,9 @@ agentEndpoints.migrate(db);
 // PHA-1620: calendar_sources + calendar_event_cache schema. Migrated
 // last so the FK to users(id) resolves, same boot-migration pattern.
 calendarSources.migrate(db);
+// PHA-2149: media_uploads table. Same boot-migration pattern; FK to
+// users(id) so it runs after userModel.migrate.
+media.migrate(db);
 
 // v0.1.0: web push subscriptions (PHA-1619)
 db.exec(`
@@ -712,6 +716,22 @@ app.post('/api/drawer', auth, async (req, res) => {
     duration_ms: 90 * lines.length,
   });
   res.end();
+});
+
+// ---- media (PHA-2149) ----
+// General-purpose content-addressed media store. Walls (PHA-2147.2) and
+// future consumers (entity-graph covers, list-item photos, Popcorn Vote)
+// build on this rather than rolling their own upload handling.
+app.post('/api/media', auth, media.upload);
+app.get('/api/media/:id', auth, (req, res) => media.fetch(req.params.id, res, false));
+app.get('/api/media/:id/thumb', auth, (req, res) => media.fetch(req.params.id, res, true));
+app.delete('/api/media/:id', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const result = media.remove(req.params.id, me.id);
+  if (result.error === 'not_found') return res.status(404).json({ error: 'not found' });
+  if (result.error === 'forbidden') return res.status(403).json({ error: 'owner or admin only' });
+  res.json({ ok: true });
 });
 
 // ---- groups ----
@@ -1889,10 +1909,17 @@ if (require.main === module) {
       // + same-author work entities that aren't linked via
       // adaptation_of and queue a review item. Cheap — pure DB.
       try { runSiblingDetectorTick(); } catch (e) { console.error('[scheduler] sibling detector tick:', e.message); }
+      // media retention sweep (PHA-2149): cheap, runs every tick — soft-
+      // deleted rows past their 24h grace window + expired rows get
+      // reaped (file unlink + row delete).
+      try {
+        const r = media.cleanupSweep(db);
+        if (r.reaped > 0) console.log(`[scheduler] media sweep: reaped ${r.reaped}`);
+      } catch (e) { console.error('[scheduler] media sweep:', e.message); }
     };
     setTimeout(tick, 10 * 1000);
     schedulerHandle = setInterval(tick, SCHED_TICK_MS);
-    console.log('[scheduler] daily digest started; tick=30min; plex+kavita entity-sync + sibling_detector every 6h');
+    console.log('[scheduler] daily digest started; tick=30min; plex+kavita entity-sync + sibling_detector + media sweep every 6h/30min');
   }
 
   // sibling_detector (PHA-1876) — see lib/dedup/matcher.js. Runs

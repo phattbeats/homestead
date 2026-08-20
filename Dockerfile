@@ -25,9 +25,9 @@ COPY server.js ./
 # lib/ holds the runtime modules (lib/user-model, lib/sync/plex,
 # lib/sync/kavita, lib/calendar-sources, lib/graph-source, lib/dedup,
 # lib/health-checker, lib/secret-box, lib/snapshot, lib/agent-tokens,
-# lib/agent-endpoints, lib/drawer-dispatcher). server.js requires
-# './lib/user-model' at boot, so dropping this directory in the
-# runtime stage leaves the container unable to start with
+# lib/agent-endpoints, lib/drawer-dispatcher, lib/media). server.js
+# requires './lib/user-model' at boot, so dropping this directory in
+# the runtime stage leaves the container unable to start with
 # `Error: Cannot find module './lib/user-model'` (PHA-2001).
 COPY lib ./lib
 COPY public ./public
