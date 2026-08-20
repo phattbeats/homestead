@@ -35,6 +35,7 @@ const plexSync = require('./lib/sync/plex');
 const kavitaSync = require('./lib/sync/kavita');
 const agentTokens = require('./lib/agent-tokens');
 const agentEndpoints = require('./lib/agent-endpoints');
+const appApiLog = require('./lib/app-api-log');
 
 const healthChecker = require('./lib/health-checker');
 const entityGraph = require('./lib/sync/_schema');
@@ -58,6 +59,10 @@ entityGraph.migrate(db);
 // PHA-1617.1: PAT tokens table. Migrated after userModel so the FK
 // to users(id) resolves. Same boot-migration pattern as the others.
 agentTokens.migrate(db);
+// PHA-2201.3 (PHA-2231): third-party app accountability trail. FKs to
+// users(id) and installed_apps(key), so it runs right after
+// agentTokens.migrate (which creates installed_apps).
+appApiLog.migrate(db);
 // PHA-1617.4: per-user, per-harness endpoint config (drawer POST +
 // events webhook URLs). HMAC secret generated on insert. FK to users;
 // migrated after userModel so the FK resolves, same pattern as
@@ -151,6 +156,26 @@ function authenticate(req, res, next) {
       authProvider: 'pat',
       authProviderDetail: { tokenId: tokenRow.id, scopes: tokenRow.scopes },
     };
+    // PHA-2231: third-party app accountability trail. app_id IS NULL is
+    // the existing PHA-1617 user-level PAT and is never logged — this
+    // table is scoped to app-issued tokens only. Written from 'finish'
+    // (fires after the response is already sent) so the log write never
+    // sits on this request's critical path.
+    if (tokenRow.app_id) {
+      res.on('finish', () => {
+        try {
+          appApiLog.log(db, {
+            userId: u.id,
+            appId: tokenRow.app_id,
+            route: `${req.method} ${req.path}`,
+            scopesUsed: tokenRow.scopes,
+            status: res.statusCode,
+          });
+        } catch (err) {
+          console.warn('[app-api-log] write failed:', err.message);
+        }
+      });
+    }
     return next();
   }
   const headerUser = req.get('x-authentik-username');
@@ -523,6 +548,20 @@ app.delete('/api/users/:username/agent-tokens/:id', auth, requireAdmin, (req, re
   const revoked = agentTokens.revoke(db, req.params.id, { ownerUserId: target.id });
   if (!revoked) return res.status(404).json({ error: 'not found' });
   res.json({ ok: true });
+});
+
+// ---- app activity log (PHA-2201.3 / PHA-2231) ----
+// Read path over app_api_log; the write path lives in authenticate()
+// above. The install endpoints (resolve/consent/install/revoke) are
+// PHA-2201.1 (PHA-2229) and not built yet — this route only needs
+// installed_apps to exist (PHA-2228, already migrated) to resolve :key.
+// Settings UI that renders this is PHA-2201.4 (PHA-2232).
+app.get('/api/apps/:key/activity', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const appRow = db.prepare('SELECT key FROM installed_apps WHERE key = ?').get(req.params.key);
+  if (!appRow) return res.status(404).json({ error: 'not_found' });
+  res.json(appApiLog.list(db, me.id, req.params.key, { limit: req.query.limit, offset: req.query.offset }));
 });
 
 // ---- agent endpoints (PHA-1617.4) ----
