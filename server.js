@@ -1863,6 +1863,16 @@ app.post('/api/review-queue/:id/reject', auth, requireAdmin, (req, res) => {
 // 404 JSON for unknown /api/* paths.
 app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 
+// lib/scope-display.js (PHA-2201.2 / PHA-2230) is the single source for
+// third-party app scope → plain-language mapping, shared between the
+// consent screen (public/consent.js) and the future Settings "what this
+// app can do" view (PHA-2201.4). It's the only lib/ file served to the
+// browser — everything else in lib/ is server-only DB/HTTP logic.
+app.get('/lib/scope-display.js', (req, res) => {
+  res.type('application/javascript');
+  res.sendFile(path.join(__dirname, 'lib', 'scope-display.js'));
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/favicon.ico', (req, res) => {
   res.set('Content-Type', 'image/svg+xml');

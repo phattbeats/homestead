@@ -1,0 +1,47 @@
+/* Homestead — third-party app consent screen (PHA-2201.2 / PHA-2230).
+   Tokens ported verbatim from public/index.html's <style> :root block
+   for visual consistency, same as public/porch.css. */
+:root{
+  --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#8A8177;
+  --line:rgba(43,38,34,.07);
+  --accent:#C4703C; --accent-soft:#F8E9DE;
+  --yes:#4C7A4F; --yes-soft:#E9F2E6;
+  --no:#b3453a; --no-soft:#FBEAE7;
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100dvh}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+
+#app{max-width:520px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 22px) 18px 40px}
+
+.demo-banner{background:var(--accent-soft);color:var(--accent);border-radius:12px;padding:8px 12px;font-size:12px;font-weight:700;margin-bottom:14px;text-align:center}
+
+.app-preview{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+.app-icon{font-size:40px;line-height:1;width:56px;height:56px;display:flex;align-items:center;justify-content:center;background:var(--surface);border-radius:16px;box-shadow:0 6px 30px rgba(0,0,0,.035);flex-shrink:0}
+.app-meta{min-width:0}
+#appName{font-weight:800;font-size:19px;letter-spacing:-.02em}
+#appAuthorVersion{font-size:12px;color:var(--muted);margin-top:2px}
+#appDescription{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.4}
+
+#consentIntro{font-size:15px;line-height:1.5;margin-bottom:20px}
+
+.scope-card{background:var(--surface);border-radius:20px;padding:16px;margin-bottom:14px;box-shadow:0 6px 30px rgba(0,0,0,.035)}
+.scope-card h2{font-size:13px;font-weight:800;letter-spacing:.02em;margin-bottom:10px}
+.scope-card.will h2{color:var(--yes)}
+.scope-card.will-not h2{color:var(--no)}
+.scope-list{list-style:none}
+.scope-list li{display:flex;gap:8px;align-items:flex-start;font-size:14px;line-height:1.4;padding:5px 0}
+.scope-list li::before{flex-shrink:0;font-weight:800;width:16px}
+.will .scope-list li::before{content:"\2713";color:var(--yes)}
+.will-not .scope-list li::before{content:"\2717";color:var(--no)}
+
+#consentFooter{font-size:12px;color:var(--muted);line-height:1.5;margin:18px 0;white-space:pre-line}
+
+.consent-actions{display:flex;gap:10px;justify-content:flex-end}
+.btn{padding:11px 18px;border-radius:14px;background:var(--accent);color:#fff;font-weight:700;font-size:14px;transition:transform .2s var(--ease),opacity .2s}
+.btn:active{transform:scale(.96)}
+.btn-secondary{background:var(--accent-soft);color:var(--accent)}
+
+.empty{color:var(--muted);text-align:center;padding:30px 0;font-size:14px}
