@@ -37,6 +37,44 @@
   contributor-local absolute path to `server.js` and broke the
   `npm run test:smoke` chain for anyone else.
 
+## v0.1.21 (2026-08-19) — PHA-1899 (PHA-1617.6)
+
+- **Drawer backend — HMAC-signed outbound forwarder.** `POST /api/drawer`
+  no longer returns a stub: it looks up the caller's enabled drawer
+  `agent_endpoints` row, signs the payload with the row's HMAC secret,
+  POSTs to the configured URL with `X-Homestead-User`,
+  `X-Homestead-Request-Id`, `X-Homestead-Timestamp`,
+  `X-Homestead-Signature: sha256=<HMAC_SHA256(secret, ts + "." + body)>`,
+  `X-Homestead-Conversation-Id`, and a `Homestead/<version>` User-Agent,
+  then consumes the response. Supports the two wire shapes the
+  frontend already understands: `text/event-stream` with `event: chunk` /
+  `event: done` (Design Trap #4: never make a human watch an LLM think),
+  and `Accept: application/json` single-shot. Anything else returns
+  200 with `{ignored:true}` so a misbehaving harness doesn't fail the
+  drawer.
+- **Morning-brief snapshot envelope.** The signed body includes a
+  `snapshot` block built by `lib/snapshot.build()` so the user's
+  harness gets today_tasks / today_events / overdue_tasks /
+  active_lists / recent_activity without an extra round-trip.
+- **Retry + circuit breaker.** Exponential backoff (1s, 4s, 16s, 60s;
+  up to 4 retries, 30s first-chunk timeout, 60s total deadline). On
+  every dispatch, `agent_endpoints.last_used_at`,
+  `last_status_code`, `last_error` are updated. An in-memory
+  consecutive-failure streak per endpoint id trips after 5 failures
+  in a single dispatch and auto-disables the endpoint
+  (`enabled = 0`); subsequent calls return 404 from the dispatcher
+  (the user re-enables in Settings).
+- **`lib/drawer-dispatch.js`** — the new dispatcher module; pure
+  dispatch (no Express), takes `db` + caller `me` + opts. Exposes
+  `dispatchDrawer`, `buildBody`, `sign`, `parseSseBlock`,
+  `findEndpoint`, `getUserGroups`, `httpPostOnce` for unit tests.
+- **`scripts/test-drawer-backend.js`** — 70-check acceptance suite
+  covering the dispatcher module shape, HMAC contract, SSE reply,
+  JSON reply, retry/backoff, circuit breaker, cross-user refusal,
+  kind/disabled refusal, endpoint-offline path, and the snapshot
+  envelope. Replaces the old `test-drawer.js` (which targeted the
+  stub and would hang against the real dispatcher).
+
 ## v0.1.20 (2026-08-15) — PHA-2001
 
 - **CRASH-LOOP HOTFIX: include `lib/` in the runtime image.** The
