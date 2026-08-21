@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.4.0 (TBD) — Notification granularity + @mentions (PHA-2218)
+## v0.4.0 (2026-08-21) — Notification granularity + @mentions (PHA-2218)
 
 Sequenced after v0.3.0's module work (PHA-2202/PHA-2203) so wall
 membership and module gating were stable underneath it. Design doc
@@ -73,7 +73,7 @@ PHA-2218 issue before implementation started.
   confirming the new default doesn't silently demote an already-`all`
   member and does correctly gate a fresh joiner without a mention.
 
-## v0.3.0 (TBD) — Modular Homestead: user_modules + module registry (PHA-2202, PHA-2203)
+## v0.3.0 (2026-08-21) — Modular Homestead: user_modules + module registry (PHA-2202, PHA-2203)
 
 ### Module registry (PHA-2203 / PHA-2200.2)
 
@@ -241,6 +241,27 @@ PHA-2218 issue before implementation started.
   consent -> install -> tile appears in `GET /api/apps` -> token
   authenticates a real call -> revoke -> 401 on the very next call).
 
+### Scope enforcement + Popcorn Vote dogfood (PHA-2052)
+
+- **Scope enforcement was missing.** Bearer app tokens minted by the
+  PHA-2201 install flow carried scopes, but no route ever checked
+  them — `authenticate()` synthesized the same full-access
+  `session.user` for an app token as for the underlying household
+  member. New `requireScope(scope)` / `requireWallReadScope`
+  middleware in `server.js`, applied to `GET`/`POST
+  /api/walls/:slug/posts`, actually enforces `read:walls[:slug]` and
+  `write:walls:post` against the token's granted scopes; unscoped
+  session/header-trust auth and legacy `scopes:'user'` PATs are
+  unaffected.
+- **Popcorn Vote** is the first third-party app proven end-to-end
+  through the PHA-2201 contract: a deliberately small manifest
+  (`read:walls:media_club`, `write:walls:post`), posting link-kind
+  announcements to `media-club` that ride the existing
+  `wall_posts` → `notification_log` pipeline. `scripts/test-pa-2201-install.js`
+  (29 assertions) proves both the positive case (can read media-club)
+  and the negative case (cannot read a wall the underlying human
+  belongs to but the token was never granted) working as designed.
+
 ## v0.2.0 (2026-08-19) — Porch Wall (PHA-2147)
 
 - **Media storage primitive.** Content-addressed uploads at `/data/media/...`,
@@ -253,6 +274,44 @@ PHA-2218 issue before implementation started.
 - **Porch UI.** `public/porch.html` + `porch.{css,js}` + top-bar entry.
   Drag-drop / paste-from-clipboard composer, 5-emoji reaction row,
   paginated Older button (no infinite scroll), mobile-first.
+
+## v0.1.21 (2026-08-19) — PHA-1899 (PHA-1617.6)
+
+- **Drawer backend — HMAC-signed outbound forwarder.** `POST /api/drawer`
+  no longer returns a stub: it looks up the caller's enabled drawer
+  `agent_endpoints` row, signs the payload with the row's HMAC secret,
+  POSTs to the configured URL with `X-Homestead-User`,
+  `X-Homestead-Request-Id`, `X-Homestead-Timestamp`,
+  `X-Homestead-Signature: sha256=<HMAC_SHA256(secret, ts + "." + body)>`,
+  `X-Homestead-Conversation-Id`, and a `Homestead/<version>` User-Agent,
+  then consumes the response. Supports the two wire shapes the
+  frontend already understands: `text/event-stream` with `event: chunk` /
+  `event: done` (Design Trap #4: never make a human watch an LLM think),
+  and `Accept: application/json` single-shot. Anything else returns
+  200 with `{ignored:true}` so a misbehaving harness doesn't fail the
+  drawer.
+- **Morning-brief snapshot envelope.** The signed body includes a
+  `snapshot` block built by `lib/snapshot.build()` so the user's
+  harness gets today_tasks / today_events / overdue_tasks /
+  active_lists / recent_activity without an extra round-trip.
+- **Retry + circuit breaker.** Exponential backoff (1s, 4s, 16s, 60s;
+  up to 4 retries, 30s first-chunk timeout, 60s total deadline). On
+  every dispatch, `agent_endpoints.last_used_at`,
+  `last_status_code`, `last_error` are updated. An in-memory
+  consecutive-failure streak per endpoint id trips after 5 failures
+  in a single dispatch and auto-disables the endpoint
+  (`enabled = 0`); subsequent calls return 404 from the dispatcher
+  (the user re-enables in Settings).
+- **`lib/drawer-dispatch.js`** — the new dispatcher module; pure
+  dispatch (no Express), takes `db` + caller `me` + opts. Exposes
+  `dispatchDrawer`, `buildBody`, `sign`, `parseSseBlock`,
+  `findEndpoint`, `getUserGroups`, `httpPostOnce` for unit tests.
+- **`scripts/test-drawer-backend.js`** — 70-check acceptance suite
+  covering the dispatcher module shape, HMAC contract, SSE reply,
+  JSON reply, retry/backoff, circuit breaker, cross-user refusal,
+  kind/disabled refusal, endpoint-offline path, and the snapshot
+  envelope. Replaces the old `test-drawer.js` (which targeted the
+  stub and would hang against the real dispatcher).
 
 ## v0.1.20 (2026-08-15) — PHA-2001
 
