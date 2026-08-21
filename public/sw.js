@@ -8,13 +8,56 @@
 // Push payload shape (sent by server.js notify()):
 //   { title, body, url, tag, icon, badge, category }
 
-self.addEventListener('install', e => self.skipWaiting());
-self.addEventListener('activate', e => self.clients.claim());
+// PHA-2200.5 / PHA-2206: minimal precache. The feed component file
+// is shared between /porch.html and the in-place #page-wall mount
+// inside /index.html — both placements need it to render the wall.
+// Without precaching, a returning PWA user with intermittent
+// connectivity would see an empty Porch. Cache-first for these URLs.
+const PRECACHE_URLS = [
+  '/components/feed.js',
+  '/porch.css',
+];
+
+self.addEventListener('install', e => {
+  e.waitUntil((async () => {
+    const cache = await caches.open('homestead-v1');
+    // Best-effort precache: a 404 here doesn't fail the install — the
+    // service worker still activates and network-first falls through.
+    try { await cache.addAll(PRECACHE_URLS); } catch (_) {}
+    await self.skipWaiting();
+  })();
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil((async () => {
+    // Drop old caches on activation.
+    const names = await caches.keys();
+    await Promise.all(names.filter(n => n !== 'homestead-v1').map(n => caches.delete(n)));
+    await self.clients.claim();
+  })());
+});
 
 self.addEventListener('fetch', e => {
-  // No offline cache for now — Homestead is a small PWA where the network
-  // is the source of truth. The install handler above is enough to make
-  // the page installable to the home screen on iOS 16.4+/Android.
+  // Cache-first for the precache list, network-first for everything else.
+  const url = new URL(e.request.url);
+  if (url.origin !== self.location.origin) return; // ignore cross-origin
+  if (PRECACHE_URLS.indexOf(url.pathname) === -1) return;
+  e.respondWith((async () => {
+    const cache = await caches.open('homestead-v1');
+    const hit = await cache.match(url.pathname);
+    if (hit) return hit;
+    try {
+      const res = await fetch(e.request);
+      if (res.ok) cache.put(url.pathname, res.clone());
+      return res;
+    } catch (_) {
+      // Offline + not in cache: return a minimal 503-ish stub so the
+      // browser's JS error is informative rather than opaque.
+      return new Response('/* offline: component not in cache */', {
+        status: 503, headers: { 'Content-Type': 'application/javascript' },
+      });
+    }
+  })());
 });
 
 const pendingClicks = new Map();

@@ -67,6 +67,73 @@ acceptance criteria rolled up from PHA-2200 design-note §7.
   before the pre-v0.3.0 component tests. Running
   `npm test` now exercises the full v0.3.0 acceptance surface.
 
+### Wall feed component extraction (PHA-2206 / PHA-2200.5)
+
+The full wall feed surface (composer, post list, reactions,
+comments, "Older" pagination) was a single-page IIFE in
+`public/porch.js` shipped by PHA-2151. With the v0.3.0 dual-surface
+design (PHA-2200 §6 — Porch is a standalone page when the wall
+module is the user's only enabled room, AND an in-place tab inside
+the meadow/feed-tabs SPA when other modules are also enabled) the
+same JS needs to render in two placements without a rewrite.
+
+- **`public/components/feed.js`** (new) — the extracted component,
+  a 27.8 KB IIFE exposing `window.HomesteadFeed.mount(target, opts)`
+  + `window.HomesteadFeed.unmount(target)`. Per-instance state
+  (ME, WALLS, WALL, POSTS, CURSOR, …) lives in the closure so two
+  simultaneous mounts don't collide. Permission gates
+  (`canPost` / `canReact` / `canComment`) are honored by hiding the
+  affected UI rather than blocking the mount. Idempotent re-mount:
+  mounting into an already-mounted target disposes the prior
+  instance first. `dispose()` aborts in-flight fetches via
+  AbortController and removes every registered event listener.
+  Test-only helpers are exported under `module.exports` so the
+  vm-sandbox tests can exercise them without a DOM.
+- **`public/porch.html`** (refactored) — now a thin shell. Drops
+  the inline `porch.js` script tag and the inline composer/feed
+  markup; instead loads `/components/feed.js` and calls
+  `HomesteadFeed.mount(document.getElementById('porch-mount'), …)`
+  on `DOMContentLoaded`. Chrome (header, back link, wall picker)
+  moved into the component so both placements render identically.
+- **`public/index.html`** (extended) — adds a `<div class="page"
+  id="page-porch"></div>` page container and a new
+  `<button data-p="porch" id="navWall" style="display:none">Porch</button>`
+  nav tile. On `boot()`, the SPA fetches `/api/me/modules` and
+  `/api/modules`, finds the enabled module whose `room === 'porch'`
+  discriminator matches the wall entry, and mounts
+  `HomesteadFeed.mount(page-porch)` in-place. Single-surface rule:
+  if the feed module is the user's ONLY enabled module, the SPA
+  redirects to `/porch.html` instead of mounting (per PHA-2200 §6).
+  The literal 'wall' / 'porch' module key is NOT hardcoded — the
+  mount discriminator is the registry's `room` field, keeping
+  PHA-2209's no-hardcoded-keys audit (Amendment 3) green.
+- **`public/porch.js`** (removed) — logic moved into
+  `public/components/feed.js`. The script tag in `porch.html` now
+  points at the component.
+- **`public/sw.js`** (extended) — adds a minimal precache list
+  (`/components/feed.js`, `/porch.css`) with cache-first fetch +
+  best-effort `cache.addAll` install. The push handler and
+  notificationclick logic are unchanged. Returning PWA users on
+  intermittent connectivity now see the Porch without an empty
+  white flash.
+- **`scripts/test-feed-component.js`** (new) — 71-assertion
+  acceptance suite. Three sections: static-asset shape (component
+  exists, exports the contract, both placements reference it, no
+  duplicate API calls), pure-helper unit tests via `vm.runInContext`
+  on the inlined helpers (esc, cssEsc, fmtTime, postMediaHtml,
+  reactionsHtml, postHtml — XSS escape matrix + author/count/pending
+  branches), and live end-to-end (boot server.js, fetch the
+  component file, exercise the wall/comment/reaction API both
+  placements consume). Inserted into `npm test` chain after the
+  registry-no-hardcoded-keys audit and before the pre-v0.3.0
+  component tests (per PHA-2209 lesson #4).
+- **`scripts/smoke-porch-ui.js`** (updated) — replaces the
+  `porch.js` references with `components/feed.js`; asserts both
+  placements load the same component URL and reference the same
+  endpoints. Now also verifies `GET /components/feed.js` returns
+  200 (shared static asset) and that the served `/index.html`
+  carries the `#page-porch` mount target.
+
 ### Invite-to-wall flow (PHA-2207 / PHA-2200.6)
 
 - **`lib/invites.js`** — new module. `invites` table

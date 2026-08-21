@@ -8,61 +8,48 @@
 <meta name="theme-color" content="#FFFBF5">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- PHA-2200.5 / PHA-2206: shared wall feed styles. Same file is also
+     used by index.html's #page-wall mount so both placements render
+     identically. -->
 <link rel="stylesheet" href="/porch.css">
 </head>
 <body>
 
-<div id="app">
-  <header>
-    <a class="back" href="/" aria-label="Back to Homestead">‹</a>
-    <div class="greet"><small>The Porch</small><span id="wallName">Wall</span></div>
-    <select id="wallPicker" aria-label="Choose wall"></select>
-  </header>
+<!-- PHA-2200.5 / PHA-2206: thin shell. The full feed (composer, post
+     list, reactions, comments, "Older" pagination) is rendered into
+     #porch-mount by public/components/feed.js — the SAME component
+     mounted inside index.html's #page-wall for the meadow layout. The
+     chrome (header.back link, single-page wrapper) lives here; everything
+     else comes from the component. -->
 
-  <main id="main">
-    <div id="composer" class="card">
-      <div class="composer-tabs">
-        <button type="button" class="ctab on" data-kind="text">Text</button>
-        <button type="button" class="ctab" data-kind="media">Photo/Video</button>
-        <button type="button" class="ctab" data-kind="link">Link</button>
-      </div>
+<div id="porch-mount"></div>
 
-      <div class="cpane on" id="pane-text">
-        <textarea id="textBody" maxlength="2000" placeholder="What's happening on the porch?" rows="3"></textarea>
-        <div class="composer-row">
-          <span class="charcount" id="textCount">0 / 2000</span>
-          <button type="button" class="btn" id="postText">Post</button>
-        </div>
-      </div>
+<!-- Load order: shared porch.css first (defines the tokens + chrome
+     styles), then components/feed.js (mounts into #porch-mount on
+     DOMContentLoaded / window load — see the IIFE in feed.js). -->
+<script src="/components/feed.js"></script>
+<script>
+  // Mount the shared feed component into this thin shell. Same call
+  // signature as index.html's #page-wall mount — placement is just
+  // a target div.
+  (function () {
+    function mountPorch() {
+      if (window.HomesteadFeed && document.getElementById('porch-mount')) {
+        window.HomesteadFeed.mount(document.getElementById('porch-mount'), {
+          apiBase: '/api',
+          canPost: true,
+          canReact: true,
+          canComment: true,
+        });
+      }
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', mountPorch);
+    } else {
+      mountPorch();
+    }
+  })();
+</script>
 
-      <div class="cpane" id="pane-media">
-        <div id="dropZone" class="drop-zone">
-          <div class="drop-hint">Drag a photo/video here, paste, or</div>
-          <label class="btn btn-secondary" for="fileInput">Choose file</label>
-          <input type="file" id="fileInput" accept="image/*,video/*" hidden>
-        </div>
-        <div id="uploadStatus" class="upload-status"></div>
-      </div>
-
-      <div class="cpane" id="pane-link">
-        <input type="url" id="linkUrl" placeholder="https://…" class="field">
-        <div id="linkPreview" class="link-preview"></div>
-        <div class="composer-row">
-          <button type="button" class="btn" id="postLink">Post link</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="feed"></div>
-
-    <div class="older-wrap">
-      <button type="button" class="btn btn-secondary" id="olderBtn" hidden>Older</button>
-    </div>
-  </main>
-</div>
-
-<div id="toast"></div>
-
-<script src="/porch.js"></script>
 </body>
 </html>
