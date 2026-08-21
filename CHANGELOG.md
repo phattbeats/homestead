@@ -1,6 +1,44 @@
 # Changelog
 
-## v0.3.0 (TBD) — Modular Homestead: user_modules (PHA-2202)
+## v0.3.0 (TBD) — Modular Homestead: user_modules + module registry (PHA-2202, PHA-2203)
+
+### Module registry (PHA-2203 / PHA-2200.2)
+
+- **Static module registry.** New `lib/modules.js` exports
+  `REGISTRY` (six built-in entries: `wall`, `lists`, `calendar`,
+  `chores`, `apps`, `agent`) plus `DEFAULT_ENABLED = ['wall']`.
+  Every entry carries the full 16-field PHA-2201 manifest contract
+  (`key, name, description, icon, room, requires, tier, version,
+  author, url, open_mode, scopes, mcp, webhooks, entity_kinds,
+  default_enabled`). Third-party apps merge into the same shape via
+  the PHA-2201 install flow — built-ins dogfood the same contract.
+  Pure data, no DB access, no plugin loader. Frozen at module load
+  so a bug can't silently extend the whitelist.
+- **`lib/registry-validate.js`** — runtime sanity check. Validates
+  every entry against the manifest contract (field names + types),
+  every `requires[]` ref points to a registered key, `DEFAULT_ENABLED`
+  references are valid, and the registry's keys are a subset of the
+  `user_modules` CHECK constraint. Throws on the first drift; warns
+  on legacy CHECK-only keys (informational, not fatal).
+- **`getEnabledModules(db, userId)`** in `lib/user-model.js` joins
+  `user_modules` against the registry and returns the enabled set in
+  `REGISTRY_ORDER`, with `enabled_at` appended. Unknown /
+  legacy module_key rows are silently skipped so the API surface
+  only sees registered modules.
+- **Helpers.** `getModule(key)`, `getRoomRoute(key)`,
+  `getDefaultEnabled()`, `isModuleKey(key)`, `listModules()`,
+  `getDefaultEnabledModules()` all live in `lib/modules.js` or
+  `lib/user-model.js`. `USER_MODULE_KEYS` / `isUserModuleKey` in
+  `user-model.js` now delegate to the registry so the CHECK
+  constraint, the whitelist, and the helpers cannot drift.
+- **Tests.** `scripts/test-modules.js` covers 81 assertions: six
+  built-ins present, `DEFAULT_ENABLED === ['wall']`, manifest
+  shape validator catches drift in 6 directions, `requires[]`
+  references, registry order, `getEnabledModules` ordering +
+  skip-unknown, helper purity (mutation isolation), live
+  `validateAndThrow` against the live DB.
+
+### Per-user module enablement (PHA-2202)
 
 - **Per-user module enablement.** New `user_modules(user_id, module_key,
   enabled_at)` table with `(user_id, module_key)` PK and FK cascade on
