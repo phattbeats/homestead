@@ -1,6 +1,67 @@
 # Changelog
 
-## v0.3.0 (TBD) — Modular Homestead: user_modules + module registry (PHA-2202, PHA-2203)
+## v0.3.0 (TBD) — Modular Homestead: user_modules + module registry (PHA-2202, PHA-2203, PHA-2204, PHA-2207)
+
+### Invite-to-wall flow (PHA-2207 / PHA-2200.6)
+
+- **`lib/invites.js`** — new module. `invites` table
+  (`id`, `wall_slug`, `created_by`, `created_at`, `expires_at`,
+  `redeemed_by`, `redeemed_at`, `note`); the `id` IS the redemption
+  code (32 hex chars from `crypto.randomUUID()` sans dashes).
+  Helpers: `create`, `peek`, `redeem`, `list`. `peek` enforces
+  expiry/redeemed checks (410 on either); `redeem` is the canonical
+  CREATE-or-CLAIM-and-enroll path that writes wall_memberships +
+  stamps the invite atomically inside a transaction.
+- **`lib/wall-members.js`** — new module. `addMember(db, slug, userId, role)` is
+  INSERT-OR-IGNORE on the existing `wall_memberships` table (the
+  schema name is `wall_memberships`, not `wall_members` as the issue
+  body says; spec drift documented inline). `ensureMember` reconciles
+  the user's `user_groups` set to include the wall's `group_name`
+  for group-visibility walls so `walls.assertMember` +
+  `walls.listForUser` see the new user after invite redemption.
+  `getMembers` returns the full profile rows for the welcome-sheet
+  avatar stack.
+- **`POST /api/invites`** (admin only) — body
+  `{wall_slug, expires_in_days?, note?}`. `wall_slug` is REQUIRED:
+  a missing `wall_slug` returns 400 with a hint referencing PHA-1575
+  (the wall-less legacy path). `expires_in_days` defaults to 7,
+  max 90. Response carries `url: https://life.phatt.vip/invite/{code}`.
+- **`GET /api/invites`** (admin only) — outstanding invites by
+  default; `?include_redeemed=1` to include redeemed.
+- **`POST /api/invites/:code/redeem`** — authed user redeems. Atomic
+  transaction: `ensureMember` (wall_memberships + group reconciliation)
+  + invite stamp. Returns `{wall_slug, wall_name, first_run, redirect,
+  members}` so the SPA can render the welcome sheet without a
+  second round-trip. 410 on expired or already-redeemed; 404 on
+  unknown code.
+- **`POST /api/me/first-run-complete`** — stamps
+  `first_run_completed_at = datetime('now')`. Idempotent. Called by
+  `public/welcome.html` on dismiss.
+- **`GET /api/walls/:slug/members`** — used by the welcome sheet to
+  render the member avatar stack. Same membership gate as the rest
+  of `/api/walls/*` (`assertMember`).
+- **`public/welcome.html`** — the welcome sheet. Single screen: wall
+  name + member avatars + "Open the feed →" CTA that POSTs
+  `/api/me/first-run-complete` then navigates to
+  `/porch.html?wall=<slug>`. Existing users (first_run: false) skip
+  straight to the feed.
+- **`public/invite.html`** — the redemption page served at
+  `/invite/:code`. Bounces unauthenticated users to `/api/login`,
+  POSTs `/api/invites/:code/redeem`, and renders the wall card +
+  "Join this wall" CTA on success.
+- **Header-trust group union** — `provisionOrClaim` is now invoked
+  with `X-authentik-groups ∪ {group_names from group-visibility
+  wall_memberships}`. Without this, the very next authenticated
+  request would call `reconcileGroups` and wipe the media-club
+  group that the invite just granted. Documented inline.
+- **Tests.** `scripts/test-invite-to-wall.js` covers 50 assertions:
+  admin-only create, wall_slug required (legacy PHA-1575 → 400),
+  valid create returns 201 + URL, redemption grants membership +
+  first_run state, already-redeemed → 410, unknown code → 404,
+  `first-run-complete` is idempotent, existing-user redemption
+  preserves first_run: false, members endpoint gated by
+  assertMember, invalid wall_slug / bad expires_in_days, no-auth
+  redeem → 401.
 
 ### Module registry (PHA-2203 / PHA-2200.2)
 
