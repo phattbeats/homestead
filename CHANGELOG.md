@@ -2,6 +2,47 @@
 
 ## v0.3.0 — Modular Homestead: user_modules + module registry + invite-to-wall (PHA-2202, PHA-2203, PHA-2204, PHA-2207, PHA-2209)
 
+
+### Agent module gate (PHA-2208 / PHA-2200.7)
+
+The `agent` module is a deliberate toggle (PHA-2200 design §3): when
+disabled, the meta-agent drawer FAB is hidden AND the `/api/drawer`
+POST endpoint AND the new `/api/gazette/brief` morning-brief endpoint
+both return 403. When enabled, both endpoints are reachable and the
+FAB is visible.
+
+- **`lib/user-model.js`** — new `isAgentEnabled(db, userId)` helper.
+  Thin wrapper over `getEnabledModules` so the registry-driven
+  filtering (PHA-2203 Amendment 1) is the same logic the SPA uses.
+  Centralised here so the route-entry middleware and the SPA
+  bootstrap read the same source.
+- **`server.js`** — `POST /api/drawer` returns 403 `agent_disabled`
+  when the caller's enabled set doesn't include `agent`. New
+  `GET /api/gazette/brief` endpoint honours the same gate (the
+  body is a placeholder noting the real wire shape will land with
+  PHA-1617's brief-assembly contract). The HMAC-signed dispatcher
+  (PHA-1617.6) is unaffected — `isAgentEnabled` is a separate
+  guard at the route entry.
+- **`public/index.html`** — new `applyAgentFab()` helper reads the
+  same `agentDrawer` flag from `/api/me/layout` that the SPA
+  bootstrap uses elsewhere (single source of truth, no second
+  fetch). Called from `boot()` after the feed mount so a wall-only
+  user who lands on `/` gets the FAB hidden before the
+  redirect-to-`/porch.html` fires. Exported on `window` so the
+  add-a-room sheet (PHA-2200.4) can call it after a live
+  enable/disable without a full `boot()`.
+- **`scripts/test-agent-gating.js`** — 33 assertions: helper
+  unit, `/api/drawer` gate (enable → 200, disable → 403,
+  round-trip), `/api/gazette/brief` gate (same shape, plus the
+  200 placeholder body), `/api/me/layout.agentDrawer` flips in
+  lockstep, and the SPA `applyAgentFab` helper via `vm.runInContext`
+  on the inlined source. Wired into `npm test` after
+  `test-registry-no-hardcoded-keys` and before
+  `test-calendar-sources`.
+- **`scripts/test-registry-no-hardcoded-keys.js`** — added the new
+  test-agent-gating.js to the `EXCLUDE_FILES` allow-list per
+  the same rule as the sibling PHA-2209 acceptance tests.
+
 ### License + contribution terms (PHA-2222)
 
 Pre-release legal groundwork. The repo shipped public releases

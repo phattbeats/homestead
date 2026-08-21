@@ -192,6 +192,25 @@ a module that has active dependents (`lists` → `chores`) throws
 `dependents_active` until `{ withDependents: true }` is passed.
 See `scripts/test-requires-cascade.js`.
 
+### Agent gate (PHA-2208 / PHA-2200.7)
+
+The `agent` module is a deliberate toggle. When disabled:
+
+- The chat-drawer FAB (`#drawerFab`) carries the `off` class
+  (CSS hides it via `opacity:0 + pointer-events:none + scale(.7)`).
+- `POST /api/drawer` returns 403 `{ error: 'agent_disabled' }`.
+- `GET /api/gazette/brief` returns 403 `{ error: 'agent_disabled' }`.
+
+The SPA flips the FAB class on `boot()` and on every
+`applyAgentFab()` invocation (the helper is exposed on `window`
+so the add-a-room sheet can re-call it after a live
+enable/disable). The server-side gate is a separate check at
+the route entry from the HMAC-signed dispatcher (PHA-1617.6) —
+both run, neither bypasses. The 200 body of `/api/gazette/brief`
+is a placeholder; the real wire shape lands with PHA-1617's
+brief-assembly contract. See `scripts/test-agent-gating.js` for
+the 33-assertion acceptance suite.
+
 ## Calendar read-through (universal: CalDAV / Graph / Google)
 
 Homestead reads events from configured external calendars through a
