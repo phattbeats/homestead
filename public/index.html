@@ -622,6 +622,14 @@ async function boot(user){
       window.location.href='/porch.html';
     }
   }catch(_){}
+  // PHA-2208 (PHA-2200.7): same gate for the meta-agent drawer FAB.
+  // Runs after the feed mount so a wall-only user who lands on /
+  // gets the FAB hidden BEFORE the redirect-to-/porch.html fires
+  // (the redirect wipes the SPA's session state, but the FAB class
+  // flips while the SPA still owns the DOM). The helper is also
+  // exposed on window so the add-a-room sheet (PHA-2200.4) can call
+  // it after a live enable/disable without a full boot().
+  await applyAgentFab().catch(()=>{});
   // PHA-1619: if the browser already has permission + a subscription,
   // re-register it against this session so a returning user on a fresh
   // device doesn't have to click "Enable" again. Best-effort: any error
@@ -1902,6 +1910,35 @@ function closeDrawer() {
   $('#drawer').setAttribute('aria-hidden', 'true');
   $('#drawerFab').classList.remove('off');
 }
+// PHA-2208 (PHA-2200.7): the drawer FAB is gated by the `agent`
+// module. When the user has not enabled `agent`, the FAB stays in
+// the DOM but with the `off` class (CSS gives it opacity:0 +
+// pointer-events:none + scale(.7) so it's invisible AND
+// non-clickable). When `agent` is enabled, the class is removed and
+// the FAB animates in. `applyAgentFab` reads the same
+// `agentDrawer` flag from `/api/me/layout` that the SPA bootstrap
+// uses elsewhere — single source of truth, no second fetch.
+// The helper is exposed on `window` so the add-a-room sheet
+// (PHA-2200.4) can call it after a fresh enable/disable without
+// re-running the whole `boot()` flow.
+async function applyAgentFab() {
+  const fab = $('#drawerFab');
+  if (!fab) return false;
+  try {
+    const layout = await api('GET', '/api/me/layout').catch(() => null);
+    // layout.agentDrawer is set by lib/modules.computeLayout() — true
+    // when "agent" is in the user's enabled-modules set. Treat any
+    // fetch failure as "off" so a transient middleware hiccup doesn't
+    // accidentally expose the FAB.
+    const on = !!(layout && layout.agentDrawer);
+    fab.classList.toggle('off', !on);
+    return on;
+  } catch (_) {
+    fab.classList.add('off');
+    return false;
+  }
+}
+window.applyAgentFab = applyAgentFab;
 $('#drawerFab').onclick = openDrawer;
 $('#drawerClose').onclick = closeDrawer;
 // ESC closes the drawer — standard dialog UX.
