@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-1617.4 acceptance tests for lib/agent-endpoints.js.
 //
 // Drives `lib/agent-endpoints.js` directly against a temp SQLite file

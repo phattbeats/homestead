@@ -2,6 +2,7 @@
 
 ## v0.3.0 — Modular Homestead: user_modules + module registry + invite-to-wall (PHA-2202, PHA-2203, PHA-2204, PHA-2207, PHA-2209)
 
+
 ### Agent module gate (PHA-2208 / PHA-2200.7)
 
 The `agent` module is a deliberate toggle (PHA-2200 design §3): when
@@ -41,6 +42,61 @@ FAB is visible.
 - **`scripts/test-registry-no-hardcoded-keys.js`** — added the new
   test-agent-gating.js to the `EXCLUDE_FILES` allow-list per
   the same rule as the sibling PHA-2209 acceptance tests.
+
+### License + contribution terms (PHA-2222)
+
+Pre-release legal groundwork. The repo shipped public releases
+(v0.0.1 → v0.2.0, public GHCR image) with **no license**, which
+defaulted to all-rights-reserved. PHA-2222 lands the split-license
+position before any outside contributor lands a commit.
+
+- **`LICENSE`** — full GNU Affero General Public License v3.0-or-later
+  text. `Copyright (C) 2026 PHATT Tech LLC`. Source-code license.
+  Rationale (per the issue body): AGPL is the lightest copyleft that
+  reaches fork-and-host SaaS; imposes nothing on end users running
+  the unmodified software; doesn't reach third-party apps because
+  PHA-2201 defines them as token holders over MCP/REST in iframes
+  rather than code in Homestead's process.
+- **`LICENSE-docs`** — Creative Commons Attribution 4.0 International
+  (`CC BY 4.0`). Applies to `README.md`, the module-registry
+  specification, and the third-party app contract (PHA-2201). The
+  contract must be freely implementable by anyone, including in
+  closed-source or differently-licensed projects; this is the
+  permissive half of the split.
+- **`CONTRIBUTING.md`** — Developer Certificate of Origin (DCO)
+  policy. `git commit -s` is required for every commit. The DCO
+  certifies origin without transferring copyright; a CLA with
+  copyright assignment was explicitly ruled out.
+- **`.github/workflows/dco.yml`** — CI check that fails any PR or
+  push to `main` / `pha-2152-v0.2.0-release` /
+  `pha-2200-8-v0.3.0-release` whose commits lack a
+  `Signed-off-by:` trailer matching the author email. No
+  dependencies; thin `git rev-list` + `grep` shell.
+- **SPDX headers** added to all 64 source files in `server.js`,
+  `lib/`, `public/`, and `scripts/`. Header shape:
+  ```js
+  // SPDX-License-Identifier: AGPL-3.0-or-later
+  // Copyright (C) 2026 PHATT Tech LLC
+  ```
+  HTML files use the equivalent `<!-- -->` comment form.
+- **`package.json`** — `"license": "AGPL-3.0-or-later"`,
+  `"private": false`, plus `author`, `repository`, `bugs`, and
+  `funding` fields. `"private": false` is the part that makes the
+  repo installable from npm if anyone wants to (it's still marked
+  `"private": true` historically because it was unpublished code).
+- **`Dockerfile`** + **`.github/workflows/release.yml`** —
+  `org.opencontainers.image.licenses=AGPL-3.0-or-later` label
+  applied at build time so GHCR image metadata agrees with
+  LICENSE / package.json. Other OCI labels added for completeness:
+  `description`, `url`, `documentation`, `vendor`.
+- **Dependency-license audit** — all 7 direct deps (and the 116
+  total transitive packages scanned) are redistribution-compatible
+  with AGPL. The only non-permissive entries are
+  `@img/sharp-libvips-linux-x64` (LGPL-3.0-or-later — explicitly
+  permits conversion to AGPL per LGPL-3 §3) and `web-push`
+  (MPL-2.0 — weak copyleft at file scope, doesn't reach the
+  consumer). Full audit results in the PHA-2222 disposition
+  comment.
 
 ### Acceptance suite + release (PHA-2209 / PHA-2200.8)
 

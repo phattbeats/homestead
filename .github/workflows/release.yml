@@ -49,8 +49,15 @@ jobs:
             ghcr.io/phattbeats/homestead:latest
           labels: |
             org.opencontainers.image.title=homestead
+            org.opencontainers.image.description=Shared life app: tasks with take-turns rotation, calendar, and a full-screen iframe app shell for self-hosted services.
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}#readme
             org.opencontainers.image.revision=${{ github.sha }}
+            # PHA-2222: pin the license label so the GHCR image metadata
+            # agrees with LICENSE / package.json (AGPL-3.0-or-later).
+            org.opencontainers.image.licenses=AGPL-3.0-or-later
+            org.opencontainers.image.vendor=PHATT Tech LLC
 
   release:
     needs: docker
