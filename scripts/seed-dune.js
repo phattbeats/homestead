@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-1872 (design doc PHA-1624 §11) — the Dune walkthrough, on disk.
 //
 // Direct DB calls only (no write API — Phase A ships read-only). Idempotent:
