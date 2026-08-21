@@ -38,11 +38,16 @@ console.log('PHA-2149 media tests\n');
 
   const userModel = require('../lib/user-model');
   const media = require('../lib/media');
+const analytics = require('../lib/analytics');
 
   const dbPath = path.join(tmpDataDir, 'life.db');
   const db = new Database(dbPath);
   userModel.migrate(db);
   media.migrate(db);
+  // PHA-2210: lib/media.js calls analytics.logEvent on every upload. The
+  // analytics layer is best-effort so a missing table wouldn't fail the
+  // test, but the noise in stderr is ugly.
+  analytics.migrate(db);
 
   const brandon = db.prepare('SELECT id FROM users WHERE username = ?').get('brandon');
   const emily = db.prepare('SELECT id FROM users WHERE username = ?').get('emily');
