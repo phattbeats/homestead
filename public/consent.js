@@ -10,13 +10,15 @@
 // no "I trust this author" checkbox, no code-signing badge).
 //
 // The install endpoints (POST /api/apps/resolve, /consent, /install)
-// are PHA-2229 and not built yet — this screen has no DB dependency
+// are PHA-2229 (shipped). This screen itself has no DB dependency
 // (PHA-2230's scope) and renders purely from a manifest + scopes[]
-// list. `renderConsentScreen` is the reusable piece PHA-2229's install
-// flow will call directly with its own resolved manifest; this page's
-// own boot() below is a standalone demo/preview harness in the
-// meantime, reading a pending install from sessionStorage if one was
-// set, otherwise falling back to a bundled sample manifest.
+// list. `renderConsentScreen` is the reusable piece — PHA-2232's
+// Settings → Apps install flow embeds this script and calls it
+// directly against its own sheet markup + resolved manifest; this
+// page's own boot() below (guarded to only run on consent.html itself)
+// remains a standalone demo/preview harness, reading a pending install
+// from sessionStorage if one was set, otherwise falling back to a
+// bundled sample manifest.
 'use strict';
 
 (function () {
@@ -103,6 +105,14 @@
   }
 
   function boot() {
+    // Guard: this standalone-page demo/preview harness only runs on
+    // consent.html itself. PHA-2232 (Settings → Apps → install) embeds
+    // this same script for `window.HomesteadConsent.renderConsentScreen`
+    // but has its own root markup (inside a Settings sheet, not
+    // consent.html's #demoBanner/#app structure) — without this guard,
+    // boot() would fire on that page's DOMContentLoaded too and crash
+    // reaching into DOM nodes that don't exist there.
+    if (!document.getElementById('demoBanner')) return;
     const pending = readPending();
     const manifest = pending ? pending.manifest : DEMO_MANIFEST;
     const scopes = pending ? pending.scopes || [] : DEMO_SCOPES;

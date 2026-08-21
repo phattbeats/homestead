@@ -68,6 +68,50 @@
   `VALUES (...) AS alias` via `db.exec`. Semantically identical,
   supported on every SQLite since 3.7.
 
+### Settings → Apps UI (PHA-2201.4 / PHA-2232)
+
+- **Apps list, per-app detail, revoke, install — the user-facing
+  surface for the whole install/consent/revoke contract.** Avatar menu
+  → **📦 Apps** opens the new Settings → Apps sheet.
+- **Unified apps list.** `lib/app-install.js`'s `listApps()`/`getApp()`
+  now merge BOTH halves of the PHA-2201 dogfood contract through the
+  same read path: enabled built-in modules (`user_modules`, tagged
+  `builtin: true`) and active third-party installs (`agent_tokens.app_id`,
+  tagged `builtin: false`). `getApp()` also returns `entity_kinds` so
+  the client can describe generic entity-CRUD scopes (`read:{kind}`)
+  without a second lookup.
+- **Per-app detail** renders "what this app can do" via the shared
+  `lib/scope-display.js` mapping (PHA-2230) and, for third-party apps,
+  a paginated **Activity** view over real `app_api_log` rows
+  (PHA-2231, `GET /api/apps/:key/activity`, "Load more" accumulates
+  pages). Built-ins show neither Activity nor Revoke — they have no
+  app-scoped token to log or kill; the UI states this rather than
+  hitting an endpoint that would 404.
+- **Revoke is one action.** The detail sheet's Revoke button calls
+  `POST /api/apps/:key/revoke` directly — no separate disable step —
+  and returns to the (now tile-free) Apps list on success.
+- **Install flow** (paste manifest URL → resolve → consent → install)
+  reuses the PHA-2230 consent screen's `window.HomesteadConsent.
+  renderConsentScreen` verbatim, embedded in a Settings sheet instead
+  of standalone `consent.html` — same copy, same scope mapping, no
+  reimplementation. `public/consent.js`'s demo `boot()` gained a guard
+  (`if (!document.getElementById('demoBanner')) return;`) so it's safe
+  to load as a shared script on a page (`index.html`) that also has an
+  `id="app"` root. The freshly-minted app token is shown once via the
+  existing copy-once reveal modal (PHA-1617.3 pattern).
+- **`lib/scope-display.js` gained `read:services`** (the `apps`
+  built-in's scope per design note §6) — an existing vocabulary gap
+  that only surfaced once built-ins started rendering through this
+  same mapping.
+- **Tests.** `scripts/smoke-apps-settings-ui.js` (new, wired into
+  `npm run test:smoke`): source assertions that the SPA wires up every
+  acceptance-listed sheet/call, plus a live HTTP round trip — built-in
+  present in `GET /api/apps` pre-install, resolve → consent → install,
+  both builtin + third-party rows post-install, scopes describable,
+  a real app-token call produces a real `app_api_log` row the activity
+  view renders, revoke removes the tile, and the same token gets 401
+  on its very next call, all within one run.
+
 ### Third-party app install flow (PHA-2201.1 / PHA-2229)
 
 - **Six endpoints**, the server-side state machine from the PHA-2201
