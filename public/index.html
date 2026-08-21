@@ -1017,6 +1017,7 @@ $('#avatarBtn').onclick=()=>{
   openSheet(`<h2>${esc(ME.display)}</h2>
     <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-calendar-sources">📅 Calendar sources</button>
     <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-connected-agents">🔌 Connected agents</button>
+    <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-about">ℹ️ About Homestead</button>
     ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-settings">⚙️ Settings · manage household</button>`:''}
     <h3>Push notifications</h3>
     <p style="font-size:13px;color:var(--muted);margin:-4px 0 10px">Get reminders for chores due today and your turn to take a rotating chore. iPhone users: add Homestead to your Home Screen first (iOS 16.4+ required for push).</p>
@@ -1033,6 +1034,7 @@ $('#avatarBtn').onclick=()=>{
   }
   $('#f-calendar-sources').onclick=()=>openCalendarSourcesSheet();
   $('#f-connected-agents').onclick=()=>openConnectedAgentsSheet();
+  $('#f-about').onclick=()=>openAboutSheet();
   pushRenderButton('#f-push');
   renderPushPrefs();
   $('#f-pw').onclick=async()=>{
@@ -1041,6 +1043,56 @@ $('#avatarBtn').onclick=()=>{
   };
   $('#f-out').onclick=async()=>{await api('POST','/api/logout');location.reload()};
 };
+
+// PHA-2223: About Homestead sheet. The single, findable surface for the
+// donation link. Per policy: "One quiet, findable link. Not on the wall,
+// not in the meadow, not in the Gazette, not in onboarding." — this sheet
+// is the only place. The link is fetched from /api/donation-link. The
+// plain counter is fire-and-forget; the navigation to
+// the provider's site must never break because the counter failed.
+async function openAboutSheet(){
+  let version='?';
+  let commit=null;
+  let link=null;
+  try{
+    const v=await fetch('/api/version').then(r=>r.json());
+    version=v.version||'?';
+    commit=v.commit||null;
+  }catch(e){}
+  try{
+    const r=await fetch('/api/donation-link');
+    if(r.ok)link=await r.json();
+  }catch(e){}
+  const linkHtml = link
+    ? `<p style="font-size:13px;color:var(--muted);margin:14px 0 6px">Support Homestead</p>
+       <button class="link" id="f-donate" style="display:block;width:100%;text-align:center;padding:12px 0;border:1px solid var(--line);border-radius:8px">${esc(link.label||'Support Homestead')} ↗</button>
+       <p style="font-size:11px;color:var(--muted);margin:8px 0 0;line-height:1.4">Opens an external page. No payment is handled by Homestead itself — no card data, no account, no record of who opened it.</p>`
+    : '';
+  const commitLine = commit ? ` · build ${esc(commit.slice(0,7))}` : '';
+  openSheet(`<h2>About Homestead</h2>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 8px">Version ${esc(version)}${commitLine}</p>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 4px;line-height:1.5">A shared-life app for a small household. Tasks, calendar, a feed for the wall, and a launcher grid for the self-hosted services we use. No telemetry, no ads, no recurring anything.</p>
+    ${linkHtml}
+    <button class="link" style="margin-top:18px;width:100%;text-align:center" onclick="closeSheet()">Close</button>`);
+  if(link){
+    $('#f-donate').onclick=async()=>{
+      // Fire-and-forget counter, then navigate. The counter is a plain
+      // INSERT into a (day TEXT) table — no user_id, no IP, no UA. The
+      // navigation must never break because the counter failed.
+      try{
+        fetch('/api/donation-click',{method:'POST',keepalive:true}).catch(()=>{});
+      }catch(e){}
+      try{
+        window.open(link.url,'_blank','noopener,noreferrer');
+      }catch(e){
+        // Some browsers block window.open; fall back to a same-tab
+        // navigation. Still using noopener-less URL because it's a
+        // user-initiated click, not a popup.
+        location.href=link.url;
+      }
+    };
+  }
+}
 
 /* ---- settings sheet (admin) ---- */
 function openSettingsSheet(){

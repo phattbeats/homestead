@@ -50,6 +50,7 @@ const media = require('./lib/media');
 const walls = require('./lib/walls');
 const invites = require('./lib/invites');
 const wallMembers = require('./lib/wall-members');
+const donations = require('./lib/donations');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -82,6 +83,11 @@ walls.seed(db);
 // PHA-2207 (PHA-2200.6): invite codes. FKs to walls(slug), so it
 // runs after walls.migrate().
 invites.migrate(db);
+
+// PHA-2223: one plain, unattributed counter.  The schema has no event rows,
+// dates, user IDs, IPs, user agents, referrers, provider data, or payment
+// records, so it cannot become donation analytics.
+donations.migrate(db);
 
 // v0.1.0: web push subscriptions (PHA-1619)
 db.exec(`
@@ -340,6 +346,36 @@ app.get('/api/health', (req, res) => {
 
 app.get('/api/version', (req, res) => {
   res.json({ version: PKG_VERSION, commit: COMMIT_SHA });
+});
+
+// PHA-2223: donation-link discovery. Public and static: this is the same
+// GitHub Sponsors link published in the README, not a per-user resource.
+app.get('/api/donation-link', (req, res) => {
+  res.json(donations.getLink());
+});
+
+// PHA-2223: donation-click counter. Public, no auth, no body. Updates
+// the one total only; there is no event row, date, user ID, IP,
+// user-agent, or referer column.
+// Fire-and-forget for the client; failures here never affect the
+// navigation to the provider's site. We always respond 204 — the
+// client doesn't need a body, and a body would only add a wire
+// payload the operator can see in logs (which we explicitly don't
+// want).
+app.post('/api/donation-click', (req, res) => {
+  donations.recordClick();
+  res.status(204).end();
+});
+
+// PHA-2223: the only permitted measurement is one plain total.  No time
+// buckets or other segmentation are exposed.
+app.get('/api/admin/donation-count', auth, (req, res) => {
+  if (!req.session.user || !req.session.user.isAdmin) {
+    return res.status(403).json({ error: 'admin_only' });
+  }
+  const count = donations.getCount();
+  if (!count.ok) return res.status(500).json({ error: count.error });
+  res.json({ count: count.count });
 });
 
 // ---- auth ----

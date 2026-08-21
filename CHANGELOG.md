@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.3.0 — Modular Homestead: user_modules + module registry + invite-to-wall (PHA-2202, PHA-2203, PHA-2204, PHA-2207, PHA-2209)
+## v0.3.0 — Modular Homestead: user_modules + module registry + invite-to-wall + donation surface (PHA-2202, PHA-2203, PHA-2204, PHA-2206, PHA-2207, PHA-2208, PHA-2209, PHA-2222, PHA-2223)
 
 
 ### Agent module gate (PHA-2208 / PHA-2200.7)
@@ -97,6 +97,42 @@ position before any outside contributor lands a commit.
   (MPL-2.0 — weak copyleft at file scope, doesn't reach the
   consumer). Full audit results in the PHA-2222 disposition
   comment.
+
+### Donation surface (PHA-2223)
+
+A single, quiet, findable donation link. By design policy, money
+stays potential — nothing is collected as a condition of access,
+and the link lives in **one** place: the avatar menu's new "About
+Homestead" sheet. It does not appear on the wall, in the meadow,
+in the Gazette, in onboarding, or in any notification.
+
+- **`lib/donations.js`** — new module. The fixed GitHub Sponsors URL
+  is shared with the README and package metadata, so deployments cannot
+  quietly substitute a different commercial surface. Its one-row
+  `donation_counter(id, count)` table has no event history, time buckets,
+  `user_id`, IP, user-agent, or referer — by schema, not by promises.
+- **`server.js`** — three new routes. `GET /api/donation-link`
+  returns the fixed `{url, label}`. `POST /api/donation-click` is
+  unauthenticated, fire-and-forget, returns **204 No Content** with
+  no body. `GET /api/admin/donation-count` is admin-only and returns
+  only `{count}`; no time buckets or other analytics exist.
+- **`public/index.html`** — new avatar-menu entry "ℹ️ About
+  Homestead" (reachable by every authenticated user, not gated on
+  admin) opens `openAboutSheet()` which fetches the link and
+  renders version/commit, the product blurb, and a single
+  bordered donation button. Click fires `/api/donation-click`
+  via `keepalive` fetch, then opens the provider's URL via
+  `window.open(url, '_blank', 'noopener,noreferrer')` so the
+  provider site can't reach Homestead's window. A fallback
+  `location.href` covers the (rare) browsers that block
+  `window.open`.
+- **`README.md`** — new "Support (PHA-2223)" section mirrors the
+  same `github.com/sponsors/phattbeats` link so self-hosters who
+  don't have an account can support without signing in.
+- **`scripts/test-donations.js`** — policy test covering the fixed
+  link, the one-row `donation_counter(id, count)` schema, live link,
+  click, and admin-count routes, browser isolation, and the matching
+  README/package URL.
 
 ### Acceptance suite + release (PHA-2209 / PHA-2200.8)
 
