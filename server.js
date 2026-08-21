@@ -31,6 +31,7 @@ const fs = require('fs');
 const webpush = require('web-push');
 
 const userModel = require('./lib/user-model');
+const modules = require('./lib/modules');
 const plexSync = require('./lib/sync/plex');
 const kavitaSync = require('./lib/sync/kavita');
 const agentTokens = require('./lib/agent-tokens');
@@ -474,6 +475,13 @@ app.get('/api/me', (req, res) => {
   // cookie yet still sees themselves. Unauthenticated requests return
   // { user: null } (200) instead of 401 so the SPA can use /api/me as a
   // "am I signed in?" check on every page load without a redirect.
+  //
+  // PHA-2204 (PHA-2200.3) extension: when authenticated, also include
+  //   enabled_modules: ['wall','apps',...]  (registry order)
+  //   default_route:    '/porch.html'       (first enabled module's room route)
+  //   first_run:        true | false        (first_run_completed_at IS NULL)
+  // so the SPA bootstrap (PHA-2200.4) can render without a second
+  // /api/me/layout fetch.
   const headerUser = req.get('x-authentik-username');
   if (headerUser) {
     const groupsHeader = req.get('x-authentik-groups') || '';
@@ -492,10 +500,29 @@ app.get('/api/me', (req, res) => {
       isAdmin: !!u.is_admin,
       authProvider: 'header_trust',
     };
-    return res.json({ user: req.session.user });
+    return res.json(buildMeEnvelope(db, req.session.user));
   }
-  res.json({ user: req.session.user || null });
+  if (!req.session.user) return res.json({ user: null });
+  res.json(buildMeEnvelope(db, req.session.user));
 });
+
+// `buildMeEnvelope` assembles the full /api/me response shape. Pulled
+// out so both the header-trust and session-cookie paths in the route
+// above use the same envelope construction. Kept module-local so it
+// doesn't leak into other routes.
+function buildMeEnvelope(db, sessionUser) {
+  const enabledRows = userModel.getEnabledModules(db,
+    db.prepare('SELECT id FROM users WHERE username = ?').get(sessionUser.username).id);
+  const enabledKeys = enabledRows.map(e => e.key);
+  const firstRoomRoute = modules.getRoomRoute(enabledKeys[0]);
+  const userId = db.prepare('SELECT id FROM users WHERE username = ?').get(sessionUser.username).id;
+  return {
+    user: sessionUser,
+    enabled_modules: enabledKeys, // registry order, deterministic
+    default_route: firstRoomRoute, // first enabled module's room route (or null)
+    first_run: userModel.isFirstRun(db, userId),
+  };
+}
 
 // PHA-1902 (PHA-1617.9): the `homestead_get_user_context` snapshot
 // endpoint. Single-call morning-brief context: today's tasks/events/
@@ -515,6 +542,109 @@ app.get('/api/me/snapshot', auth, (req, res) => {
     res.status(500).json({ error: 'snapshot_build_failed' });
   }
 });
+// ---- PHA-2204 (PHA-2200.3): module / layout API surface ----
+//
+// Four read endpoints + two write endpoints:
+//   * GET  /api/me/layout       — SPA bootstrap; computed from enabled set
+//   * GET  /api/me/modules      — current user's enabled keys (registry order)
+//   * GET  /api/modules         — full registry array (for the add-a-room sheet)
+//   * POST /api/me/modules/:key/enable   — idempotent; cascade via withRequirements
+//   * POST /api/me/modules/:key/disable  — idempotent; cascade via withDependents
+//
+// Auth: every endpoint uses the existing `auth` middleware. Users only
+// modify their own `user_modules` rows (the handlers below look up the
+// caller's user.id from the session). No new admin gates.
+
+// GET /api/me/layout — returns the SPA bootstrap shape built from the
+// caller's currently-enabled modules. See lib/modules.computeLayout for
+// the four layout modes (empty / feed-only / feed-tabs / meadow).
+app.get('/api/me/layout', auth, (req, res) => {
+  const username = req.session.user && req.session.user.username;
+  if (!username) return res.status(401).json({ error: 'unauthorized' });
+  const u = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (!u) return res.status(401).json({ error: 'unauthorized' });
+  const enabledKeys = userModel.getEnabledModules(db, u.id).map(e => e.key);
+  res.json(modules.computeLayout(enabledKeys));
+});
+
+// GET /api/me/modules — returns the caller's enabled keys in registry
+// order. Same data the SPA can derive from /api/me.enabled_modules,
+// but exposed as its own endpoint for callers (drawer scripts, MCP
+// tools) that want JUST the keys without the full /api/me envelope.
+app.get('/api/me/modules', auth, (req, res) => {
+  const username = req.session.user && req.session.user.username;
+  if (!username) return res.status(401).json({ error: 'unauthorized' });
+  const u = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (!u) return res.status(401).json({ error: 'unauthorized' });
+  const enabledKeys = userModel.getEnabledModules(db, u.id).map(e => e.key);
+  res.json(enabledKeys);
+});
+
+// GET /api/modules — returns the full registry as an array of entries
+// in registry order. Used by the add-a-room sheet (PHA-2200.4) to
+// render the list of available modules the user can enable.
+app.get('/api/modules', auth, (req, res) => {
+  res.json(modules.listModules());
+});
+
+// POST /api/me/modules/:key/enable — idempotent enable. Body is
+// optional; { withRequirements: true } cascades unmet requirements.
+// 400 on invalid key. 409 on unmet requirements when the cascade flag
+// is not set (response carries { error: 'requires_unmet', unmet: [...] }).
+// Returns { enabled: { module_key, enabled, enabled_at }, also_enabled: [...] }.
+app.post('/api/me/modules/:key/enable', auth, (req, res) => {
+  const username = req.session.user && req.session.user.username;
+  if (!username) return res.status(401).json({ error: 'unauthorized' });
+  const key = req.params.key;
+  if (!modules.isModuleKey(key)) return res.status(400).json({ error: 'invalid_module_key', key });
+  const u = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (!u) return res.status(401).json({ error: 'unauthorized' });
+  const withRequirements = !!(req.body && req.body.withRequirements === true);
+  try {
+    const result = userModel.enableModule(db, u.id, key, { withRequirements });
+    res.json({
+      enabled: result.enabled,
+      also_enabled: result.also_enabled,
+      enabled_modules: userModel.getEnabledModules(db, u.id).map(e => e.key),
+    });
+  } catch (err) {
+    if (err && err.code === 'requires_unmet') {
+      return res.status(409).json({ error: 'requires_unmet', unmet: err.unmet });
+    }
+    console.error('[api/me/modules/:key/enable]', err);
+    res.status(500).json({ error: 'enable_failed' });
+  }
+});
+
+// POST /api/me/modules/:key/disable — idempotent disable. Body is
+// optional; { withDependents: true } cascades to dependents.
+// 400 on invalid key. 409 on active dependents when the cascade flag
+// is not set (response carries { error: 'dependents_active', dependents: [...] }).
+// Returns { disabled: { module_key, enabled, enabled_at }, also_disabled: [...] }.
+app.post('/api/me/modules/:key/disable', auth, (req, res) => {
+  const username = req.session.user && req.session.user.username;
+  if (!username) return res.status(401).json({ error: 'unauthorized' });
+  const key = req.params.key;
+  if (!modules.isModuleKey(key)) return res.status(400).json({ error: 'invalid_module_key', key });
+  const u = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (!u) return res.status(401).json({ error: 'unauthorized' });
+  const withDependents = !!(req.body && req.body.withDependents === true);
+  try {
+    const result = userModel.disableModule(db, u.id, key, { withDependents });
+    res.json({
+      disabled: result.disabled,
+      also_disabled: result.also_disabled,
+      enabled_modules: userModel.getEnabledModules(db, u.id).map(e => e.key),
+    });
+  } catch (err) {
+    if (err && err.code === 'dependents_active') {
+      return res.status(409).json({ error: 'dependents_active', dependents: err.dependents });
+    }
+    console.error('[api/me/modules/:key/disable]', err);
+    res.status(500).json({ error: 'disable_failed' });
+  }
+});
+
 app.post('/api/password', auth, (req, res) => {
   const { current, next } = req.body || {};
   const u = db.prepare('SELECT * FROM users WHERE username = ?').get(req.session.user.username);
