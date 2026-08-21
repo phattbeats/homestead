@@ -45,6 +45,7 @@ const calendarSources = require('./lib/calendar-sources');
 const secretBox = require('./lib/secret-box');
 const snapshot = require('./lib/snapshot');
 const drawerDispatch = require('./lib/drawer-dispatch');
+const eventsDispatch = require('./lib/events-dispatch');
 const media = require('./lib/media');
 const walls = require('./lib/walls');
 const notifications = require('./lib/notifications');
@@ -142,6 +143,13 @@ app.use(session({
 // In-memory only; the persistent record is the row's last_status_code
 // + last_error columns written by agentEndpoints.recordDispatch.
 app.locals.drawerStreakMap = new Map();
+
+// PHA-1617.7: same in-memory consecutive-failure streak pattern as
+// drawerStreakMap above, but tracked separately — a household's
+// drawer harness and events harness (often the same physical box, but
+// possibly different agent_endpoints rows) trip their circuit
+// breakers independently.
+app.locals.eventsStreakMap = new Map();
 
 // ---- auth middleware ----
 // Four-layer auth:
@@ -376,6 +384,17 @@ async function notify(userId, payload, opts = {}) {
     }
   }
   logNotification(userId, category, payload, delivered, delivered === 0 && errors > 0 ? 'all_endpoints_failed' : null);
+  // PHA-1617.7: mirror every attempted push out to the user's opted-in
+  // events endpoints (category 'push'). Fire-and-forget — a dead
+  // events harness must never affect push delivery to the browser.
+  const pushUser = db.prepare('SELECT id, username, display, color FROM users WHERE id = ?').get(userId);
+  if (pushUser) {
+    eventsDispatch.dispatchEvent(db, app.locals.eventsStreakMap, pushUser, 'push', {
+      category, title: payload.title || '', body: payload.body || '',
+      url: payload.url || '/', tag: payload.tag || category,
+      delivered, errors,
+    }).catch(() => {});
+  }
   return { delivered, skipped: 0, errors };
 }
 
@@ -1189,7 +1208,12 @@ app.post('/api/tasks', auth, (req, res) => {
   const alt = rotate && alt_assignee ? alt_assignee : null;
   const r = db.prepare('INSERT INTO tasks (title,notes,assignee,alt_assignee,due_date,recur,rotate,created_by) VALUES (?,?,?,?,?,?,?,?)')
     .run(title, notes, assignee, alt, due_date, recur, rotate ? 1 : 0, req.session.user.username);
-  res.json(db.prepare('SELECT * FROM tasks WHERE id = ?').get(r.lastInsertRowid));
+  const created = db.prepare('SELECT * FROM tasks WHERE id = ?').get(r.lastInsertRowid);
+  // PHA-1617.7: fire-and-forget events webhook fan-out. Never awaited on
+  // the request path — a dead events harness must not slow down or fail
+  // task creation.
+  eventsDispatch.dispatchEventForAssignee(db, app.locals.eventsStreakMap, assignee, 'task_created', { task: created }).catch(() => {});
+  res.json(created);
 });
 app.put('/api/tasks/:id', auth, (req, res) => {
   const t = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
@@ -1212,7 +1236,8 @@ function bumpDate(dateStr, recur) {
 app.post('/api/tasks/:id/toggle', auth, (req, res) => {
   const t = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (!t) return res.status(404).json({ error: 'not found' });
-  if (!t.done && t.recur) {
+  const wasRotation = !t.done && t.recur;
+  if (wasRotation) {
     let assignee = t.assignee;
     let alt = t.alt_assignee;
     if (t.rotate && alt) {
@@ -1226,7 +1251,20 @@ app.post('/api/tasks/:id/toggle', auth, (req, res) => {
     db.prepare('UPDATE tasks SET done=?, done_by=?, done_at=datetime(\'now\') WHERE id=?')
       .run(t.done ? 0 : 1, req.session.user.username, t.id);
   }
-  res.json(db.prepare('SELECT * FROM tasks WHERE id = ?').get(t.id));
+  const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(t.id);
+  // PHA-1617.7: fire-and-forget events webhook fan-out. A rotating chore
+  // that just handed off to the next assignee fires 'chore_rotated' (to
+  // the NEW assignee, since that's who needs to know); a plain task
+  // toggle fires 'task_completed'/'task_uncompleted'.
+  if (wasRotation) {
+    eventsDispatch.dispatchEventForAssignee(db, app.locals.eventsStreakMap, updated.assignee, 'chore_rotated',
+      { task: updated, previous_assignee: t.assignee }).catch(() => {});
+  } else {
+    const category = updated.done ? 'task_completed' : 'task_uncompleted';
+    eventsDispatch.dispatchEventForAssignee(db, app.locals.eventsStreakMap, updated.assignee, category,
+      { task: updated }).catch(() => {});
+  }
+  res.json(updated);
 });
 app.delete('/api/tasks/:id', auth, (req, res) => {
   db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.id);
@@ -1247,7 +1285,10 @@ app.post('/api/events', auth, (req, res) => {
   if (!userModel.validateAssignee(db, owner)) return res.status(400).json({ error: 'unknown owner' });
   const r = db.prepare('INSERT INTO events (title,date,time,notes,owner,created_by) VALUES (?,?,?,?,?,?)')
     .run(title, date, time, notes, owner, req.session.user.username);
-  res.json(db.prepare('SELECT * FROM events WHERE id = ?').get(r.lastInsertRowid));
+  const created = db.prepare('SELECT * FROM events WHERE id = ?').get(r.lastInsertRowid);
+  // PHA-1617.7: fire-and-forget events webhook fan-out (see /api/tasks).
+  eventsDispatch.dispatchEventForAssignee(db, app.locals.eventsStreakMap, owner, 'event_created', { event: created }).catch(() => {});
+  res.json(created);
 });
 app.put('/api/events/:id', auth, (req, res) => {
   const e = db.prepare('SELECT * FROM events WHERE id = ?').get(req.params.id);
