@@ -68,6 +68,62 @@
   `VALUES (...) AS alias` via `db.exec`. Semantically identical,
   supported on every SQLite since 3.7.
 
+### Third-party app install flow (PHA-2201.1 / PHA-2229)
+
+- **Six endpoints**, the server-side state machine from the PHA-2201
+  design note §2/§7: `POST /api/apps/resolve`, `POST
+  /api/apps/consent`, `POST /api/apps/install`, `GET /api/apps`, `GET
+  /api/apps/:key`, `POST /api/apps/:key/revoke`, `POST
+  /api/apps/:key/reinstall`. New `lib/app-install.js` (pure DB/business
+  logic, no express) backs all six; `server.js` handlers are auth +
+  status-code mapping only.
+- **`resolve` never writes to the DB** (verified by the acceptance
+  suite) — it fetches a manifest URL (in-memory cache, keyed by URL,
+  ETag revalidation, 5-minute TTL), validates its shape via
+  `lib/registry-validate.js`'s `validateEntryShape` and its `scopes[]`
+  against `lib/scope-display.js`'s §3 vocabulary — reusing both, not
+  forking — and rejects built-in-key collisions (`409
+  manifest_key_conflict`, e.g. a manifest claiming `key: "wall"`).
+  Unknown scopes fail with the valid vocabulary listed in the error.
+- **URL security.** Third-party `url` (the manifest fetch target and
+  the manifest's own iframe/tab target) must be `https://` with a
+  non-loopback host; `dev: true` on the request body — never a
+  manifest property — relaxes this for pointing Homestead at a
+  locally-running app under development.
+- **Consent tokens.** 60s TTL, single-use, bound to `(user,
+  manifest_url)`, backed by a new `app_consent_tokens` table
+  (sha256-hashed, not bcrypt — a 60-second exchange token doesn't need
+  bcrypt's offline-brute-force cost). The manifest is snapshotted onto
+  the token at consent time so install commits exactly what was shown
+  on the consent screen even if the remote manifest changes in the
+  intervening window.
+- **Install is one transaction**: consumes the consent token,
+  inserts/reactivates the shared `installed_apps` row (keyed
+  household-wide, not per-user — a second household member installing
+  the same app reuses the existing row instead of re-inserting),
+  mints an app-scoped PAT (`agent_tokens.app_id`, scopes from the
+  consented manifest) via `agentTokens.issue()`'s new `appId` param,
+  and enables the `apps` launcher module for the installing user
+  (`user_modules` is CHECK-constrained to the six built-in keys —
+  third-party apps launch from the existing `apps` tiled launcher,
+  PHA-1863, rather than minting their own `user_modules` row). Any
+  failure rolls back everything, including the consent-token
+  consumption.
+- **Revoke** soft-deletes this user's app-scoped token(s) (immediate
+  401 on their next call), disables `apps` for them if it was their
+  last third-party app, and archives the shared `installed_apps` row
+  once no household member holds an active token for it — "remove the
+  tile" without disturbing another member's install of the same app.
+  **Reinstall** mints a fresh token with the same scopes for a user
+  with prior install history, without repeating consent.
+- **Tests.** `scripts/test-app-install.js` covers 64 assertions across
+  direct calls (resolve DB-purity, shape/scope/URL rejections,
+  built-in collision, full consent+install lifecycle, shared-app
+  multi-user semantics, revoke/reinstall, manifest caching) and one
+  end-to-end HTTP round trip against a live `server.js` (resolve ->
+  consent -> install -> tile appears in `GET /api/apps` -> token
+  authenticates a real call -> revoke -> 401 on the very next call).
+
 ## v0.2.0 (2026-08-19) — Porch Wall (PHA-2147)
 
 - **Media storage primitive.** Content-addressed uploads at `/data/media/...`,
