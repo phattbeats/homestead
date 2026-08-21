@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-1874 (PHA-1624 Phase B-2) acceptance tests for the Kavita sync worker.
 //
 // Pure-DB tests: drive `lib/sync/kavita.js` against a temp SQLite file

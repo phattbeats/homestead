@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-1867 merge-layer smoke test: end-to-end against a live server.js.
 //
 //   1. Boot server.js in-process with CALENDAR_CRED_KEY + a fake CalDAV.

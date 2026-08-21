@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-2203 acceptance tests for the v0.3.0 module registry.
 //
 // Drives `lib/modules.js`, `lib/registry-validate.js`, and the new
