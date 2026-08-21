@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.3.0 — Modular Homestead: user_modules + module registry + invite-to-wall (PHA-2202, PHA-2203, PHA-2204, PHA-2207, PHA-2209)
+## v0.3.0 — Modular Homestead: user_modules + module registry + invite-to-wall + donation surface (PHA-2202, PHA-2203, PHA-2204, PHA-2206, PHA-2207, PHA-2208, PHA-2209, PHA-2222, PHA-2223)
 
 
 ### Agent module gate (PHA-2208 / PHA-2200.7)
@@ -97,6 +97,56 @@ position before any outside contributor lands a commit.
   (MPL-2.0 — weak copyleft at file scope, doesn't reach the
   consumer). Full audit results in the PHA-2222 disposition
   comment.
+
+### Donation surface (PHA-2223)
+
+A single, quiet, findable donation link. By design policy, money
+stays potential — nothing is collected as a condition of access,
+and the link lives in **one** place: the avatar menu's new "About
+Homestead" sheet. It does not appear on the wall, in the meadow,
+in the Gazette, in onboarding, or in any notification.
+
+- **`lib/donations.js`** — new module. `process.env.DONATION_URL`
+  configures the link (HTTPS / HTTP / mailto only — other schemes
+  rejected at boot so a typo can't become a phishing redirect).
+  `process.env.DONATION_LABEL` overrides the visible link text
+  (capped at 80 chars). The click counter table
+  `donation_clicks(id, day)` has no `user_id`, no IP, no
+  user-agent, no referer column — by schema, not by promises, the
+  server cannot answer "who clicked?".
+- **`server.js`** — three new routes. `GET /api/donation-link`
+  returns `{url, label}` when configured and 404 `{error:
+  "not_configured"}` otherwise. `POST /api/donation-click` is
+  unauthenticated, fire-and-forget, returns **204 No Content** with
+  no body — the operator can't see click timing in logs because
+  there is no body to log. `GET /api/admin/donation-stats` is
+  admin-only and returns `{total, byDay[], configured}`.
+- **`public/index.html`** — new avatar-menu entry "ℹ️ About
+  Homestead" (reachable by every authenticated user, not gated on
+  admin) opens `openAboutSheet()` which fetches the link and
+  renders version/commit, the product blurb, and a single
+  bordered donation button. Click fires `/api/donation-click`
+  via `keepalive` fetch, then opens the provider's URL via
+  `window.open(url, '_blank', 'noopener,noreferrer')` so the
+  provider site can't reach Homestead's window. A fallback
+  `location.href` covers the (rare) browsers that block
+  `window.open`.
+- **`README.md`** — new "Support (PHA-2223)" section mirrors the
+  same `github.com/sponsors/phattbeats` link so self-hosters who
+  don't have an account can support without signing in.
+- **`scripts/test-donations.js`** — 50+ assertions across 9
+  sections: URL-validation gate (rejects `javascript:` / `data:`
+  / `file:` / empty / garbage / `https://` with no hostname),
+  env-link memoization + label cap, schema assertion (only
+  `{id, day}` columns — no per-user attribution), `recordClick`
+  + `getStats` math, live boot of `GET /api/donation-link`
+  (configured 200 / unset 404), `POST /api/donation-click` 204
+  with empty body, admin-only `/api/admin/donation-stats` (admin
+  200 / non-admin 403), SPA wiring (button + helper + fetch +
+  fire-and-forget POST + `noopener,noreferrer`), README Support
+  section presence + policy language, and a hardcoded-keys audit
+  sanity check (no new `wall|lists|calendar|chores|apps|agent`
+  literals introduced in donation code).
 
 ### Acceptance suite + release (PHA-2209 / PHA-2200.8)
 

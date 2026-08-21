@@ -50,6 +50,7 @@ const media = require('./lib/media');
 const walls = require('./lib/walls');
 const invites = require('./lib/invites');
 const wallMembers = require('./lib/wall-members');
+const donations = require('./lib/donations');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -82,6 +83,14 @@ walls.seed(db);
 // PHA-2207 (PHA-2200.6): invite codes. FKs to walls(slug), so it
 // runs after walls.migrate().
 invites.migrate(db);
+
+// PHA-2223: donation_clicks counter. No FK to users(id) on purpose —
+// the policy is "no analytics on donation clicks beyond a plain count,
+// and never attributed to a user." The schema enforces that: there is
+// no user_id, no IP, no user-agent, no referer column. The only column
+// is `day` (UTC date, YYYY-MM-DD) so we can answer "how many clicks
+// today?" without ever identifying any human.
+donations.migrate(db);
 
 // v0.1.0: web push subscriptions (PHA-1619)
 db.exec(`
@@ -340,6 +349,42 @@ app.get('/api/health', (req, res) => {
 
 app.get('/api/version', (req, res) => {
   res.json({ version: PKG_VERSION, commit: COMMIT_SHA });
+});
+
+// PHA-2223: donation-link discovery. Public, no auth — the link is a
+// public artifact, not a per-user resource. 404 when the surface is
+// not configured (DONATION_URL unset) so the client can show a
+// "donation surface not configured" line instead of a broken link.
+app.get('/api/donation-link', (req, res) => {
+  const link = donations.getLink();
+  if (!link) return res.status(404).json({ error: 'not_configured' });
+  res.json({ url: link.url, label: link.label });
+});
+
+// PHA-2223: donation-click counter. Public, no auth, no body. Records
+// a single row with the current UTC date — no user_id, no IP, no
+// user-agent, no referer (the schema doesn't have those columns).
+// Fire-and-forget for the client; failures here never affect the
+// navigation to the provider's site. We always respond 204 — the
+// client doesn't need a body, and a body would only add a wire
+// payload the operator can see in logs (which we explicitly don't
+// want).
+app.post('/api/donation-click', (req, res) => {
+  donations.recordClick();
+  res.status(204).end();
+});
+
+// PHA-2223: operator-only donation stats. Admin auth — same gate as
+// the other /api/admin/sync/* endpoints. Returns total clicks + a
+// per-day breakdown so the operator can see "did anyone click this
+// month?" without ever identifying who.
+app.get('/api/admin/donation-stats', auth, (req, res) => {
+  if (!req.session.user || !req.session.user.isAdmin) {
+    return res.status(403).json({ error: 'admin_only' });
+  }
+  const stats = donations.getStats();
+  if (!stats.ok) return res.status(500).json({ error: stats.error });
+  res.json({ ...stats, configured: donations.getStatus().configured });
 });
 
 // ---- auth ----

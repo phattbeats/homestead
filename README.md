@@ -552,6 +552,42 @@ DATA_DIR=./data npm start
 
 The first run will create `./data/life.db` and seed the admin user.
 
+## Support (PHA-2223)
+
+If Homestead has earned a coffee, you can chip in — but only if you want
+to, and only via a single quiet link. The link is
+[github.com/sponsors/phattbeats](https://github.com/sponsors/phattbeats)
+(the `funding` field in `package.json` points at the same URL so package
+managers surface it too). Self-hosters who don't have an account can
+support the project without signing up for anything.
+
+**What this surface deliberately is not:**
+
+- **Not a payment system.** Homestead itself handles no money — no card
+  data, no webhooks, no financial records in `life.db`. Clicking the
+  link opens the provider's site in a separate origin (`_blank` +
+  `noopener,noreferrer`); Homestead's window can't be reached from the
+  provider's tab and the provider's cookies can't reach Homestead.
+- **Not per-user.** Clicks are counted as a plain integer per UTC day
+  in a single `donation_clicks(id, day)` table — there is no `user_id`,
+  no IP, no user-agent, no referer column. By schema, not by promises.
+- **Not nagware.** The link lives in **one place**: the avatar menu's
+  "About Homestead" sheet. It does not appear on the wall, in the
+  meadow, in the Gazette, in onboarding, or in any notification. If you
+  didn't go looking, you won't see it.
+- **Not a tier system.** There are no supporter badges, no perks, no
+  priority queues. Access to Homestead is independent of any payment.
+
+These rules are policy, not preference — see PHA-2223 for the full
+reasoning. If anything on this list ever changes, it is a Brandon
+decision recorded on that issue, not a product iteration.
+
+Operators who want to enable the in-app link set
+[`DONATION_URL`](#configuration) (HTTPS / HTTP / mailto only — other
+schemes are rejected at boot). With `DONATION_URL` unset, the
+"About Homestead" sheet shows a "donation surface not configured"
+line instead of a broken link.
+
 ## Unraid
 
 A Community Applications template ships in the repo at
