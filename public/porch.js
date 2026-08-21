@@ -26,6 +26,10 @@
   let CURSOR = null;
   let HAS_MORE = true;
   let PENDING_MEDIA = null; // {id,url,thumbUrl,kind} awaiting post
+  let MEMBERS = []; // wall members cache (PHA-2218), refreshed per wall load
+  let MEMBER_BY_USERNAME = new Map(); // lowercase username -> member, for mention linkify
+  let MUTED_POSTS = new Set(); // local optimistic per-post mute state (no bulk-status endpoint exists)
+  let mentionState = null; // {start, end, query} bounds of the in-progress @token in #textBody
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -87,10 +91,12 @@
     renderWallPicker();
     WALL = WALLS[0].slug;
     $('#wallName').textContent = WALLS[0].name || WALLS[0].slug;
+    await Promise.all([loadMembers(), loadNotifyLevel()]);
     await loadPosts(true);
 
     wireComposer();
     wireOlder();
+    wireNotifyLevel();
   }
 
   function renderWallPicker() {
@@ -104,7 +110,50 @@
       WALL = picker.value;
       const w = WALLS.find((x) => x.slug === WALL);
       $('#wallName').textContent = (w && w.name) || WALL;
+      MUTED_POSTS = new Set(); // local mute state doesn't carry across walls
+      closeMentionMenu();
+      await Promise.all([loadMembers(), loadNotifyLevel()]);
       await loadPosts(true);
+    };
+  }
+
+  // ---- wall members (mention autocomplete + linkify) ----
+  async function loadMembers() {
+    MEMBERS = [];
+    MEMBER_BY_USERNAME = new Map();
+    try {
+      const res = await api('GET', `/api/walls/${encodeURIComponent(WALL)}/members`);
+      MEMBERS = (res && res.members) || [];
+      MEMBERS.forEach((m) => MEMBER_BY_USERNAME.set(String(m.username).toLowerCase(), m));
+    } catch (e) {
+      // autocomplete/mentions just degrade to plain text if this fails
+    }
+  }
+
+  // ---- per-wall notification level (PHA-2218) ----
+  async function loadNotifyLevel() {
+    const sel = $('#notifyLevel');
+    let level = 'all';
+    try {
+      const res = await api('GET', `/api/walls/${encodeURIComponent(WALL)}/notifications`);
+      level = (res && res.level) || 'all';
+    } catch (e) { /* default to 'all' if this fails to load */ }
+    sel.value = level;
+    sel.dataset.prev = level;
+  }
+
+  function wireNotifyLevel() {
+    const sel = $('#notifyLevel');
+    sel.onchange = async () => {
+      const level = sel.value;
+      const prev = sel.dataset.prev || 'all';
+      try {
+        await api('PUT', `/api/walls/${encodeURIComponent(WALL)}/notifications`, { level });
+        sel.dataset.prev = level;
+      } catch (e) {
+        sel.value = prev;
+        toast('Could not update notification setting', true);
+      }
     };
   }
 
@@ -156,9 +205,23 @@
       </a>`;
     }
     if (p.kind === 'text') {
-      return `<div class="post-body">${esc(p.text)}</div>`;
+      return `<div class="post-body">${linkifyMentions(esc(p.text), p.id)}</div>`;
     }
     return '';
+  }
+
+  // Turns escaped `@handle` tokens into links, but only for handles that
+  // match a known wall member (from the /members cache) — this avoids
+  // linkifying stray '@' characters (emails, etc.) that aren't real mentions.
+  // Plain wall-scoped links (no entity-graph slug resolution) per the design doc.
+  function linkifyMentions(escapedText, postId) {
+    if (!MEMBER_BY_USERNAME.size) return escapedText;
+    return escapedText.replace(/(^|[^\w@])@(\w{1,32})/g, (whole, pre, handle) => {
+      const m = MEMBER_BY_USERNAME.get(handle.toLowerCase());
+      if (!m) return whole;
+      const href = `/porch.html?wall=${encodeURIComponent(WALL)}&post=${encodeURIComponent(postId)}#${encodeURIComponent(m.username)}`;
+      return `${pre}<a href="${href}" class="mention-link">@${esc(m.username)}</a>`;
+    });
   }
 
   function reactionsHtml(p) {
@@ -180,8 +243,11 @@
       </div>
       ${postMediaHtml(p)}
       ${reactionsHtml(p)}
-      <div class="comments-toggle" data-post="${esc(p.id)}">
-        <span class="arrow">›</span> Comments${p.commentCount ? ` (${p.commentCount})` : ''}
+      <div class="post-tools">
+        <div class="comments-toggle" data-post="${esc(p.id)}">
+          <span class="arrow">›</span> Comments${p.commentCount ? ` (${p.commentCount})` : ''}
+        </div>
+        ${muteBtnHtml(p)}
       </div>
       <div class="comments" data-post="${esc(p.id)}">
         <div class="comments-list"></div>
@@ -191,6 +257,15 @@
         </form>
       </div>
     </div>`;
+  }
+
+  // Thread mute toggle (PHA-2218). No bulk "am I muting any of these posts"
+  // endpoint exists, so this starts every post in the "not muted" visual
+  // state and flips optimistically per click — acceptable v1.
+  function muteBtnHtml(p) {
+    const muted = MUTED_POSTS.has(p.id);
+    const label = muted ? 'Unmute this thread' : 'Mute this thread';
+    return `<button type="button" class="mute-btn${muted ? ' muted' : ''}" data-post="${esc(p.id)}" aria-label="${esc(label)}" title="${esc(label)}">${muted ? '🔕' : '🔔'}</button>`;
   }
 
   function renderFeed() {
@@ -207,6 +282,35 @@
     $$('.reaction').forEach((btn) => { btn.onclick = debounce(() => onReactClick(btn), 300); });
     $$('.comments-toggle').forEach((el) => { el.onclick = () => onCommentsToggle(el); });
     $$('.comment-form').forEach((f) => { f.onsubmit = (e) => onCommentSubmit(e, f); });
+    $$('.mute-btn').forEach((btn) => { btn.onclick = debounce(() => onMuteClick(btn), 300); });
+  }
+
+  async function onMuteClick(btn) {
+    const postId = btn.dataset.post;
+    const wasMuted = MUTED_POSTS.has(postId);
+    const nextMuted = !wasMuted;
+    const setBtnState = (muted) => {
+      const label = muted ? 'Unmute this thread' : 'Mute this thread';
+      btn.classList.toggle('muted', muted);
+      btn.textContent = muted ? '🔕' : '🔔';
+      btn.setAttribute('aria-label', label);
+      btn.title = label;
+    };
+    // optimistic
+    if (nextMuted) MUTED_POSTS.add(postId); else MUTED_POSTS.delete(postId);
+    setBtnState(nextMuted);
+    try {
+      if (nextMuted) {
+        await api('POST', `/api/walls/${encodeURIComponent(WALL)}/posts/${encodeURIComponent(postId)}/mute`);
+      } else {
+        await api('DELETE', `/api/walls/${encodeURIComponent(WALL)}/posts/${encodeURIComponent(postId)}/mute`);
+      }
+    } catch (e) {
+      // rollback
+      if (nextMuted) MUTED_POSTS.delete(postId); else MUTED_POSTS.add(postId);
+      setBtnState(wasMuted);
+      toast('Could not update mute setting', true);
+    }
   }
 
   function debounce(fn, ms) {
@@ -269,17 +373,17 @@
     try {
       const res = await api('GET', `/api/walls/${encodeURIComponent(WALL)}/posts/${encodeURIComponent(postId)}/comments`);
       panel.dataset.loaded = '1';
-      renderComments(list, res.comments || []);
+      renderComments(list, res.comments || [], postId);
     } catch (e) {
       list.innerHTML = '<div class="empty" style="padding:6px 0">Could not load comments</div>';
     }
   }
 
-  function renderComments(list, comments) {
+  function renderComments(list, comments, postId) {
     if (!comments.length) { list.innerHTML = '<div class="empty" style="padding:6px 0">No comments yet</div>'; return; }
     list.innerHTML = comments.map((c) => {
       const author = (c.author && (c.author.display || c.author.username)) || 'Someone';
-      return `<div class="comment"><b>${esc(author)}:</b> ${esc(c.body)}</div>`;
+      return `<div class="comment"><b>${esc(author)}:</b> ${linkifyMentions(esc(c.body), postId)}</div>`;
     }).join('');
   }
 
@@ -296,7 +400,7 @@
     // optimistic
     const tempEl = document.createElement('div');
     tempEl.className = 'comment';
-    tempEl.innerHTML = `<b>${esc((ME && (ME.display || ME.username)) || 'You')}:</b> ${esc(body)}`;
+    tempEl.innerHTML = `<b>${esc((ME && (ME.display || ME.username)) || 'You')}:</b> ${linkifyMentions(esc(body), postId)}`;
     if (list.querySelector('.empty')) list.innerHTML = '';
     list.appendChild(tempEl);
     try {
@@ -332,6 +436,12 @@
       const el = $('#textCount');
       el.textContent = `${n} / 2000`;
       el.classList.toggle('over', n > 2000);
+      updateMentionMenu(textArea);
+    });
+    textArea.addEventListener('keydown', onMentionKeydown);
+    textArea.addEventListener('blur', () => {
+      // delay so a mousedown on a dropdown item can register its selection first
+      setTimeout(closeMentionMenu, 150);
     });
     $('#postText').onclick = onPostText;
 
@@ -366,6 +476,92 @@
     // link
     $('#linkUrl').addEventListener('blur', onLinkBlur);
     $('#postLink').onclick = onPostLink;
+  }
+
+  // ---- composer: @mention autocomplete ----
+  function currentMentionToken(textArea) {
+    const pos = textArea.selectionStart;
+    const upToCursor = textArea.value.slice(0, pos);
+    const m = upToCursor.match(/(?:^|\s)@(\w{0,32})$/);
+    if (!m) return null;
+    const start = pos - m[1].length - 1; // index of the '@'
+    return { start, end: pos, query: m[1] };
+  }
+
+  function updateMentionMenu(textArea) {
+    const token = currentMentionToken(textArea);
+    if (!token || !MEMBERS.length) { closeMentionMenu(); return; }
+    const q = token.query.toLowerCase();
+    const matches = MEMBERS.filter((m) =>
+      String(m.username).toLowerCase().startsWith(q) || String(m.display || '').toLowerCase().startsWith(q)
+    ).slice(0, 8);
+    if (!matches.length) { closeMentionMenu(); return; }
+    mentionState = token;
+    renderMentionMenu(matches);
+  }
+
+  function renderMentionMenu(matches) {
+    const menu = $('#mentionMenu');
+    menu.innerHTML = matches.map((m, i) => `<div class="mention-item${i === 0 ? ' active' : ''}" data-username="${esc(m.username)}">
+      <span class="mu">@${esc(m.username)}</span>${m.display && m.display !== m.username ? `<span class="md">${esc(m.display)}</span>` : ''}
+    </div>`).join('');
+    menu.classList.add('on');
+    $$('.mention-item', menu).forEach((item) => {
+      // mousedown (not click) + preventDefault so the textarea never loses
+      // focus/blurs before the selection is applied.
+      item.onmousedown = (e) => { e.preventDefault(); selectMention(item.dataset.username); };
+    });
+  }
+
+  function closeMentionMenu() {
+    mentionState = null;
+    const menu = $('#mentionMenu');
+    if (!menu) return;
+    menu.classList.remove('on');
+    menu.innerHTML = '';
+  }
+
+  function selectMention(username) {
+    if (!mentionState) return;
+    const textArea = $('#textBody');
+    const { start, end } = mentionState;
+    const value = textArea.value;
+    const insert = `@${username} `;
+    textArea.value = value.slice(0, start) + insert + value.slice(end);
+    const caret = start + insert.length;
+    closeMentionMenu();
+    textArea.focus();
+    textArea.setSelectionRange(caret, caret);
+    const n = textArea.value.length;
+    const el = $('#textCount');
+    el.textContent = `${n} / 2000`;
+    el.classList.toggle('over', n > 2000);
+  }
+
+  function onMentionKeydown(e) {
+    const menu = $('#mentionMenu');
+    if (!menu.classList.contains('on')) return;
+    const items = $$('.mention-item', menu);
+    if (!items.length) return;
+    let idx = items.findIndex((it) => it.classList.contains('active'));
+    if (idx === -1) idx = 0;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      items[idx].classList.remove('active');
+      idx = (idx + 1) % items.length;
+      items[idx].classList.add('active');
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      items[idx].classList.remove('active');
+      idx = (idx - 1 + items.length) % items.length;
+      items[idx].classList.add('active');
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      selectMention(items[idx].dataset.username);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeMentionMenu();
+    }
   }
 
   async function handleFile(file) {

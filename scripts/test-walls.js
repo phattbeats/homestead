@@ -189,26 +189,58 @@ assert(!badSnapshotOrderBy, 'recentActivity() ORDER BY sorts by created_at only'
   // ---- Test 7: activity-feed wiring (PHA-2153) ----
   console.log('\nTest 7: activity-feed wiring');
   const snapshot = require('../lib/snapshot');
+  const notifications = require('../lib/notifications');
 
   // emily is a media-club member too (added alongside brandon above minus
-  // the dup-group insert — give emily membership explicitly here).
+  // the dup-group insert — give emily membership explicitly here). She
+  // joins AFTER walls.migrate()'s backfillPrefs already ran, so she gets
+  // the PHA-2218 default level ('mentions'), not a backfilled 'all' — set
+  // her explicitly to 'all' so this test still exercises the plain
+  // activity-feed wiring path independent of level-gating (that gating
+  // is Test 8's job).
   db.prepare('INSERT OR IGNORE INTO user_groups (user_id, group_id) VALUES (?, ?)').run(emily.id, mcGroup.id);
+  notifications.setLevel(seeded.id, emily.id, 'all', 'user_groups');
+  // Disable quiet hours for this test (start===end means "no window" per
+  // isInQuietHours) — otherwise whether this suite passes depends on the
+  // wall-clock hour it happens to run at (default window is 21-8).
+  db.prepare('INSERT OR REPLACE INTO notification_prefs (user_id, quiet_start_hour, quiet_end_hour) VALUES (?, 0, 0)').run(emily.id);
 
   const activityPost = walls.createPost('media-club', brandon.id, { kind: 'text', text_body: 'activity feed check' });
 
   // recentActivity() is the exact function GET /api/me/snapshot's
   // activity_recent field is built from — same source, same shape.
   const emilyActivity = snapshot.recentActivity(db, emily.id, 25);
-  const activityRow = emilyActivity.find((a) => a.tag === `wall_post:media-club:${activityPost.id}`);
+  const activityRow = emilyActivity.find((a) => a.tag === `wall_post:media-club:bundle`);
   assert(!!activityRow, 'wall post surfaces in a fellow member\'s activity_recent');
   assert(!!activityRow && activityRow.url.includes('wall=media-club'), 'activity row url carries the wall slug');
   assert(!!activityRow && activityRow.url.includes(activityPost.id), 'activity row url carries the post id');
   assertEq(activityRow && activityRow.category, 'wall_post', 'activity row category is wall_post');
-  assertEq(activityRow && activityRow.created_at, activityPost.createdAt, 'activity row created_at matches the post created_at');
+  assertEq(activityRow && activityRow.delivered, true, 'activity row is marked delivered (level=all)');
 
   const brandonActivity = snapshot.recentActivity(db, brandon.id, 25);
-  const selfRow = brandonActivity.find((a) => a.tag === `wall_post:media-club:${activityPost.id}`);
+  const selfRow = brandonActivity.find((a) => a.tag === `wall_post:media-club:bundle`);
   assert(!selfRow, 'author does not get an activity row for their own post');
+
+  // ---- Test 8: PHA-2218 default level gates plain activity ----
+  console.log('\nTest 8: PHA-2218 default level (mentions) suppresses a plain post');
+  db.prepare("INSERT OR IGNORE INTO users (username, display, color, pass_hash, is_admin) VALUES ('kevin','Kevin','#111',?,0)").run('x');
+  const kevin = db.prepare('SELECT id FROM users WHERE username = ?').get('kevin');
+  db.prepare('INSERT OR IGNORE INTO user_groups (user_id, group_id) VALUES (?, ?)').run(kevin.id, mcGroup.id);
+  db.prepare('INSERT OR REPLACE INTO notification_prefs (user_id, quiet_start_hour, quiet_end_hour) VALUES (?, 0, 0)').run(kevin.id);
+  assertEq(notifications.getLevel(seeded.id, kevin.id), 'mentions', 'freshly-joined member defaults to level=mentions');
+
+  const plainPost = walls.createPost('media-club', brandon.id, { kind: 'text', text_body: 'no mention here' });
+  const kevinActivity = snapshot.recentActivity(db, kevin.id, 25);
+  const kevinRow = kevinActivity.find((a) => a.url && a.url.includes(plainPost.id));
+  assert(!!kevinRow, 'a skip row still lands in notification_log for audit (recentActivity does not filter delivered)');
+  assertEq(kevinRow && kevinRow.delivered, false, 'level=mentions with no @mention is not delivered');
+
+  const mentionPost = walls.createPost('media-club', brandon.id, { kind: 'text', text_body: 'hey @kevin check this out' });
+  const kevinActivity2 = snapshot.recentActivity(db, kevin.id, 25);
+  const mentionRow = kevinActivity2.find((a) => a.url && a.url.includes(mentionPost.id));
+  assert(!!mentionRow, 'mention row lands for the level=mentions user');
+  assertEq(mentionRow && mentionRow.delivered, true, '@mention is delivered even under level=mentions');
+  assertEq(mentionRow && mentionRow.category, 'mention', 'mention row category is mention');
 
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);

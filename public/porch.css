@@ -21,6 +21,7 @@ header .back{font-size:22px;font-weight:800;text-decoration:none;width:32px;flex
 .greet{font-weight:800;font-size:20px;letter-spacing:-.02em;flex:1;min-width:0}
 .greet small{display:block;font-size:11px;color:var(--muted);font-weight:500;letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px}
 #wallPicker{border:1px solid var(--line);border-radius:12px;padding:8px 10px;background:var(--surface);font-size:13px;max-width:40vw}
+#notifyLevel{border:1px solid var(--line);border-radius:12px;padding:8px 10px;background:var(--surface);font-size:12px;max-width:34vw;color:var(--muted)}
 
 main{padding:0 18px}
 
@@ -37,6 +38,16 @@ main{padding:0 18px}
 .field,textarea{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--bg);outline:none;transition:border-color .3s var(--ease)}
 .field:focus,textarea:focus{border-color:var(--accent)}
 textarea{resize:vertical;font-family:inherit}
+
+.composer-wrap{position:relative}
+.mention-menu{position:absolute;z-index:10;left:0;right:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 6px 30px rgba(0,0,0,.08);max-height:180px;overflow-y:auto;display:none}
+.mention-menu.on{display:block}
+.mention-item{padding:8px 12px;font-size:13px;cursor:pointer;display:flex;gap:6px;align-items:baseline}
+.mention-item:hover,.mention-item.active{background:var(--accent-soft)}
+.mention-item .mu{font-weight:700}
+.mention-item .md{color:var(--muted);font-size:12px}
+.mention-link{color:var(--accent);font-weight:700;text-decoration:none}
 .composer-row{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:10px}
 .charcount{font-size:12px;color:var(--muted)}
 .charcount.over{color:#b3453a;font-weight:700}
@@ -75,7 +86,10 @@ textarea{resize:vertical;font-family:inherit}
 .reaction.mine{background:var(--accent-soft);border-color:var(--accent)}
 .reaction .rc{font-size:11px;color:var(--muted)}
 
-.comments-toggle{margin-top:8px;font-size:12px;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:4px}
+.post-tools{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
+.mute-btn{font-size:15px;color:var(--muted);padding:2px 6px;border-radius:8px;line-height:1}
+.mute-btn.muted{color:var(--accent)}
+.comments-toggle{margin-top:0;font-size:12px;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:4px}
 .comments-toggle .arrow{transition:transform .2s var(--ease)}
 .comments-toggle.open .arrow{transform:rotate(90deg)}
 .comments{display:none;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}

@@ -1,5 +1,78 @@
 # Changelog
 
+## v0.4.0 (TBD) — Notification granularity + @mentions (PHA-2218)
+
+Sequenced after v0.3.0's module work (PHA-2202/PHA-2203) so wall
+membership and module gating were stable underneath it. Design doc
+(schema + resolution + bundling rules) posted and approved on the
+PHA-2218 issue before implementation started.
+
+- **Per-wall notification level.** New `wall_notification_prefs
+  (wall_id, user_id, level, via)` table — `level` is `all` |
+  `mentions` | `none`, composite PK, UPSERT via
+  `PUT /api/walls/:slug/notifications`. Replaces the implicit
+  `wall_memberships.notifications` boolean (left in place,
+  deprecated) as the actual gate. Default for a genuinely new join is
+  `mentions`; a one-time backfill preserves today's behavior for
+  every member who already existed when this migration ran (direct
+  walls: `notifications=1/0` → `all`/`none`; group walls: everyone
+  backfilled to `all`, since they never had an opt-out before).
+- **`@mentions`.** New `mentions(post_id XOR comment_id,
+  mentioned_user_id, mentioned_by)` table, inserted atomically with
+  the post/comment it belongs to. Parsing is wall-scoped only — you
+  cannot `@mention` someone who isn't a member; non-member and
+  self-mentions are silently dropped, no error toast. A mention
+  notification fires regardless of `all`/`mentions` level; only
+  `none` or the recipient's own quiet hours suppress it. Composer
+  autocomplete and `@handle` → member-link rendering ship in
+  `public/porch.js`.
+- **Per-thread mute.** New `thread_mutes(user_id, post_id)` table.
+  `POST`/`DELETE /api/walls/:slug/posts/:postId/mute`. Mute always
+  wins — it overrides even a `mentions`-level match, on the theory
+  that the user explicitly asked to stop hearing about this one
+  thread.
+- **Resolver (`lib/notifications.js`, new).** `resolve()` composes
+  level → thread mute → quiet hours (PHA-1619), in that order —
+  level decides *if*, quiet hours decide *when*. A quiet-hours skip
+  still leaves an audit row (`delivered=0, skipped_reason
+  ='quiet_hours'`) so nothing is silently lost, it just doesn't push.
+  `lib/walls.js`'s old `emitActivity` (flat per-recipient INSERT, no
+  gating at all) is replaced by resolver-driven `emitForPost` /
+  `emitForComment`.
+- **Bundling.** N wall posts within a 15-minute window
+  (`BUNDLE_WINDOW_MS`) collapse into one `notification_log` row
+  ("3 new posts on Memes") instead of one push per post. Mentions and
+  posts on `direct`-visibility walls never bundle — the act of
+  addressing someone is its own trigger, distinct from ambient
+  activity.
+- **Badge-clearing (PHA-1617 promise).** `notification_log.seen_at`
+  (additive column). Three clear paths: opening the push target
+  (service worker's `notificationclick` now posts to
+  `/api/me/notifications/seen`), the activity feed's bulk clear
+  (`{clearAll:true}`), and a natural 30-day-old data footprint. New
+  `GET /api/me/notifications` (`?unseen=1` for the badge view,
+  distinct from the unfiltered `/api/me/snapshot` dashboard feed).
+- **Routes.** `GET /api/walls/:slug/members` (autocomplete source),
+  `GET`/`PUT /api/walls/:slug/notifications`, `POST`/`DELETE
+  /api/walls/:slug/posts/:postId/mute`, `GET /api/me/notifications`,
+  `POST /api/me/notifications/seen`.
+- **Frontend.** `public/porch.js`: `@` composer autocomplete over
+  wall members, `@handle` rendered as a member link in posts and
+  comments, a per-wall notification-level selector on the wall
+  header itself (not buried in global settings), a per-post
+  mute/unmute toggle next to the comments control.
+- **Tests.** `scripts/test-notifications-resolver.js` (24
+  assertions — level gating, mute override, quiet-hours composition,
+  the default-window fallback), `scripts/test-mentions-parser.js`
+  (21 — wall-scoping, self/non-member drop, dedup, the mentions CHECK
+  constraint, an end-to-end pass through `walls.createPost`/
+  `createComment`), `scripts/test-thread-mutes.js` (11 — persistence,
+  idempotence, CASCADE on post delete, no self-suppression),
+  `scripts/smoke-notifications.js` (25 — full HTTP surface against a
+  booted server). `scripts/test-walls.js` grows two assertions
+  confirming the new default doesn't silently demote an already-`all`
+  member and does correctly gate a fresh joiner without a mention.
+
 ## v0.3.0 (TBD) — Modular Homestead: user_modules + module registry (PHA-2202, PHA-2203)
 
 ### Module registry (PHA-2203 / PHA-2200.2)
