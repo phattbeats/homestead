@@ -45,6 +45,8 @@ const secretBox = require('./lib/secret-box');
 const snapshot = require('./lib/snapshot');
 const media = require('./lib/media');
 const walls = require('./lib/walls');
+const invites = require('./lib/invites');
+const wallMembers = require('./lib/wall-members');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -74,6 +76,9 @@ media.migrate(db);
 // media_uploads(id), so it runs after userModel.migrate and media.migrate.
 walls.migrate(db);
 walls.seed(db);
+// PHA-2207 (PHA-2200.6): invite codes. FKs to walls(slug), so it
+// runs after walls.migrate().
+invites.migrate(db);
 
 // v0.1.0: web push subscriptions (PHA-1619)
 db.exec(`
@@ -163,7 +168,16 @@ function authenticate(req, res, next) {
     } else {
       groups = groupsHeader.split(',').map(s => s.trim()).filter(Boolean);
     }
-    const u = userModel.provisionOrClaim(db, headerUser, 'header_trust', headerUser, groups);
+    // PHA-2207 (PHA-2200.6): union in group_names from wall_memberships
+    // rows for group-visibility walls so invite-granted group
+    // membership survives subsequent header-trust reconciliations.
+    const inviteGroups = db.prepare(`
+      SELECT DISTINCT w.group_name AS name FROM wall_memberships wm
+      JOIN walls w ON w.id = wm.wall_id
+      WHERE wm.user_id = (SELECT id FROM users WHERE username = ?) AND w.visibility = 'group'
+    `).all(headerUser).map(r => r.name).filter(Boolean);
+    const mergedGroups = Array.from(new Set([...groups, ...inviteGroups]));
+    const u = userModel.provisionOrClaim(db, headerUser, 'header_trust', headerUser, mergedGroups);
     if (!u) return res.status(401).json({ error: 'invalid trusted username' });
     req.session.user = {
       username: u.username,
@@ -521,6 +535,158 @@ app.post('/api/me/modules/:key/disable', auth, (req, res) => {
     console.error('[api/me/modules/:key/disable]', err);
     res.status(500).json({ error: 'disable_failed' });
   }
+});
+
+// ---- PHA-2207 (PHA-2200.6): invite-to-wall flow + first-run-complete ----
+//
+// Three write endpoints + one read endpoint, plus a static HTML page
+// mount for /invite/:code (the redemption handshake):
+//
+//   * POST /api/invites                    — admin issues a new invite.
+//                                             body: {wall_slug, expires_in_days?, note?}
+//                                             400 if wall_slug missing (legacy PHA-1575 path).
+//   * POST /api/invites/:code/redeem       — authed user redeems; auto-enrolls into the wall.
+//   * GET  /api/invites                    — admin list view (no redeemed by default).
+//   * POST /api/me/first-run-complete      — caller stamps first_run_completed_at = now.
+//                                             Called by welcome.html on dismiss.
+//
+// `requireAuthOrHeader` is a small wrapper around the header-trust
+// path: every redemption must resolve a user before we touch the
+// invite row, but the redemption page itself is served unauthenticated
+// (the SWAG / authentik layer bounces the browser through SSO on the
+// way in, and the redeemed call carries the X-authentik-username
+// header). Same pattern as the existing /api/me handler above.
+function _resolveCaller(req, res) {
+  const me = userModel.getMe(db, req.session.user && req.session.user.username);
+  if (me) return me;
+  // Header-trust fallback (SWAG forwards X-authentik-username when
+  // the session cookie hasn't been set yet — first-login-from-invite).
+  const headerUser = req.get('x-authentik-username');
+  if (!headerUser) return null;
+  const groupsHeader = req.get('x-authentik-groups') || '';
+  let groups = [];
+  if (groupsHeader.startsWith('[')) {
+    try { groups = JSON.parse(groupsHeader); } catch (_) { groups = []; }
+  } else {
+    groups = groupsHeader.split(',').map(s => s.trim()).filter(Boolean);
+  }
+  // PHA-2207 (PHA-2200.6): union in any group_names from
+  // wall_memberships for group-visibility walls. This makes
+  // invite-granted group membership survive subsequent header-trust
+  // reconciliations — provisionOrClaim otherwise replaces the full
+  // user_groups set with just the X-authentik-groups header, wiping
+  // the media-club row we wrote on invite redemption.
+  const inviteGroups = db.prepare(`
+    SELECT DISTINCT w.group_name AS name FROM wall_memberships wm
+    JOIN walls w ON w.id = wm.wall_id
+    WHERE wm.user_id = (SELECT id FROM users WHERE username = ?) AND w.visibility = 'group'
+  `).all(headerUser).map(r => r.name).filter(Boolean);
+  const mergedGroups = Array.from(new Set([...groups, ...inviteGroups]));
+  const u = userModel.provisionOrClaim(db, headerUser, 'header_trust', headerUser, mergedGroups);
+  if (!u) return null;
+  req.session.user = {
+    username: u.username,
+    display: u.display,
+    color: u.color,
+    isAdmin: !!u.is_admin,
+    authProvider: 'header_trust',
+  };
+  return userModel.getMe(db, u.username);
+}
+
+// POST /api/invites — admin issues a new invite. The reframe says:
+//   * wall_slug is REQUIRED (legacy PHA-1575 wall-less invites return 400)
+//   * expires_in_days defaults to 7, max 90
+//   * only admins can create
+app.post('/api/invites', auth, requireAdmin, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { wall_slug, expires_in_days, note } = req.body || {};
+  if (!wall_slug || typeof wall_slug !== 'string') {
+    return res.status(400).json({ error: 'wall_slug required', hint: 'PHA-1575 wall-less invites are gone (see PHA-2207).' });
+  }
+  try {
+    const inv = invites.create(db, { wall_slug, expires_in_days, note, created_by: me.id });
+    res.status(201).json(inv);
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.code || 'invalid' });
+    console.error('[api/invites POST]', err);
+    res.status(500).json({ error: 'create_failed' });
+  }
+});
+
+// GET /api/invites — admin list view.
+app.get('/api/invites', auth, requireAdmin, (req, res) => {
+  const include_redeemed = req.query.include_redeemed === '1' || req.query.include_redeemed === 'true';
+  const wall_slug = req.query.wall_slug || null;
+  try {
+    res.json({ invites: invites.list(db, { include_redeemed, wall_slug }) });
+  } catch (err) {
+    console.error('[api/invites GET]', err);
+    res.status(500).json({ error: 'list_failed' });
+  }
+});
+
+// POST /api/invites/:code/redeem — authed user redeems an invite.
+//   1. resolve caller (session OR header-trust)
+//   2. look up invite (peek semantics; 410 if expired/redeemed)
+//   3. atomic: INSERT wall_memberships row + stamp invite.redeemed_by
+//   4. return {wall_slug, wall_name, first_run: <bool>, redirect: /welcome.html?wall=...}
+//
+// first_run is preserved as-is for existing users (their
+// first_run_completed_at is non-null so the SPA won't show the sheet
+// again) and stays NULL for fresh accounts (the SPA gates the sheet
+// on first_run: true regardless of invite membership).
+app.post('/api/invites/:code/redeem', (req, res) => {
+  const me = _resolveCaller(req, res);
+  if (!me) return res.status(401).json({ error: 'unauthenticated' });
+  try {
+    const result = invites.redeem(db, req.params.code, me.id);
+    res.json({
+      ok: true,
+      invite_id: result.invite.id,
+      wall_slug: result.wall_slug,
+      wall_name: result.wall_name,
+      first_run: userModel.isFirstRun(db, me.id),
+      redirect: `/welcome.html?wall=${encodeURIComponent(result.wall_slug)}`,
+      // include the membership list so the welcome sheet can render
+      // member avatars without an extra round-trip.
+      members: wallMembers.getMembers(db, result.wall_slug).members,
+    });
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.code || 'invalid', detail: err.message });
+    console.error('[api/invites/:code/redeem]', err);
+    res.status(500).json({ error: 'redeem_failed' });
+  }
+});
+
+// POST /api/me/first-run-complete — caller stamps first_run_completed_at.
+// Idempotent (completeFirstRun preserves the original timestamp on
+// re-call). Used by public/welcome.html's "got it" CTA.
+app.post('/api/me/first-run-complete', (req, res) => {
+  const me = _resolveCaller(req, res);
+  if (!me) return res.status(401).json({ error: 'unauthenticated' });
+  try {
+    const stillFirstRun = userModel.completeFirstRun(db, me.id);
+    res.json({ ok: true, first_run: stillFirstRun });
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.code || 'invalid' });
+    console.error('[api/me/first-run-complete]', err);
+    res.status(500).json({ error: 'first_run_complete_failed' });
+  }
+});
+
+// GET /api/walls/:slug/members — public-readable on the caller's
+// own membership. Used by the welcome sheet.
+app.get('/api/walls/:slug/members', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const data = wallMembers.getMembers(db, req.params.slug);
+  if (!data) return res.status(404).json({ error: 'not_found' });
+  // Membership gate — same constitutional rule as the rest of /api/walls.
+  try { walls.assertMember(req.params.slug, me.id); }
+  catch (e) { return wallsErr(res, e); }
+  res.json(data);
 });
 
 app.post('/api/password', auth, (req, res) => {
@@ -1994,6 +2160,15 @@ app.post('/api/review-queue/:id/reject', auth, requireAdmin, (req, res) => {
 app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 
 app.use(express.static(path.join(__dirname, 'public')));
+// PHA-2207 (PHA-2200.6): invite redemption handshake. Visiting
+// https://life.phatt.vip/invite/{code} serves the redemption page
+// (public/invite.html). The page itself does the POST to /api/invites/:code/redeem
+// once the SWAG/authentik layer has authenticated the user. Codes
+// contain only hex chars (32 chars from crypto.randomUUID without
+// dashes), so the regex anchor is safe — no path-confusion risk.
+app.get(/^\/invite\/([A-Fa-f0-9]{16,64})$/, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'invite.html'));
+});
 app.get('/favicon.ico', (req, res) => {
   res.set('Content-Type', 'image/svg+xml');
   res.set('Cache-Control', 'public, max-age=86400');

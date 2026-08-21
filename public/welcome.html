@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Welcome — Homestead</title>
+<meta name="theme-color" content="#FFFBF5">
+<link rel="manifest" href="/manifest.json">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* PHA-2207 (PHA-2200.6): the welcome sheet shown after a new user
+   redeems an invite. Single screen: wall name + member avatars +
+   "see the feed" CTA that calls /api/me/first-run-complete on
+   dismiss. Tokens mirror public/porch.css so the visual handoff to
+   /porch.html feels like the same app, not a different site. */
+:root{
+  --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#8A8177;
+  --line:rgba(43,38,34,.07);
+  --accent:#C4703C; --accent-soft:#F8E9DE;
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100dvh}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+
+#app{max-width:520px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 36px) 22px 30px;min-height:100dvh;display:flex;flex-direction:column}
+
+.heading{font-size:30px;font-weight:800;letter-spacing:-.025em;line-height:1.15;margin-bottom:6px}
+.subheading{color:var(--muted);font-size:15px;line-height:1.45;margin-bottom:26px}
+
+.wall-card{background:var(--surface);border-radius:22px;padding:18px;margin-bottom:18px;box-shadow:0 6px 30px rgba(0,0,0,.035)}
+.wall-name{font-size:18px;font-weight:800;margin-bottom:4px}
+.wall-meta{color:var(--muted);font-size:12px;letter-spacing:.05em;text-transform:uppercase;margin-bottom:14px}
+
+.avatars{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:6px}
+.avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;border:2px solid var(--bg);box-shadow:0 1px 3px rgba(0,0,0,.08);text-transform:uppercase}
+.avatar-stack{display:flex;margin-right:-12px}
+.avatar-stack .avatar{margin-left:-10px}
+.avatar.you{outline:2px solid var(--accent);outline-offset:1px}
+.member-list{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+.member-row{display:flex;align-items:center;gap:10px;font-size:14px}
+.member-row .avatar{width:30px;height:30px;font-size:12px}
+.member-row .meta{color:var(--muted);font-size:12px}
+
+.cta{margin-top:auto;padding-top:20px}
+.btn{display:block;width:100%;padding:14px 18px;border-radius:16px;background:var(--accent);color:#fff;font-weight:700;font-size:15px;text-align:center;transition:transform .2s var(--ease),opacity .2s}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.5;cursor:default}
+
+.error{background:var(--surface);border-radius:18px;padding:18px;border:1px solid var(--line);color:var(--ink)}
+.error h2{font-size:18px;margin-bottom:6px}
+.error p{color:var(--muted);font-size:14px}
+
+.empty-state{color:var(--muted);text-align:center;padding:18px 0;font-size:14px}
+
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="content">
+    <!-- populated by JS -->
+  </div>
+  <div class="cta">
+    <button id="continueBtn" class="btn hidden">Open the feed →</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// PHA-2207 (PHA-2200.6): welcome sheet bootstrap.
+//   1. GET /api/me — confirm the user is authenticated (header-trust
+//      or session). If not, the SPA is in the wrong place; bounce
+//      them to /api/login (LAN fallback) and let SWAG/authentik
+//      re-route from there.
+//   2. Parse ?wall=<slug> from the URL — set by /api/invites/:code/redeem
+//      when the user came in via the redemption page.
+//   3. If first_run: false, skip straight to the feed (existing user).
+//      Otherwise render the welcome sheet: wall name + members + CTA.
+//   4. CTA calls POST /api/me/first-run-complete then navigates to
+//      /porch.html?wall=<slug>.
+
+const content = document.getElementById('content');
+const ctaBtn = document.getElementById('continueBtn');
+
+function el(tag, props = {}, children = []) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'text') e.textContent = v;
+    else if (k === 'style') Object.assign(e.style, v);
+    else e.setAttribute(k, v);
+  }
+  for (const c of children) e.appendChild(c);
+  return e;
+}
+
+function avatarColor(seed) {
+  // Stable color from username hash. Mirrors the palette in
+  // lib/user-model.js so the avatar colors match the rest of the app.
+  const palette = ['#9eb48a','#C4703C','#7a8da8','#b48a9e','#8a9eb4','#b4b48a','#b47a8a','#7ab4a8'];
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  return palette[Math.abs(h) % palette.length];
+}
+function avatarInitial(user) {
+  const name = (user.display || user.username || '?').trim();
+  return (name[0] || '?').toUpperCase();
+}
+
+function renderMembers(members, currentUsername) {
+  if (!members || members.length === 0) {
+    return el('div', { class: 'empty-state', text: 'You\'re the first person here — say hi.' });
+  }
+  const wrap = el('div', { class: 'member-list' });
+  // Stack of avatars (first 5)
+  const stack = el('div', { class: 'avatar-stack', style: { marginBottom: '12px' } });
+  const shown = members.slice(0, 5);
+  for (const m of shown) {
+    const a = el('div', {
+      class: 'avatar' + (m.username === currentUsername ? ' you' : ''),
+      style: { background: m.color || avatarColor(m.username || '') },
+      text: avatarInitial(m),
+      title: m.display || m.username,
+    });
+    stack.appendChild(a);
+  }
+  if (members.length > shown.length) {
+    const more = el('div', {
+      class: 'avatar',
+      style: { background: 'var(--line)', color: 'var(--muted)' },
+      text: '+' + (members.length - shown.length),
+    });
+    stack.appendChild(more);
+  }
+  wrap.appendChild(stack);
+  for (const m of members) {
+    const row = el('div', { class: 'member-row' });
+    row.appendChild(el('div', {
+      class: 'avatar',
+      style: { background: m.color || avatarColor(m.username || '') },
+      text: avatarInitial(m),
+    }));
+    const name = el('div', { class: 'name', text: m.display || m.username });
+    if (m.username === currentUsername) name.appendChild(el('span', { class: 'meta', text: ' (you)' }));
+    row.appendChild(name);
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+
+function renderError(title, body) {
+  return el('div', { class: 'error' }, [
+    el('h2', { text: title }),
+    el('p', { text: body }),
+  ]);
+}
+
+async function bootstrap() {
+  const params = new URLSearchParams(location.search);
+  const wallSlug = params.get('wall');
+  if (!wallSlug) {
+    content.appendChild(renderError('No wall selected', 'This page expects a ?wall=<slug> query string. Try opening the invite link again.'));
+    return;
+  }
+
+  let me;
+  try {
+    const r = await fetch('/api/me', { credentials: 'same-origin' });
+    me = await r.json();
+  } catch (err) {
+    content.appendChild(renderError('Network error', 'Couldn\'t reach the server. Check your connection and try again.'));
+    return;
+  }
+  if (!me || !me.user) {
+    // Not signed in — bounce to login, then back here.
+    location.href = '/api/login?next=' + encodeURIComponent(location.pathname + location.search);
+    return;
+  }
+
+  // Existing user (first_run_completed_at IS NOT NULL) — skip the sheet.
+  if (me.first_run === false) {
+    location.replace('/porch.html?wall=' + encodeURIComponent(wallSlug));
+    return;
+  }
+
+  // Fetch wall + members for the sheet.
+  let wallData;
+  try {
+    const r = await fetch('/api/walls/' + encodeURIComponent(wallSlug) + '/members', { credentials: 'same-origin' });
+    if (!r.ok) throw new Error('wall not found');
+    wallData = await r.json();
+  } catch (err) {
+    content.appendChild(renderError('Wall not found', 'The wall "' + wallSlug + '" doesn\'t exist or you don\'t have access. Check the invite link.'));
+    return;
+  }
+
+  const wall = wallData.wall || { name: wallSlug, slug: wallSlug };
+  const members = wallData.members || [];
+
+  content.appendChild(el('h1', { class: 'heading', text: 'Welcome to ' + wall.name }));
+  content.appendChild(el('p', {
+    class: 'subheading',
+    text: 'You\'re in. ' + (members.length
+      ? 'Here\'s who else is on this wall.'
+      : 'You\'re the first one here — post something to break the silence.'),
+  }));
+
+  const card = el('div', { class: 'wall-card' });
+  card.appendChild(el('div', { class: 'wall-name', text: wall.name }));
+  card.appendChild(el('div', { class: 'wall-meta', text: wall.visibility === 'group' ? 'group wall' : 'private wall' }));
+  card.appendChild(renderMembers(members, me.user.username));
+  content.appendChild(card);
+
+  // Wire the CTA.
+  ctaBtn.classList.remove('hidden');
+  ctaBtn.textContent = 'Open the feed →';
+  ctaBtn.addEventListener('click', async () => {
+    ctaBtn.disabled = true;
+    ctaBtn.textContent = 'Opening the feed…';
+    try {
+      await fetch('/api/me/first-run-complete', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      });
+    } catch (_) { /* idempotent — if it fails we'll still try the feed */ }
+    location.href = '/porch.html?wall=' + encodeURIComponent(wallSlug);
+  });
+}
+
+bootstrap();
+</script>
+</body>
+</html>
