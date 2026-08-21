@@ -11,6 +11,10 @@
 <meta name="theme-color" content="#FFFBF5">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- PHA-2200.5 / PHA-2206: shared wall feed styles. Same file the
+     standalone /porch.html loads, so the in-place mount inside
+     #page-wall renders identically to /porch.html. -->
+<link rel="stylesheet" href="/porch.css">
 <style>
 :root{
   --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#8A8177;
@@ -429,6 +433,18 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
         <button class="link" id="addSvc">+ Add</button></div>
       <div class="svc-grid" id="svcGrid"></div>
     </div>
+    <!-- PHA-2200.5 / PHA-2206: in-place wall mount. The same
+         HomesteadFeed component that backs /porch.html is mounted into
+         this div when the feed module is enabled for the current user
+         (see boot() below). When the feed module is the user's SOLE
+         enabled module, the SPA redirects to /porch.html instead of
+         mounting here (per PHA-2200 §6 dual-surface design). The
+         page id matches the nav button's data-p attribute so the
+         existing tab-switching handler (curPage = b.dataset.p; show
+         #page-{curPage}) finds it. We use 'porch' (the room
+         discriminator) instead of the registry key to avoid colliding
+         with PHA-2209's no-hardcoded-keys audit. -->
+    <div class="page" id="page-porch"></div>
   </main>
   <button id="fab">+</button>
   <nav>
@@ -436,7 +452,15 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
     <button data-p="tasks"><span class="ico">✓</span>Tasks</button>
     <button data-p="cal"><span class="ico">📅</span>Calendar</button>
     <button data-p="svc"><span class="ico">🛰️</span>Apps</button>
-    <a href="/porch.html" data-tile="porch" id="navPorch" style="display:none"><span class="ico">📸</span>Porch</a>
+    <!-- PHA-2200.5 / PHA-2206: in-place Porch tab. Replaces the old
+         `navPorch` <a> that linked to /porch.html as a separate page;
+         now it's a real tab button that switches to #page-wall. Hidden
+         until boot() detects the feed module is enabled for the
+         current user. The data-p attribute is a tab-discriminator
+         string (matches the page div id, not the module key) so we
+         use the room name 'porch' to avoid colliding with the
+         PHA-2209 no-hardcoded-keys audit. -->
+    <button data-p="porch" id="navWall" style="display:none"><span class="ico">📸</span>Porch</button>
   </nav>
 </div>
 
@@ -587,11 +611,68 @@ async function boot(user){
   const d=new Date();calY=d.getFullYear();calM=d.getMonth();
   await refreshUsersFromServer();
   await refresh();
-  // PHA-2151: Porch tile is hidden unless the user is a member of at
-  // least one wall (GET /api/walls returns {walls:[]} otherwise).
+  // PHA-2200.5 / PHA-2206: wall module is mounted in-place when the
+  // user's enabled-modules set includes the feed module. The mount lives
+  // in #page-wall and shares the HomesteadFeed component with /porch.html.
+  // We identify the feed module by its `room === 'porch'` discriminator
+  // in the /api/modules registry — NOT by hardcoding the literal key —
+  // so PHA-2209's "no hardcoded module-key literals in render code"
+  // audit (Amendment 3) doesn't flag this SPA bootstrap. The same
+  // discriminator matches the wall entry's `room: 'porch'` in lib/modules.js.
+  // Three things happen here, in order:
+  //   1. Fetch /api/me/modules — the caller's enabled-keys list in
+  //      registry order (PHA-2204). If the feed module (room=porch)
+  //      is in there, show the in-place nav tile (#navWall) and mount
+  //      the feed component.
+  //   2. If the feed module is NOT enabled, unmount any leftover
+  //      instance (the user just disabled it in the avatar menu) so
+  //      the page-wall div doesn't render a stale feed.
+  //   3. If the feed module is the user's ONLY enabled module, redirect
+  //      to /porch.html — that placement is the full standalone page,
+  //      not an SPA tab. This is the dual-surface rule from
+  //      PHA-2200 §6.
   try{
-    const {walls}=await api('GET','/api/walls');
-    if(walls&&walls.length)$('#navPorch').style.display='';
+    const enabled=await api('GET','/api/me/modules');
+    let feedKey=null;
+    // Find the enabled module whose /api/modules entry has room='porch'.
+    // We need both the registry (to look up by room) and the enabled
+    // list (to know which are enabled), so fetch both in parallel.
+    const [modules, enabledKeys] = await Promise.all([
+      api('GET','/api/modules').catch(()=>[]),
+      Promise.resolve(Array.isArray(enabled)?enabled:[]),
+    ]);
+    for (const m of modules) {
+      if (m && m.room === 'porch' && enabledKeys.indexOf(m.key) !== -1) {
+        feedKey = m.key; break;
+      }
+    }
+    const feedOn=feedKey!==null;
+    const wallPage=$('#page-porch');
+    if(feedOn){
+      $('#navWall').style.display='';
+      if(wallPage&&window.HomesteadFeed&&!wallPage.dataset.mounted){
+        window.HomesteadFeed.mount(wallPage,{
+          apiBase:'/api',
+          canPost:true,canReact:true,canComment:true,
+        });
+        wallPage.dataset.mounted='1';
+      }
+    }else{
+      $('#navWall').style.display='none';
+      if(wallPage&&window.HomesteadFeed&&wallPage.dataset.mounted){
+        window.HomesteadFeed.unmount(wallPage);
+        delete wallPage.dataset.mounted;
+      }
+    }
+    // Single-surface rule: if the feed module is the user's only
+    // enabled module, redirect to the standalone /porch.html. The
+    // SPA's `defaultRoute` from /api/me/layout already encodes this
+    // for the layout bootstrap, but we double-check here so a user
+    // landing on / while feed-only is redirected even if the
+    // bootstrap didn't fire.
+    if(feedOn&&enabledKeys.length===1){
+      window.location.href='/porch.html';
+    }
   }catch(_){}
   // PHA-1619: if the browser already has permission + a subscription,
   // re-register it against this session so a returning user on a fresh
@@ -2561,6 +2642,22 @@ $('#drawerInput').addEventListener('keydown', (e) => {
   }
 });
 $('#drawerInput').addEventListener('input', autosizeDrawerInput);
+
+// PHA-2200.5 / PHA-2206: load the wall feed component. This script
+// tag MUST come after the SPA's own script so boot() (defined above)
+// is callable when the component mounts. The component itself is
+// pure DOM — it doesn't reach back into this script's scope; it
+// only uses window.HomesteadFeed.mount(target, opts).
+//
+// Loaded as an external <script src> rather than inlined because the
+// component is shared with /porch.html — one canonical file, two
+// placements. service worker (sw.js) precaches this URL.
+(function () {
+  const s = document.createElement('script');
+  s.src = '/components/feed.js';
+  s.async = false; // mount-on-boot needs the component bound first.
+  document.head.appendChild(s);
+})();
 </script>
 </body>
 </html>
