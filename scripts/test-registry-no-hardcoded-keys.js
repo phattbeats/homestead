@@ -72,6 +72,11 @@ const EXCLUDE_FILES = new Set([
   'scripts/test-requires-cascade.js',
   'scripts/test-default-off-future.js',
   'scripts/test-shared-registry-third-party.js',
+  // PHA-2208 (PHA-2200.7): agent-gating acceptance test.
+  // Sibling acceptance tests (PHA-2209) deliberately use literal keys
+  // to assert against the registry; this one flips enable/disable on
+  // each module to test the gate, NOT render code.
+  'scripts/test-agent-gating.js',
   'CHANGELOG.md',
   'package-lock.json',
 ]);
