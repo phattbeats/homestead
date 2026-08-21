@@ -18,8 +18,20 @@
     "calendar",
     "sqlite"
   ],
-  "license": "UNLICENSED",
-  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "private": false,
+  "author": "PHATT Tech LLC",
+  "homepage": "https://github.com/phattbeats/homestead#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/phattbeats/homestead.git"
+  },
+  "bugs": {
+    "url": "https://github.com/phattbeats/homestead/issues"
+  },
+  "funding": {
+    "url": "https://github.com/phattbeats/homestead"
+  },
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^13.0.1",

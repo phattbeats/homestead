@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-2209 / PHA-2200.8 — Empty-state acceptance test (AC8 from
 // PHA-2200 §7): "Brand-new user enables Calendar, sees the tab,
 // disables, tab disappears with data intact, re-enables, tab

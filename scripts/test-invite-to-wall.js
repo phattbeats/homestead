@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-2207 (PHA-2200.6) acceptance tests for the invite-to-wall flow.
 //
 // Boots server.js on an ephemeral port (3192) and exercises the full

@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-2209 / PHA-2200.8 — Amendment 2 acceptance test:
 // "Adding a new module to the registry does NOT backfill user_modules
 // rows for existing users; new users see {wall} only."

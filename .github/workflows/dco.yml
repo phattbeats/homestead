@@ -1,0 +1,78 @@
+name: DCO
+
+# PHA-2222: enforce Developer Certificate of Origin sign-off on every
+# pull request and every push to main.
+#
+# The rule: every commit in the PR's range must carry a
+# `Signed-off-by:` trailer matching the commit author. This is the
+# same convention used by the Linux kernel; it is NOT a CLA and does
+# NOT transfer copyright — see CONTRIBUTING.md for the full text.
+
+on:
+  pull_request:
+    branches: [main, pha-2152-v0.2.0-release, pha-2200-8-v0.3.0-release]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  dco:
+    name: Sign-off check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: DCO check (PHA-2222)
+        env:
+          # When triggered by PR, only check the commits added by the PR.
+          # When triggered by push, check the last commit only.
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "${BASE_SHA:-}" ] && [ "${BASE_SHA}" != "${HEAD_SHA}" ]; then
+            RANGE="${BASE_SHA}..${HEAD_SHA}"
+          else
+            RANGE="${HEAD_SHA}~1..${HEAD_SHA}"
+          fi
+
+          echo "Checking range: ${RANGE}"
+
+          missing=0
+          while IFS= read -r sha; do
+            [ -z "${sha}" ] && continue
+            # Look for the Signed-off-by trailer in the commit message
+            # (anywhere after the first blank line, per git convention).
+            if ! git log -1 --format=%B "${sha}" | grep -qiE '^Signed-off-by: '; then
+              echo "::error file=${sha}::Commit ${sha:0:7} is missing Signed-off-by trailer."
+              missing=$((missing + 1))
+              continue
+            fi
+            # Verify the Signed-off-by email matches the author email
+            # (case-insensitive on the local part, lowercased domain).
+            author_email="$(git log -1 --format='%ae' "${sha}" | tr '[:upper:]' '[:lower:]')"
+            signoff_email="$(git log -1 --format=%B "${sha}" \
+              | grep -iE '^Signed-off-by:' \
+              | head -1 \
+              | sed -E 's/.*<([^>]+)>.*/\1/' \
+              | tr '[:upper:]' '[:lower:]')"
+            if [ "${author_email}" != "${signoff_email}" ]; then
+              echo "::error file=${sha}::Commit ${sha:0:7} Signed-off-by email (${signoff_email}) does not match author email (${author_email})."
+              missing=$((missing + 1))
+            fi
+          done < <(git rev-list "${RANGE}")
+
+          if [ "${missing}" -gt 0 ]; then
+            echo
+            echo "${missing} commit(s) failed DCO. See CONTRIBUTING.md for the sign-off rule."
+            echo "Fix with:  git commit --amend --signoff --no-edit"
+            exit 1
+          fi
+
+          echo "All commits in range are signed off."
