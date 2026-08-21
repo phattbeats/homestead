@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-1873 (PHA-1624 Phase B-1) smoke test for the Plex sync worker.
 //
 // End-to-end smoke against a live Plex Media Server. Reads:

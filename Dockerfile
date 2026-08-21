@@ -3,6 +3,20 @@
 # resulting node_modules into a slim runtime image in stage 2. The
 # node-gyp install hook auto-fired by npm needs python3/make/g++ to
 # evaluate binding.gyp even when the prebuilt N-API binary is used.
+
+# OpenContainers image labels (PHA-2222). The license label must agree
+# with the LICENSE file at repo root (AGPL-3.0-or-later) and the
+# `license` field in package.json. These labels are inherited by the
+# runtime stage below because they live before the first FROM.
+LABEL org.opencontainers.image.title="homestead" \
+      org.opencontainers.image.description="Shared life app: tasks with take-turns rotation, calendar, and a full-screen iframe app shell for self-hosted services." \
+      org.opencontainers.image.source="https://github.com/phattbeats/homestead" \
+      org.opencontainers.image.url="https://github.com/phattbeats/homestead" \
+      org.opencontainers.image.documentation="https://github.com/phattbeats/homestead#readme" \
+      org.opencontainers.image.licenses="AGPL-3.0-or-later" \
+      org.opencontainers.image.vendor="PHATT Tech LLC" \
+      org.opencontainers.image.authors="PHATT Tech LLC"
+
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app
 RUN apt-get update \

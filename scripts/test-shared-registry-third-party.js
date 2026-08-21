@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-2209 / PHA-2200.8 — Amendment 1 acceptance test:
 // "Built-in modules pass the same shape validator as PHA-2201 third-party apps."
 //
