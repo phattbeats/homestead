@@ -1,5 +1,6 @@
 # Changelog
 
+<<<<<<< HEAD
 ## Unreleased — PHA-2149 (PHA-2147.1) — media storage primitive
 
 - **`lib/media.js`.** General-purpose content-addressed media store —
@@ -68,7 +69,7 @@
   dispatch (no Express), takes `db` + caller `me` + opts. Exposes
   `dispatchDrawer`, `buildBody`, `sign`, `parseSseBlock`,
   `findEndpoint`, `getUserGroups`, `httpPostOnce` for unit tests.
-- **`scripts/test-drawer-backend.js`** — 70-check acceptance suite
+
   covering the dispatcher module shape, HMAC contract, SSE reply,
   JSON reply, retry/backoff, circuit breaker, cross-user refusal,
   kind/disabled refusal, endpoint-offline path, and the snapshot
@@ -87,6 +88,76 @@
   no other code or config changes are required. `life.phatt.vip`
   was offline until this landed; once Brandon's Docker pulls
   `:latest` it will be back. (PHA-2001.)
+=======
+## v0.1.22 (2026-08-21) — PHA-2219
+
+- **PWA install coach (option A only).** First-login flow that
+  closes the install-friction gap on the PWA path. Decided against
+  native wrapper (option B) and full native clients (option C) per
+  Brandon's 2026-08-19 call: no Apple Developer account, no Play
+  Console, no mobile release pipeline. Reopens only if the
+  analytics funnel shows real friends stalling at the install step.
+- **Install detection (`isInstalled()`).** Recognises iOS Safari
+  `navigator.standalone`, Android Chrome `display-mode: standalone`,
+  and the desktop `fullscreen` / `minimal-ui` variants via
+  `window.matchMedia`. Returns false in a normal browser tab so
+  the coach never fires on an installed-and-happy user (rule #5).
+- **Platform-classified instructions.** The coach sheet shows a
+  card with an inline SVG visual plus a numbered <ol> tailored to
+  the platform: iOS Safari (Share → Add to Home Screen),
+  Android Chrome (menu → Install app), or a generic paragraph that
+  points at the avatar-menu chip for desktop/unknown (rule #1).
+- **One-line WHY copy.** Headline explains that notifications only
+  work once the app is installed — the literal truth on iOS and
+  the only argument that lands (rule #2).
+- **Deferred, not dismissed-forever.** A dismiss flips a
+  `localStorage` flag; the coach then lives behind a small,
+  quiet "Set up notifications" chip in the avatar menu (rule #3).
+  The chip only renders when not installed AND
+  `Notification.permission !== 'granted'` — no nagging.
+- **No permission prompt from the coach.** The coach sheet does
+  not call `Notification.requestPermission()`. Permission is
+  requested only by the existing avatar-menu push button after
+  install AND after the user has had time to settle (rule #4).
+- **Auto-prompt timing.** `maybeShowInstallCoach()` is called from
+  `boot()` AFTER `refresh()`, the walls check, and the
+  push re-subscribe block — so a returning user with push already
+  enabled is never prompted, and a first-time friend sees the
+  feed for a moment before the coach opens. Auto-prompt fires
+  exactly once per browser; after that, only the chip re-opens it.
+- **Install-completed detection.** `visibilitychange` listener
+  flips the dismissed flag and emits `install_completed` when
+  the browser returns to `display-mode: standalone` after a
+  backgrounding — no need to wait for the next page load to know
+  the install landed.
+- **Funnel telemetry table + endpoint.** New
+  `install_funnel_events(user_id, step, platform, meta, created_at)`
+  table, two indexes (per-user, per-step). New auth-gated
+  `POST /api/funnel/install` accepts a closed enum of steps
+  (`prompt_shown`, `instructions_opened`, `dismissed`,
+  `install_chip_tapped`, `install_completed`, `permission_requested`,
+  `permission_granted`, `permission_denied`, `first_push_delivered`)
+  and rejects unknown values with 400. PHA-2210 (analytics funnel
+  umbrella) reads these rows to compute
+  invite → accepted → installed → push-enabled (rule #6).
+- **No analytics pipeline yet.** This issue ships the funnel
+  ingestion only; the dashboard / aggregation step belongs to
+  PHA-2210. Until PHA-2210 ships, the rows are still queryable
+  directly via SQL for ad-hoc sanity checks.
+- **Tests:** `scripts/test-install-coach.js` (new, 40 assertions
+  across 17 test groups) — extracts the inlined helpers from
+  `public/index.html` into a `vm` sandbox with mocked
+  `navigator`/`window`/`Notification`/`localStorage`, then drives
+  every code path. End-to-end covers: iOS standalone, Android
+  Chrome standalone, fullscreen / minimal-ui display modes, plain
+  browser tab, iPhone / iPad / iPadOS-on-Mac / Android /
+  desktop Chrome / desktop Firefox platform classification, the
+  dismissed + first-prompted + installed + permission-granted
+  gating rules, the platform-specific instruction HTML shapes,
+  and the full closed-enum validation + 400 on unknown + 401 on
+  anonymous for the new endpoint, plus a SQLite-level assertion
+  that 9 funnel rows land and the JSON `meta` round-trips.
+>>>>>>> 9529ccb (PHA-2219: PWA install coach (option A — no native apps))
 
 ## v0.1.19 (2026-08-12) — PHA-1896 (PHA-1617.3)
 
