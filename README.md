@@ -87,16 +87,20 @@ Homestead accepts commits authored only by `phattbeats <obiwouldjablowme@protonm
   the 16-char non-secret prefix, revoke. The PAT layer is the
   contract for the upcoming chat drawer (PHA-1617.5/.6) and the
   MCP server (PHA-1617.8). See [Personal access tokens](#personal-access-tokens-pha-16173) below.
-- **The Porch Wall (PHA-2151)** — `/porch.html`, linked from the bottom
-  nav as **📸 Porch** (hidden if you're not on any wall yet). A
-  chronological, group-scoped photo/video/link/text feed on top of the
-  media (PHA-2149) and walls (PHA-2150) primitives: drag-drop / paste /
-  file-picker upload with progress and a friendly "too large" toast,
-  link posts with a best-effort server-side title/description preview
-  (`GET /api/link-preview`), 2000-char text posts, five-emoji reactions
-  (👍😂🔥👀❤️, idempotent toggle), and flat inline comments. Pagination
-  is an explicit "Older" button (cursor-based, 20 at a time) — no
-  infinite scroll.
+- **The Porch Wall (PHA-2151 + PHA-2206)** — `/porch.html` is the
+  standalone thin shell when the wall module is the user's only
+  enabled room; when other modules are also enabled, the SAME feed
+  surface mounts in-place inside `#page-porch` of the SPA via
+  `window.HomesteadFeed.mount(target, opts)`. The shared component
+  lives at `public/components/feed.js`. Either way you get a
+  chronological, group-scoped photo/video/link/text feed on top of
+  the media (PHA-2149) and walls (PHA-2150) primitives:
+  drag-drop / paste / file-picker upload with progress and a
+  friendly "too large" toast, link posts with a best-effort
+  server-side title/description preview (`GET /api/link-preview`),
+  2000-char text posts, five-emoji reactions (👍😂🔥👀❤️, idempotent
+  toggle), and flat inline comments. Pagination is an explicit
+  "Older" button (cursor-based, 20 at a time) — no infinite scroll.
 - **Push notifications** — web-push reminders for chores due today,
   overdue chores, and rotating "your turn" handoffs. Per-user quiet hours
   and per-category on/off toggles. No Firebase — standard VAPID keys
