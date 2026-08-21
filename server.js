@@ -44,6 +44,7 @@ const dedupMatcher = require('./lib/dedup/matcher');
 const calendarSources = require('./lib/calendar-sources');
 const secretBox = require('./lib/secret-box');
 const snapshot = require('./lib/snapshot');
+const drawerDispatch = require('./lib/drawer-dispatch');
 const media = require('./lib/media');
 const walls = require('./lib/walls');
 const notifications = require('./lib/notifications');
@@ -133,6 +134,14 @@ app.use(session({
   saveUninitialized: false,
   cookie: { httpOnly: true, sameSite: 'lax', maxAge: 1000 * 60 * 60 * 24 * 90 }
 }));
+
+// PHA-1617.6: in-memory consecutive-failure streak map, keyed by
+// agent_endpoints.id. Used by the drawer dispatcher to decide when
+// the per-endpoint circuit breaker should trip (5 consecutive
+// failures → enabled=0, §6.5). Resets to 0 on any successful dispatch.
+// In-memory only; the persistent record is the row's last_status_code
+// + last_error columns written by agentEndpoints.recordDispatch.
+app.locals.drawerStreakMap = new Map();
 
 // ---- auth middleware ----
 // Four-layer auth:
@@ -794,16 +803,23 @@ app.delete('/api/users/:username/agent-endpoints/:id', auth, requireAdmin, (req,
   res.json({ ok: true });
 });
 
-// ---- PHA-1617.5: chat drawer stub ----
-// Frontend-only shell for the meta-agent chat drawer (design doc §6.3).
-// The composer POSTs {message, endpoint_id, conversation_id} here and the
-// response is rendered by the SSE/JSON consumer in public/index.html.
+// ---- PHA-1617.6: drawer backend — outbound POST + SSE consumer + retry/circuit breaker ----
+// Design doc §6.2–6.5. The drawer UI (PHA-1617.5) POSTs here with
+// {message, endpoint_id, conversation_id}; this route signs and forwards
+// the payload to the user's configured drawer_endpoint URL with the
+// morning-brief snapshot attached, consumes SSE chunks or single-shot
+// JSON back from the harness, retries on transient failure with
+// exponential backoff (1s, 4s, 16s, 60s), and auto-disables the
+// endpoint after 5 consecutive failures (§6.5).
 //
-// This is the STUB layer for the UI shell sub-task (PHA-1617.5). It does
-// not yet HMAC-sign or forward to the user's harness URL — that's
-// PHA-1617.6's job. The wire shape (SSE chunks OR single JSON reply) is
-// stable and intentionally matches §6.3 so the .6 backend can swap in
-// without any frontend changes.
+// Wire shape matches the stub (PHA-1617.5) on purpose so the frontend
+// consumer in public/index.html doesn't need any changes:
+//   * SSE reply (default): text/event-stream with `event: chunk` /
+//     `event: done` — Design Trap #4 ("never make a human watch an
+//     LLM think") means we stream chunks as they arrive.
+//   * JSON reply: when `Accept: application/json`, the same
+//     dispatcher result is returned as a single object with
+//     {request_id, text, actions?, tokens_in?, tokens_out?}.
 app.post('/api/drawer', auth, async (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
   if (!me) return res.status(401).json({ error: 'unknown_user' });
@@ -812,51 +828,103 @@ app.post('/api/drawer', auth, async (req, res) => {
   const endpointId = Number(b.endpoint_id);
   const conversationId = typeof b.conversation_id === 'string' && b.conversation_id
     ? b.conversation_id
-    : 'c-stub-' + Date.now().toString(36);
+    : 'c-drawer-' + Date.now().toString(36);
   if (!message) return res.status(400).json({ error: 'message required' });
   if (!Number.isInteger(endpointId) || endpointId <= 0) {
     return res.status(400).json({ error: 'endpoint_id required' });
   }
-
-  // Scope to the caller's enabled drawer endpoints. We never read the
-  // secret here — the .6 dispatcher is the only place that handles the
-  // HMAC signing.
-  const ep = db.prepare(
-    `SELECT id, harness_label, url FROM agent_endpoints
-       WHERE id = ? AND user_id = ? AND kind = 'drawer' AND enabled = 1`
-  ).get(endpointId, me.id);
-  if (!ep) return res.status(404).json({ error: 'endpoint_not_found' });
 
   // Honour `Accept: application/json` to return a single-shot reply; SSE
   // is the default. The frontend consumer supports both per §6.3.
   const accept = String(req.headers.accept || '').toLowerCase();
   const wantsJson = accept.includes('application/json');
 
-  // Record dispatch bookkeeping (last_used_at + last_status_code) so the
-  // settings UI can show "last contacted" without a separate query. The
-  // stub always succeeds; .6 will record real status / errors.
-  agentEndpoints.recordDispatch(db, ep.id, { statusCode: 200, error: null });
+  // Compute the in-memory consecutive-failure streak so the route can
+  // decide whether to auto-disable after this dispatch (§6.5).
+  // The streak resets to 0 on any successful dispatch. After a failed
+  // dispatch we add the number of HTTP attempts the dispatcher made
+  // (each retry counts as one failure toward the 5-failure threshold).
+  // The map is in-memory only; on process restart it resets, but the
+  // row-level last_status_code + last_error columns give a hard
+  // persistent record of recent dispatch health.
+  const streakMap = (req.app && req.app.locals && req.app.locals.drawerStreakMap) || null;
 
-  if (wantsJson) {
-    return res.json({
-      request_id: conversationId,
-      text: `Stub reply from Homestead (PHA-1617.5). Your message was "${message.slice(0, 80)}". ` +
-            `Endpoint "${ep.harness_label}" accepted it. The real HMAC-signed forwarder ` +
-            `arrives in PHA-1617.6.`,
-      tokens_in: message.length,
-      tokens_out: 0,
+  const result = await drawerDispatch.dispatchDrawer(db, me, {
+    message,
+    endpointId,
+    conversationId,
+  });
+
+  // Update the streak after dispatch.
+  if (streakMap) {
+    if (result.ok) {
+      streakMap.set(endpointId, 0);
+    } else if (result.status !== 'endpoint_not_found') {
+      const newStreak = (streakMap.get(endpointId) || 0) + (result.attempts || 1);
+      streakMap.set(endpointId, newStreak);
+      // Apply the §6.5 circuit breaker: 5 consecutive failures → auto-disable.
+      if (newStreak >= drawerDispatch.CIRCUIT_FAILURE_THRESHOLD) {
+        const epRow = db.prepare('SELECT id, enabled FROM agent_endpoints WHERE id = ?').get(endpointId);
+        if (epRow && epRow.enabled) {
+          db.prepare('UPDATE agent_endpoints SET enabled = 0 WHERE id = ?').run(endpointId);
+          agentEndpoints.recordDispatch(db, endpointId, {
+            statusCode: result.lastStatus || null,
+            error: `circuit_broken:${result.lastError || 'unknown'}`,
+          });
+          return res.status(503).json({
+            error: 'circuit_broken',
+            message: 'endpoint auto-disabled after 5 consecutive failures; re-enable in settings',
+            last_status: result.lastStatus || null,
+            last_error: result.lastError || null,
+            request_id: result.requestId,
+            conversation_id: result.conversationId,
+          });
+        }
+      }
+    }
+  }
+
+  if (result.status === 'endpoint_not_found') {
+    return res.status(404).json({ error: 'endpoint_not_found' });
+  }
+  if (result.status === 'endpoint_offline') {
+    return res.status(502).json({
+      error: 'endpoint_offline',
+      message: 'failed to reach the user-configured drawer endpoint after retries',
+      last_status: result.lastStatus || null,
+      last_error: result.lastError || null,
+      request_id: result.requestId,
+      conversation_id: result.conversationId,
     });
   }
 
-  // SSE reply. Stream a small synthetic agent response in chunks so the
-  // frontend's `event: chunk` consumer visibly exercises the streaming
-  // path. Chunks are flushed individually with a small delay so the UI
-  // shows the typewriter effect.
+  if (!result.ok) {
+    // Defensive: a non-ok without a known status shouldn't happen, but
+    // surface it rather than 500 with no body.
+    return res.status(500).json({ error: 'dispatch_failed', detail: result.lastError });
+  }
+
+  if (wantsJson) {
+    return res.json({
+      request_id: result.requestId,
+      conversation_id: result.conversationId,
+      text: result.text || '',
+      ...(result.actions ? { actions: result.actions } : {}),
+      ...(typeof result.tokensIn === 'number' ? { tokens_in: result.tokensIn } : {}),
+      ...(typeof result.tokensOut === 'number' ? { tokens_out: result.tokensOut } : {}),
+      duration_ms: result.durationMs,
+    });
+  }
+
+  // SSE reply. Stream the chunks the dispatcher collected. If the
+  // dispatcher returned one big string, we ship it as a single chunk so
+  // the wire shape (event: chunk + event: done) is preserved.
   res.status(200);
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
+  res.setHeader('X-Homestead-Request-Id', result.requestId);
   res.flushHeaders && res.flushHeaders();
 
   const writeSse = (event, data) => {
@@ -865,24 +933,24 @@ app.post('/api/drawer', auth, async (req, res) => {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
 
-  // Surface the harness label so the UI can show "via <harness>" if it wants.
-  writeSse('chunk', { text: `Stub reply via "${ep.harness_label}":\n\n` });
-  const lines = [
-    `Heard: "${message.slice(0, 120)}${message.length > 120 ? '…' : ''}"`,
-    ``,
-    `PHA-1617.5 ships the drawer UI shell (composer + SSE/JSON consumer).`,
-    `The HMAC-signed outbound forwarder to your harness lands in PHA-1617.6.`,
-  ];
-  for (const line of lines) {
+  const chunkList = Array.isArray(result.chunks) && result.chunks.length
+    ? result.chunks
+    : (result.text ? [result.text] : []);
+
+  // Flush the first chunk immediately so the UI shows life (Design
+  // Trap #4). Then stream the rest with a small typewriter delay so the
+  // bubble fills in.
+  for (let i = 0; i < chunkList.length; i++) {
     if (res.writableEnded) break;
-    await new Promise(r => setTimeout(r, 90));
-    writeSse('chunk', { text: line + '\n' });
+    if (i > 0) await new Promise(r => setTimeout(r, 30));
+    writeSse('chunk', { text: chunkList[i] });
   }
   writeSse('done', {
-    request_id: conversationId,
-    tokens_in: message.length,
-    tokens_out: 0,
-    duration_ms: 90 * lines.length,
+    request_id: result.requestId,
+    conversation_id: result.conversationId,
+    tokens_in: typeof result.tokensIn === 'number' ? result.tokensIn : (message ? message.length : 0),
+    tokens_out: typeof result.tokensOut === 'number' ? result.tokensOut : 0,
+    duration_ms: result.durationMs,
   });
   res.end();
 });
