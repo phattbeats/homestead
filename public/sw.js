@@ -61,6 +61,18 @@ self.addEventListener('notificationclick', e => {
     }
     await clients.openWindow(url);
   })());
+  // PHA-2218: a push-tap should clear its own badge — mark this notification's
+  // tag seen server-side. Additive to the focus/open-tab flow above; best-effort
+  // (a failure here shouldn't block or affect navigation, which already ran via
+  // the waitUntil() above).
+  e.waitUntil(
+    fetch('/api/me/notifications/seen', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tag }),
+    }).catch(() => {})
+  );
 });
 
 self.addEventListener('notificationclose', e => {

@@ -46,6 +46,7 @@ const secretBox = require('./lib/secret-box');
 const snapshot = require('./lib/snapshot');
 const media = require('./lib/media');
 const walls = require('./lib/walls');
+const notifications = require('./lib/notifications');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -965,6 +966,85 @@ app.post('/api/walls/posts/:postId/comments', auth, (req, res) => {
   try {
     res.json(walls.createComment(req.params.postId, me.id, req.body && req.body.body));
   } catch (e) { wallsErr(res, e); }
+});
+
+// ---- notification prefs + mentions (PHA-2218) ----
+// Per-wall level (all/mentions/none), wall-scoped @mention autocomplete,
+// per-thread mute, and the badge-clearing endpoints. Membership gate is
+// the same walls.assertMember() the wall routes above already trust — a
+// wall's members and notification prefs are only visible/settable to
+// its own members. Plain `auth` (not scope-gated): these are personal
+// preference routes, same tier as /api/push/prefs, not something a
+// third-party app's manifest scopes cover yet.
+app.get('/api/walls/:slug/members', auth, requireWallReadScope, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    const { wall } = walls.assertMember(req.params.slug, me.id);
+    const members = notifications.membersForWall(wall).map((m) => ({
+      username: m.username,
+      display: m.display,
+      color: m.color,
+      isMemberSince: m.joined_at || null,
+    }));
+    res.json({ members });
+  } catch (e) { wallsErr(res, e); }
+});
+
+app.get('/api/walls/:slug/notifications', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    const { wall } = walls.assertMember(req.params.slug, me.id);
+    res.json({ level: notifications.getLevel(wall.id, me.id) });
+  } catch (e) { wallsErr(res, e); }
+});
+app.put('/api/walls/:slug/notifications', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    const { wall } = walls.assertMember(req.params.slug, me.id);
+    const via = wall.visibility === 'group' ? 'user_groups' : 'wall_memberships';
+    res.json(notifications.setLevel(wall.id, me.id, (req.body || {}).level, via));
+  } catch (e) { wallsErr(res, e); }
+});
+
+app.post('/api/walls/:slug/posts/:postId/mute', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    const { post } = walls.getPostInWall(req.params.slug, req.params.postId, me.id);
+    res.json(notifications.muteThread(me.id, post.id));
+  } catch (e) { wallsErr(res, e); }
+});
+app.delete('/api/walls/:slug/posts/:postId/mute', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    const { post } = walls.getPostInWall(req.params.slug, req.params.postId, me.id);
+    res.json(notifications.unmuteThread(me.id, post.id));
+  } catch (e) { wallsErr(res, e); }
+});
+
+// GET /api/me/notifications: the badge/activity-feed list backing PHA-1617's
+// clearable-badge promise. ?unseen=1 filters to seen_at IS NULL. Distinct
+// from /api/me/snapshot's activity_recent (the morning-brief dashboard
+// feed, unfiltered) — this one is the badge itself.
+app.get('/api/me/notifications', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  res.json({ notifications: notifications.listForUser(me.id, { unseen: req.query.unseen === '1', limit: req.query.limit }) });
+});
+// POST /api/me/notifications/seen: three clear paths funnel here — a
+// push click (SW posts {tag}), opening the target post ({postId}), or
+// the activity feed's "clear all" ({clearAll: true}). Always scoped to
+// the caller's own rows.
+app.post('/api/me/notifications/seen', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const b = req.body || {};
+  const cleared = notifications.markSeen(me.id, { tag: b.tag, postId: b.postId, clearAll: !!b.clearAll });
+  res.json({ ok: true, cleared });
 });
 
 // ---- link preview (PHA-2151) ----

@@ -17,6 +17,11 @@
     <a class="back" href="/" aria-label="Back to Homestead">‹</a>
     <div class="greet"><small>The Porch</small><span id="wallName">Wall</span></div>
     <select id="wallPicker" aria-label="Choose wall"></select>
+    <select id="notifyLevel" aria-label="Notification level for this wall">
+      <option value="all">Notify: All</option>
+      <option value="mentions">Notify: Mentions only</option>
+      <option value="none">Notify: None</option>
+    </select>
   </header>
 
   <main id="main">
@@ -28,7 +33,10 @@
       </div>
 
       <div class="cpane on" id="pane-text">
-        <textarea id="textBody" maxlength="2000" placeholder="What's happening on the porch?" rows="3"></textarea>
+        <div class="composer-wrap">
+          <textarea id="textBody" maxlength="2000" placeholder="What's happening on the porch?" rows="3"></textarea>
+          <div class="mention-menu" id="mentionMenu"></div>
+        </div>
         <div class="composer-row">
           <span class="charcount" id="textCount">0 / 2000</span>
           <button type="button" class="btn" id="postText">Post</button>
