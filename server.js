@@ -45,6 +45,7 @@ const snapshot = require('./lib/snapshot');
 const drawerDispatch = require('./lib/drawer-dispatch');
 const media = require('./lib/media');
 const walls = require('./lib/walls');
+const analytics = require('./lib/analytics');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -74,6 +75,10 @@ media.migrate(db);
 // media_uploads(id), so it runs after userModel.migrate and media.migrate.
 walls.migrate(db);
 walls.seed(db);
+// PHA-2210: analytics_events capture table. Same boot-migration pattern;
+// FK to users(id) is loose (ON DELETE SET NULL) so it runs alongside
+// (not after) the user-mutating modules.
+analytics.migrate(db);
 
 // v0.1.0: web push subscriptions (PHA-1619)
 db.exec(`
@@ -196,6 +201,25 @@ function authenticate(req, res, next) {
       isAdmin: !!u.is_admin,
       authProvider: 'header_trust',
     };
+    // PHA-2210: session_started (header-trust path). Best-effort; never
+    // throws into the request path. Fired AFTER req.session.user is set
+    // so the analytics row carries the user_id.
+    analytics.logEvent(db, {
+      userId: u.id,
+      kind: 'session_started',
+      subjectType: 'user',
+      subjectId: u.id,
+      meta: { device: 'header_trust' },
+    });
+    // PHA-2210: first_login funnel signal (one row per user ever).
+    analytics.logFirst(db, {
+      userId: u.id,
+      kind: 'first_login',
+      subjectType: 'user',
+      subjectId: u.id,
+      meta: { device: 'header_trust' },
+    });
+    sessionStartedAt.set(req.session, Date.now());
     return next();
   }
   if (req.session.user) return next();
@@ -303,6 +327,14 @@ async function notify(userId, payload, opts = {}) {
       await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, json, { TTL: 60 * 60 * 24 });
       db.prepare('UPDATE push_subscriptions SET last_success_at=datetime(\'now\'), failure_count=0 WHERE id=?').run(s.id);
       delivered++;
+      // PHA-2210: push_delivered per endpoint.
+      analytics.logEvent(db, {
+        userId,
+        kind: 'push_delivered',
+        subjectType: 'push_subscription',
+        subjectId: s.id,
+        meta: { category, request_tag: payload.tag || category },
+      });
     } catch (err) {
       errors++;
       const status = err.statusCode || 0;
@@ -310,6 +342,17 @@ async function notify(userId, payload, opts = {}) {
         db.prepare('DELETE FROM push_subscriptions WHERE id=?').run(s.id);
       } else {
         db.prepare('UPDATE push_subscriptions SET last_failure_at=datetime(\'now\'), failure_count=failure_count+1 WHERE id=?').run(s.id);
+      }
+      // PHA-2210: push_failed per endpoint (only for live failures, not
+      // for the 404/410 endpoint-gone case where we just dropped the row).
+      if (status !== 404 && status !== 410) {
+        analytics.logEvent(db, {
+          userId,
+          kind: 'push_failed',
+          subjectType: 'push_subscription',
+          subjectId: s.id,
+          meta: { category, status_code: status, skipped_reason: err.body || null },
+        });
       }
     }
   }
@@ -367,9 +410,47 @@ app.post('/api/login', (req, res) => {
     isAdmin: !!u.is_admin,
     authProvider: 'password',
   };
+  // PHA-2210: session_started (LAN-fallback password path).
+  analytics.logEvent(db, {
+    userId: u.id,
+    kind: 'session_started',
+    subjectType: 'user',
+    subjectId: u.id,
+    meta: { device: 'password' },
+  });
+  // PHA-2210: first_login funnel signal (one row per user ever).
+  analytics.logFirst(db, {
+    userId: u.id,
+    kind: 'first_login',
+    subjectType: 'user',
+    subjectId: u.id,
+    meta: { device: 'password' },
+  });
+  sessionStartedAt.set(req.session, Date.now());
   res.json({ user: req.session.user });
 });
-app.post('/api/logout', (req, res) => req.session.destroy(() => res.json({ ok: true })));
+
+// PHA-2210: session_ended with duration_seconds promoted. Fires on
+// /api/logout (and on session-expiry, both are legit signals). Wraps
+// req.session.destroy so the callback carries the start ts we recorded.
+const sessionStartedAt = new WeakMap();
+app.post('/api/logout', (req, res) => {
+  const user = req.session && req.session.user;
+  const startedAt = sessionStartedAt.get(req.session) || Date.now();
+  req.session.destroy(() => {
+    if (user && user.id) {
+      const duration = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+      analytics.logEvent(db, {
+        userId: user.id,
+        kind: 'session_ended',
+        subjectType: 'user',
+        subjectId: user.id,
+        durationSeconds: duration,
+      });
+    }
+    res.json({ ok: true });
+  });
+});
 app.get('/api/logout', (req, res) => res.status(405).json({ error: 'method_not_allowed', allow: 'POST' }));
 app.get('/api/me', (req, res) => {
   // Header-trust probe (PHA-1574): when SWAG forwards X-authentik-username,
@@ -705,6 +786,25 @@ app.post('/api/drawer', auth, async (req, res) => {
     message,
     endpointId,
     conversationId,
+  });
+
+  // PHA-2210: drawer_call_completed / drawer_call_failed. duration_ms is
+  // the wall-clock time the dispatcher spent; we promote it into
+  // duration_seconds (rounded). Fires once per call, on every wire
+  // shape (JSON, SSE, error).
+  analytics.logEvent(db, {
+    userId: me.id,
+    kind: result.ok ? 'drawer_call_completed' : 'drawer_call_failed',
+    subjectType: 'agent_endpoint',
+    subjectId: endpointId,
+    durationSeconds: Math.round((result.durationMs || 0) / 1000),
+    meta: {
+      status_code: result.lastStatus || null,
+      request_id: result.requestId || null,
+      conversation_id: conversationId,
+      ok: !!result.ok,
+      error: result.lastError || null,
+    },
   });
 
   // Update the streak after dispatch.
