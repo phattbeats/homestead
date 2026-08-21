@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-2151 smoke test: boot server.js on an ephemeral port and exercise
 // the Porch Wall frontend surface — static asset delivery plus the one
 // new server route (GET /api/link-preview) that porch.js depends on but

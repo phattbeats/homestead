@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-1874 (PHA-1624 Phase B-2) smoke test for the Kavita sync worker.
 //
 // End-to-end smoke against a live Kavita server. Reads:

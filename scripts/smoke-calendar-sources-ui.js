@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-1868 smoke test: per-user source config UI surface area.
 //
 // Exercises the new endpoints the SPA uses:
