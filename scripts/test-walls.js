@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-2150 acceptance tests for lib/walls.js: schema migrate, the
 // group/direct membership gate, post create/list/delete, reaction
 // toggle idempotence, and comment create/list/1k cap. Also a defensive
