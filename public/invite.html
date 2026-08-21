@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Join a wall — Homestead</title>
+<meta name="theme-color" content="#FFFBF5">
+<link rel="manifest" href="/manifest.json">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* PHA-2207 (PHA-2200.6): invite redemption page. The page itself is
+   unauthenticated — it just shows the wall the invite is for and
+   asks the user to confirm. The actual API call requires auth, so
+   we bounce through /api/login (or header-trust via SWAG) and POST
+   /api/invites/:code/redeem on the way back. Tokens mirror
+   public/porch.css + welcome.html. */
+:root{
+  --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#8A8177;
+  --line:rgba(43,38,34,.07);
+  --accent:#C4703C; --accent-soft:#F8E9DE;
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100dvh}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+
+#app{max-width:520px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 36px) 22px 30px;min-height:100dvh;display:flex;flex-direction:column}
+.heading{font-size:30px;font-weight:800;letter-spacing:-.025em;line-height:1.15;margin-bottom:6px}
+.subheading{color:var(--muted);font-size:15px;line-height:1.45;margin-bottom:26px}
+
+.wall-card{background:var(--surface);border-radius:22px;padding:18px;margin-bottom:18px;box-shadow:0 6px 30px rgba(0,0,0,.035)}
+.wall-name{font-size:22px;font-weight:800;margin-bottom:4px}
+.wall-meta{color:var(--muted);font-size:12px;letter-spacing:.05em;text-transform:uppercase}
+
+.note{background:var(--accent-soft);border-radius:14px;padding:12px 14px;font-size:13px;color:var(--ink);margin-top:14px;white-space:pre-wrap}
+
+.cta{margin-top:auto;padding-top:20px}
+.btn{display:block;width:100%;padding:14px 18px;border-radius:16px;background:var(--accent);color:#fff;font-weight:700;font-size:15px;text-align:center;transition:transform .2s var(--ease),opacity .2s}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.5;cursor:default}
+
+.error{background:var(--surface);border-radius:18px;padding:18px;border:1px solid var(--line)}
+.error h2{font-size:18px;margin-bottom:6px}
+.error p{color:var(--muted);font-size:14px}
+
+.loading{color:var(--muted);text-align:center;padding:18px 0;font-size:14px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="content">
+    <p class="loading">Loading invite…</p>
+  </div>
+  <div class="cta">
+    <button id="redeemBtn" class="btn" style="display:none">Join this wall</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// PHA-2207 (PHA-2200.6): invite redemption handshake.
+//   1. Extract the code from the URL: /invite/{code}
+//   2. GET /api/me — if unauthenticated, bounce to login with ?next=
+//      set so we come back here.
+//   3. POST /api/invites/:code/redeem — authed redeem.
+//      On success, the response includes `redirect: /welcome.html?wall=<slug>`
+//      and a `first_run` boolean. New users go to /welcome; existing
+//      users go straight to the feed.
+//   4. If the invite is expired/redeemed/invalid, the API returns
+//      410/404. We render an error card with a back-to-home link.
+
+const content = document.getElementById('content');
+const ctaBtn = document.getElementById('redeemBtn');
+
+function el(tag, props = {}, children = []) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'text') e.textContent = v;
+    else if (k === 'style') Object.assign(e.style, v);
+    else e.setAttribute(k, v);
+  }
+  for (const c of children) e.appendChild(c);
+  return e;
+}
+
+function renderError(title, body) {
+  return el('div', { class: 'error' }, [
+    el('h2', { text: title }),
+    el('p', { text: body }),
+  ]);
+}
+
+function clear() { while (content.firstChild) content.removeChild(content.firstChild); }
+
+async function ensureAuthed() {
+  // GET /api/me — same shape used by the rest of the SPA.
+  try {
+    const r = await fetch('/api/me', { credentials: 'same-origin' });
+    const me = await r.json();
+    if (me && me.user) return me;
+  } catch (_) { /* fall through to login bounce */ }
+  // Not signed in — bounce to login and come back to this URL.
+  location.replace('/api/login?next=' + encodeURIComponent(location.pathname));
+  return null;
+}
+
+async function bootstrap() {
+  const m = location.pathname.match(/^\/invite\/([A-Fa-f0-9]+)$/);
+  if (!m) {
+    clear();
+    content.appendChild(renderError('Invalid invite link', 'This URL doesn\'t look like an invite. Check the link you were sent.'));
+    return;
+  }
+  const code = m[1];
+
+  const me = await ensureAuthed();
+  if (!me) return; // bouncing to login
+
+  // Authed. Hit the redeem endpoint.
+  ctaBtn.style.display = 'none';
+  clear();
+  content.appendChild(el('p', { class: 'loading', text: 'Joining…' }));
+
+  let result;
+  try {
+    const r = await fetch('/api/invites/' + encodeURIComponent(code) + '/redeem', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      const errCode = body.error || '';
+      clear();
+      if (r.status === 410 && errCode === 'invite_expired') {
+        content.appendChild(renderError('Invite expired', 'This invite has expired. Ask whoever sent it for a fresh one.'));
+      } else if (r.status === 410 && errCode === 'invite_already_redeemed') {
+        content.appendChild(renderError('Already used', 'This invite has already been redeemed. Sign in with the account that used it.'));
+      } else if (r.status === 404) {
+        content.appendChild(renderError('Invite not found', 'This invite doesn\'t exist or has been deleted.'));
+      } else {
+        content.appendChild(renderError('Couldn\'t redeem', 'Server error: ' + (errCode || r.status) + '. Try again in a moment.'));
+      }
+      return;
+    }
+    result = await r.json();
+  } catch (err) {
+    clear();
+    content.appendChild(renderError('Network error', 'Couldn\'t reach the server. Check your connection and try again.'));
+    return;
+  }
+
+  // Success — render the wall card + "Join this wall" CTA (in case
+  // the user wants one last look at the wall name before bouncing).
+  clear();
+  content.appendChild(el('h1', { class: 'heading', text: 'You\'re invited to ' + result.wall_name }));
+  const memberCount = (result.members || []).length;
+  content.appendChild(el('p', {
+    class: 'subheading',
+    text: memberCount === 0
+      ? 'You\'ll be the first one here. Start the conversation.'
+      : 'You\'ll be joining ' + memberCount + ' ' + (memberCount === 1 ? 'person' : 'people') + ' on this wall.',
+  }));
+  const card = el('div', { class: 'wall-card' });
+  card.appendChild(el('div', { class: 'wall-name', text: result.wall_name }));
+  card.appendChild(el('div', { class: 'wall-meta', text: '@' + result.wall_slug }));
+  content.appendChild(card);
+
+  ctaBtn.textContent = result.first_run ? 'Welcome me in →' : 'Open the feed →';
+  ctaBtn.style.display = 'block';
+  ctaBtn.addEventListener('click', () => {
+    location.href = result.redirect || ('/welcome.html?wall=' + encodeURIComponent(result.wall_slug));
+  });
+}
+
+bootstrap();
+</script>
+</body>
+</html>
