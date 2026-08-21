@@ -209,6 +209,53 @@ function authenticate(req, res, next) {
 // Legacy alias used by route definitions below.
 const auth = authenticate;
 
+// ---- app-scoped token authorization (PHA-2052 dogfood) ----
+// `authenticate()` above accepts a Bearer app token and synthesizes the
+// SAME req.session.user shape a real household member gets — on its own
+// that means an app-scoped PAT is authorized as if it were the full
+// underlying user, regardless of the scopes[] the manifest actually
+// declared and the user actually consented to. `tokenScopes(req)`
+// distinguishes the three auth paths:
+//   * Bearer app token (authProviderDetail.scopes is a JSON array) ->
+//     that array, and ONLY that array, gates what the request may do.
+//   * Legacy user-level PAT (authProviderDetail.scopes === 'user') or
+//     session/header-trust auth (no authProviderDetail at all) -> null,
+//     meaning "full access" — unchanged behavior for every caller that
+//     isn't an installed third-party app.
+function tokenScopes(req) {
+  const detail = req.session.user && req.session.user.authProviderDetail;
+  if (!detail || detail.scopes === undefined || detail.scopes === 'user') return null;
+  try {
+    const arr = JSON.parse(detail.scopes);
+    return Array.isArray(arr) ? arr : null;
+  } catch (_) {
+    return null;
+  }
+}
+// requireScope(scope): the token must carry this exact scope string.
+function requireScope(scope) {
+  return function (req, res, next) {
+    const scopes = tokenScopes(req);
+    if (scopes === null || scopes.includes(scope)) return next();
+    return res.status(403).json({ error: 'insufficient_scope', required: scope });
+  };
+}
+// requireWallReadScope: read:walls (any wall) or read:walls:<slug>
+// (this wall only) — mirrors the two-tier vocabulary in
+// lib/scope-display.js (§3: the fixed `read:walls` phrase vs. the
+// per-wall `read:walls:{id}` pattern). Scope names use underscores
+// (lib/scope-display.js's fixed `read:walls:media_club` entry) while
+// wall slugs use dashes (`walls.seed()`'s `media-club`) — the §3
+// vocabulary is locked as written, so the slug is normalized to match
+// it here rather than the other way around.
+function requireWallReadScope(req, res, next) {
+  const scopes = tokenScopes(req);
+  if (scopes === null) return next();
+  const scopeSlug = req.params.slug.replace(/-/g, '_');
+  if (scopes.includes('read:walls') || scopes.includes(`read:walls:${scopeSlug}`)) return next();
+  return res.status(403).json({ error: 'insufficient_scope', required: `read:walls:${scopeSlug}` });
+}
+
 // ---- VAPID keypair (PHA-1619) ----
 // Generated once on first startup, persisted to DATA_DIR/vapid.json.
 // The public key is exposed via /api/push/vapid-public-key so the service
@@ -870,14 +917,14 @@ app.get('/api/walls', auth, (req, res) => {
   if (!me) return res.status(401).json({ error: 'unknown_user' });
   res.json({ walls: walls.listForUser(me.id) });
 });
-app.get('/api/walls/:slug/posts', auth, (req, res) => {
+app.get('/api/walls/:slug/posts', auth, requireWallReadScope, (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
   if (!me) return res.status(401).json({ error: 'unknown_user' });
   try {
     res.json({ posts: walls.postsForWall(req.params.slug, me.id, req.query.cursor, req.query.limit) });
   } catch (e) { wallsErr(res, e); }
 });
-app.post('/api/walls/:slug/posts', auth, (req, res) => {
+app.post('/api/walls/:slug/posts', auth, requireScope('write:walls:post'), (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
   if (!me) return res.status(401).json({ error: 'unknown_user' });
   try {
