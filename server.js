@@ -942,6 +942,15 @@ app.delete('/api/users/:username/agent-endpoints/:id', auth, requireAdmin, (req,
 app.post('/api/drawer', auth, async (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
   if (!me) return res.status(401).json({ error: 'unknown_user' });
+  // PHA-2208 (PHA-2200.7): the meta-agent drawer is gated by the
+  // `agent` module. When the user has not enabled it, the drawer FAB
+  // is hidden in the SPA AND the endpoint returns 403 so any stale
+  // client (background fetch, retained tab, malicious script) can't
+  // reach the agent surface. The HMAC-signed dispatcher (PHA-1617.6)
+  // is unaffected — this check is a separate guard at the route entry.
+  if (!userModel.isAgentEnabled(db, me.id)) {
+    return res.status(403).json({ error: 'agent_disabled' });
+  }
   const b = req.body || {};
   const message = typeof b.message === 'string' ? b.message.trim() : '';
   const endpointId = Number(b.endpoint_id);
@@ -1020,6 +1029,40 @@ app.post('/api/drawer', auth, async (req, res) => {
     duration_ms: 90 * lines.length,
   });
   res.end();
+});
+
+// ---- PHA-2208 (PHA-2200.7): Gazette brief endpoint ----
+// Morning-brief surface from PHA-1617's design note §3 ("the morning
+// brief is the first product surface"). The wire shape is intentionally
+// forward-compatible with PHA-1617 — the in-review parent issue owns
+// the brief payload assembly; this shim only proves the gate wires up
+// before the real shape lands.
+//
+// Gating rule (matches `/api/drawer`): the brief is only readable when
+// the user's enabled set includes the `agent` module. Emily's
+// `default_enabled` is `wall` only, so her account never sees the
+// drawer or the brief without an explicit enable. Planting the route
+// here keeps the gate co-located with `/api/drawer`; the body is the
+// 403 path. The 200 path will arrive when PHA-1617 ships the brief
+// assembly contract (likely a sibling sub-task PHA-1900-style
+// dispatcher or a new `lib/gazette.js`).
+app.get('/api/gazette/brief', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  if (!userModel.isAgentEnabled(db, me.id)) {
+    return res.status(403).json({ error: 'agent_disabled' });
+  }
+  // Placeholder. The real brief will land in PHA-1617 (or a sibling
+  // sub-task) — at that point the gate above stays and the body is
+  // replaced with the assembly call. For now the 200 path is a
+  // minimal stub so the test suite can assert the gate flips cleanly
+  // without standing up the full brief pipeline.
+  res.json({
+    ok: true,
+    note: 'gated_ok',
+    agent_enabled: true,
+    shipped_by: 'PHA-2208',
+  });
 });
 
 // ---- media (PHA-2149) ----
