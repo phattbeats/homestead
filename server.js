@@ -36,6 +36,7 @@ const kavitaSync = require('./lib/sync/kavita');
 const agentTokens = require('./lib/agent-tokens');
 const agentEndpoints = require('./lib/agent-endpoints');
 const appApiLog = require('./lib/app-api-log');
+const appInstall = require('./lib/app-install');
 
 const healthChecker = require('./lib/health-checker');
 const entityGraph = require('./lib/sync/_schema');
@@ -63,6 +64,10 @@ agentTokens.migrate(db);
 // users(id) and installed_apps(key), so it runs right after
 // agentTokens.migrate (which creates installed_apps).
 appApiLog.migrate(db);
+// PHA-2201.1 (PHA-2229): install flow's consent-token table. FK to
+// users(id), so it runs after userModel.migrate; no dependency on
+// installed_apps (consent tokens exist before an app is installed).
+appInstall.migrate(db);
 // PHA-1617.4: per-user, per-harness endpoint config (drawer POST +
 // events webhook URLs). HMAC secret generated on insert. FK to users;
 // migrated after userModel so the FK resolves, same pattern as
@@ -550,12 +555,84 @@ app.delete('/api/users/:username/agent-tokens/:id', auth, requireAdmin, (req, re
   res.json({ ok: true });
 });
 
+// ---- app install flow (PHA-2201.1 / PHA-2229) ----
+// State machine: resolve -> consent -> install, plus list/get/revoke/
+// reinstall. All logic lives in lib/app-install.js (pure, no express);
+// these handlers just do auth + status-code mapping. Settings UI that
+// drives this flow is PHA-2201.4 (PHA-2232).
+function sendAppInstallError(res, err) {
+  if (err instanceof appInstall.AppInstallError) {
+    return res.status(err.status).json({ error: err.code, message: err.message, ...err.extra });
+  }
+  console.error('[app-install] unexpected error:', err);
+  return res.status(500).json({ error: 'internal_error' });
+}
+app.post('/api/apps/resolve', auth, async (req, res) => {
+  const { url, dev } = req.body || {};
+  try {
+    const manifest = await appInstall.resolveManifest(db, url, { dev: !!dev });
+    res.json({ manifest });
+  } catch (err) {
+    sendAppInstallError(res, err);
+  }
+});
+app.post('/api/apps/consent', auth, async (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { manifest_url, acknowledged, dev } = req.body || {};
+  try {
+    const result = await appInstall.issueConsent(db, me.id, manifest_url, { acknowledged: !!acknowledged, dev: !!dev });
+    res.json(result);
+  } catch (err) {
+    sendAppInstallError(res, err);
+  }
+});
+app.post('/api/apps/install', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { consent_token } = req.body || {};
+  try {
+    res.json(appInstall.installApp(db, me.id, consent_token));
+  } catch (err) {
+    sendAppInstallError(res, err);
+  }
+});
+app.get('/api/apps', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  res.json(appInstall.listApps(db, me.id));
+});
+app.get('/api/apps/:key', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json(appInstall.getApp(db, me.id, req.params.key));
+  } catch (err) {
+    sendAppInstallError(res, err);
+  }
+});
+app.post('/api/apps/:key/revoke', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json(appInstall.revokeApp(db, me.id, req.params.key));
+  } catch (err) {
+    sendAppInstallError(res, err);
+  }
+});
+app.post('/api/apps/:key/reinstall', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json(appInstall.reinstallApp(db, me.id, req.params.key));
+  } catch (err) {
+    sendAppInstallError(res, err);
+  }
+});
+
 // ---- app activity log (PHA-2201.3 / PHA-2231) ----
 // Read path over app_api_log; the write path lives in authenticate()
-// above. The install endpoints (resolve/consent/install/revoke) are
-// PHA-2201.1 (PHA-2229) and not built yet — this route only needs
-// installed_apps to exist (PHA-2228, already migrated) to resolve :key.
-// Settings UI that renders this is PHA-2201.4 (PHA-2232).
+// above.
 app.get('/api/apps/:key/activity', auth, (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
   if (!me) return res.status(401).json({ error: 'unknown_user' });
