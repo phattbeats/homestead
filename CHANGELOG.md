@@ -1,5 +1,49 @@
 # Changelog
 
+## v0.4.1 (2026-08-21) — Events webhook outbound dispatcher (PHA-1900 / PHA-1617.7)
+
+Design doc §6.1/6.5. Depends on PHA-1617.4 (`agent_endpoints`, already
+shipped) and reuses the exact HTTP/retry/circuit-breaker mechanics
+from the drawer dispatcher (PHA-1617.6/PHA-1899) via
+`drawerDispatch.httpPostOnce` so both dispatchers share one HTTP/SSE/
+JSON parser and can't drift.
+
+- **`lib/events-dispatch.js` (new).** Fans a household event out to
+  every enabled `kind='events'` `agent_endpoints` row for the target
+  user(s), gated by that endpoint's `event_filter` — opt-in only, a
+  missing/falsy key means the endpoint does NOT receive that category
+  (matches the `{task_created: true, chore_rotated: true}` example in
+  `lib/agent-endpoints.js`'s §6.1 comment). Same signed-header shape
+  as the drawer (`X-Homestead-User/-Request-Id/-Timestamp/-Signature`,
+  `sha256=HMAC_SHA256(secret, ts + "." + body)`), plus
+  `X-Homestead-Event-Category`. Same retry schedule (1s/4s/16s/60s,
+  4 retries) and circuit breaker (5 consecutive failures →
+  `enabled=0`), tracked in a **separate** in-memory streak map
+  (`app.locals.eventsStreakMap`) so a dead events harness and a dead
+  drawer harness on the same box trip independently.
+- **Fire-and-forget, unlike the drawer.** The drawer is a synchronous
+  chat reply the browser is waiting on; events dispatch is a
+  background fan-out nothing is waiting on. Route handlers call
+  `dispatchEvent`/`dispatchEventForAssignee` without awaiting — a dead
+  events harness never turns into a slow or failed task/chore/event/
+  push response.
+- **Wired at four lifecycle points:** `POST /api/tasks` →
+  `task_created`; `POST /api/tasks/:id/toggle` → `chore_rotated` (to
+  the **new** assignee, for a recurring+rotating task) or
+  `task_completed`/`task_uncompleted` (plain toggle); `POST
+  /api/events` → `event_created`; every attempted `notify()` delivery
+  (the existing web-push chokepoint used by chore digests, mentions,
+  wall posts, etc.) → `push`, carrying the underlying push category,
+  title/body/url/tag and delivered/error counts.
+- **Assignee/owner fan-out.** `'all'` resolves to every household user
+  (each gets their own dispatch, scoped to their own endpoints); a
+  specific username resolves to just that user.
+- Tests: `scripts/test-events-dispatcher.js` (39 assertions) — module
+  surface, HMAC signing, category opt-in gating, all four trigger
+  points end-to-end through the live routes (polling past the
+  fire-and-forget boundary), retry/backoff, and circuit-breaker
+  auto-disable independent of the drawer's streak map.
+
 ## v0.4.0 (2026-08-21) — Notification granularity + @mentions (PHA-2218)
 
 Sequenced after v0.3.0's module work (PHA-2202/PHA-2203) so wall
