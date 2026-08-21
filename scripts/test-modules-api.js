@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-2204 acceptance tests for the v0.3.0 modules / layout API surface.
 //
 // Boots server.js on an ephemeral port (3191) and exercises the full

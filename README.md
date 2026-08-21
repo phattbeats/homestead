@@ -541,6 +541,27 @@ Unraid server can reach and point Community Applications at it.
 
 ## License
 
-UNLICENSED. All rights reserved. Source is public for review and personal
-use; redistribution, modification, and commercial use require explicit
-permission.
+Homestead uses a **split license** (PHA-2222):
+
+| What | License |
+|------|---------|
+| Source code in this repository (`server.js`, `lib/`, `public/*.js`, `scripts/*.js`) | [GNU Affero General Public License v3.0 or later](LICENSE) (`AGPL-3.0-or-later`) |
+| Documentation, specifications, README, the module registry spec, and the third-party app contract (PHA-2201) | [Creative Commons Attribution 4.0 International](LICENSE-docs) (`CC BY 4.0`) |
+
+Copyright (C) 2026 PHATT Tech LLC.
+
+The code under AGPL means: if you run a modified version of Homestead on a
+server that users interact with over a network, you must make the
+corresponding source available to those users. Running the unmodified
+software for personal use (friends, household, media club) carries no such
+obligation.
+
+The split is deliberate: the third-party app contract — the wire format
+apps use to talk to Homestead over MCP/REST in an iframe — is **CC BY 4.0**
+so anyone can implement it from a closed-source codebase or a different
+language. The copyleft boundary lives in the code that *runs on your
+server*, not in the protocol apps use to talk to it.
+
+See [`LICENSE`](LICENSE) and [`LICENSE-docs`](LICENSE-docs) for the full
+texts, and [`CONTRIBUTING.md`](CONTRIBUTING.md) for the DCO sign-off rule
+that applies to every contribution.

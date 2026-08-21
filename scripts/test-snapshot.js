@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-1902 (PHA-1617.9) acceptance tests for the snapshot endpoint.
 //
 // Covers:

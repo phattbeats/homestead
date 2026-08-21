@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // Homestead — shared life app (tasks, calendar, services, full-screen app shell).
 //
 // Identity model (PHA-1618, v0.0.5):

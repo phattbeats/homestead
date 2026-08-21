@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-2200.5 / PHA-2206 smoke test (extends PHA-2151's smoke-porch-ui):
 // verify BOTH placements of the wall feed component — /porch.html (the
 // standalone thin shell) and /index.html (the in-place #page-wall
