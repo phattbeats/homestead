@@ -14,6 +14,16 @@ Homestead accepts commits authored only by `phattbeats <obiwouldjablowme@protonm
 
 ## Features
 
+- **Modular onboarding (v0.3.0)** — Homestead greets every new user
+  with a single room — the Porch, a feed of posts from the wall they
+  were invited to — and nothing else. Adding a module (Lists,
+  Calendar, Chores, Apps, Agent) adds a room. The agent is opt-in
+  so the BYOK "paste your key" ask arrives after the user already
+  likes the app. Substrate features (entity graph, activity feed,
+  media, push, auth) are always on. Existing users see no change —
+  every module is enabled for you automatically. See [Modular
+  nature](#modular-nature-v030) below for the registry contract.
+
 - **Tasks** — assign to any user or to Everyone. Due dates, repeat
   daily/weekly/monthly. The "take turns" toggle swaps the assignee between
   the assigned users every time a recurring chore is checked off — checking
@@ -106,6 +116,85 @@ Homestead accepts commits authored only by `phattbeats <obiwouldjablowme@protonm
   and per-category on/off toggles. No Firebase — standard VAPID keys
   generated once and stored in `/data/vapid.json`. Requires the PWA to
   be installed to a phone home screen (iOS 16.4+ / Android Chrome).
+
+## Modular nature (v0.3.0)
+
+v0.3.0 ships Homestead as a **feed-first, modular** app. The
+core deliverable is the Porch — a single-room feed of posts from
+a wall the user was invited to. Every other "room" (Lists,
+Calendar, Chores, Apps, Agent) is opt-in: the user enables it
+when they're ready, and it shows up as another tab. The agent is
+opt-in so the "paste your key" prompt doesn't gate the first-run
+experience.
+
+### The module registry
+
+Every module Homestead can render — built-in or third-party — is
+declared in a single registry at `lib/modules.js`. The registry
+ships in source. It is the **shared intake path** for both
+built-in modules and (future) third-party apps per PHA-2201.
+
+The registry holds six built-ins for v0.3.0:
+
+| Key       | Name    | Open mode | Default | Requires |
+|-----------|---------|-----------|---------|----------|
+| `wall`    | Porch   | frame     | ✅      | —        |
+| `lists`   | Lists   | frame     | ❌      | —        |
+| `calendar`| Calendar| frame     | ❌      | —        |
+| `chores`  | Chores  | frame     | ❌      | `lists`  |
+| `apps`    | Apps    | frame     | ❌      | —        |
+| `agent`   | Agent   | drawer    | ❌      | —        |
+
+`wall` is the only module that is enabled for new users (per
+Amendment 2 from PHA-2200, comment `04093be5`). Adding a new
+module to the registry MUST NOT backfill existing users — see
+the `scripts/test-default-off-future.js` acceptance test for the
+discipline contract.
+
+### Third-party app contract
+
+A third-party app registers by providing a manifest entry that
+satisfies the same 16-field shape as a built-in (see
+`lib/registry-validate.js` `REQUIRED_FIELDS`):
+
+```
+key, name, description, icon, room, requires, tier,
+version, author, url, open_mode, scopes, mcp,
+webhooks, entity_kinds, default_enabled
+```
+
+`validateEntryShape(entry)` is the canonical intake gate. Built-in
+modules and third-party apps go through the **same function** —
+no private internal-only fields are allowed. See
+`scripts/test-shared-registry-third-party.js` for the validator
+symmetry proof.
+
+### Three layout shapes
+
+The SPA bootstrap (`GET /api/me/layout`) returns one of four
+shapes based on the user's enabled-set size:
+
+| Layout      | Enabled count | What the SPA renders |
+|-------------|---------------|----------------------|
+| `empty`     | 0             | Onboarding — no rooms, `+ Add rooms` pill |
+| `feed-only` | 1             | Single tab (no drawer chrome) |
+| `feed-tabs` | 2–3           | Top tab strip + drawer chrome |
+| `meadow`    | 4+            | Full grid + drawer + add-room pill |
+
+`agentDrawer: true` is set when the `agent` module is enabled
+(so the SPA renders the chat-drawer FAB). `addRoomVisible: true`
+when at least one module in the registry is not yet enabled by
+this user (drives the `+ Add rooms` pill).
+
+### Cascade rules
+
+When a module declares `requires: [...]` (e.g. `chores` requires
+`lists`), enabling the module without the requirement flag
+throws `requires_unmet` with the unmet list. The caller can
+retry with `{ withRequirements: true }` to cascade. Disabling
+a module that has active dependents (`lists` → `chores`) throws
+`dependents_active` until `{ withDependents: true }` is passed.
+See `scripts/test-requires-cascade.js`.
 
 ## Calendar read-through (universal: CalDAV / Graph / Google)
 

@@ -346,6 +346,72 @@ PHA-2218 issue before implementation started.
   assertMember, invalid wall_slug / bad expires_in_days, no-auth
   redeem → 401.
 
+### Acceptance suite + release (PHA-2209 / PHA-2200.8)
+
+Six new acceptance scripts gate the v0.3.0 release. They cover the
+three amendments from comments `1afbe170` + `04093be5` and the
+acceptance criteria rolled up from PHA-2200 design-note §7.
+
+- **`scripts/test-modular-layout.js`** — synthetic-user HTTP suite.
+  Boots server.js on `:3192` and exercises the three layout shapes
+  (`empty` / `feed-only` / `feed-tabs` / `meadow`) plus the welcome
+  sheet (`first_run` lifecycle, PHA-2200.6), the agent-drawer flag
+  (PHA-2200.7), the `+ Add rooms` pill (`addRoomVisible`), and the
+  tab/page shape contract that the SPA bootstrap relies on. 63
+  assertions.
+- **`scripts/test-disable-reenable.js`** — empty-state acceptance
+  (AC8): enable a non-default module (Calendar), see the tab,
+  disable, tab disappears with the `user_modules` row preserved
+  (data intact), re-enable, tab returns. Also covers the four
+  layout modes by enabled-set size and the `addRoomVisible` /
+  `agentDrawer` flag transitions. 41 assertions.
+- **`scripts/test-requires-cascade.js`** — enable/disable cascade
+  (AC5). `enableModule(chores, { withRequirements: true })` also
+  writes `lists`; `disableModule(lists, { withDependents: true })`
+  also clears `chores`. Without the cascade flag, the call throws
+  `requires_unmet` / `dependents_active` with the unmet/dependent
+  list. Idempotency + unknown-key rejection covered. 25 assertions.
+- **`scripts/test-default-off-future.js`** — Amendment 2 (default
+  OFF for future first-party modules). Simulates adding a 7th
+  module (`recipes`) to the registry without backfilling existing
+  users. Asserts new users still see `{wall}` only, existing users'
+  enabled sets are unaffected, the DB row is preserved with data
+  intact (invisible until the registry knows about the key), and
+  no per-module INSERT-backfill appears in `lib/user-model.js`
+  migration text (the v3 cross-join is the only place that
+  writes user_modules en masse). 16 assertions.
+- **`scripts/test-shared-registry-third-party.js`** — Amendment 1
+  (registry is the shared intake path). Built-in entries and a
+  representative third-party-shaped entry (`popcorn_vote` per
+  PHA-2201 manifest contract) both pass `validateEntryShape`.
+  Deliberately malformed third-party entries fail. Verifies the
+  16-field manifest contract and that the validator treats both
+  shapes symmetrically. 37 assertions.
+- **`scripts/test-registry-no-hardcoded-keys.js`** — Amendment 3
+  (no hardcoded module-key literals in render code). Greps the
+  repo for `'wall'` / `'lists'` / `'calendar'` / `'chores'` /
+  `'apps'` / `'agent'` literals outside the registry + migrations
+  + test files. Strips comments before scanning and excludes
+  object-property-key positions. Allow-list covers the four
+  known-benign namespace collisions (`welcome.html` URL param,
+  `caldav-source.js` CalDAV XML element, `index.html` drawer
+  stream-author, snapshot envelope categories). 11 assertions.
+
+### Version bump
+
+- `package.json` — bumped to `0.3.0` (from `0.3.0-invite-2207`).
+  The pre-release `-invite-2207` suffix was a work-in-progress
+  tag; v0.3.0 is the stable release.
+
+### Test chain wiring
+
+- `package.json` `scripts.test` — the six new tests are inserted
+  after the v0.3.0 component tests (`test-user-modules`,
+  `test-modules`, `test-modules-api`, `test-invite-to-wall`) and
+  before the pre-v0.3.0 component tests. Running
+  `npm test` now exercises the full v0.3.0 acceptance surface.
+
+
 ### Third-party app install flow (PHA-2201.1 / PHA-2229)
 
 - **Six endpoints**, the server-side state machine from the PHA-2201
