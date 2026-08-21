@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-1618 acceptance tests for the v0.0.5 user model.
 //
 // Drives `lib/user-model.js` directly against a temp SQLite file. No

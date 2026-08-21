@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-1896 (PHA-1617.3) smoke test: end-to-end against a live server.js.
 //
 // The token manager is a pure SPA consumer of /api/agent-tokens

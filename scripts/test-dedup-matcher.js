@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-1876 (PHA-1624 Phase C) acceptance tests for the entity-graph
 // dedup + review-queue matcher.
 //

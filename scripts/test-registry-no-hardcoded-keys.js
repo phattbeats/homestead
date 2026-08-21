@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-2209 / PHA-2200.8 — Amendment 3 acceptance test:
 // "No hardcoded module-key literals in render code outside the registry + migrations."
 //

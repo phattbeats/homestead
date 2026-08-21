@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // Homestead — The Porch Wall frontend (PHA-2151).
 //
 // Vanilla JS, no build step, no framework — same convention as

@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-1620 acceptance tests for the calendar-sources module.
 //   * secret-box (AES-256-GCM encrypt/decrypt + fail-closed on missing key)
 //   * caldav-source (iCal parser, adapter factory, injected HTTP stub)

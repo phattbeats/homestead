@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-1623 acceptance tests for the v0.0.6 health checker.
 //
 // Drives `lib/health-checker.js` directly against a temp SQLite file.

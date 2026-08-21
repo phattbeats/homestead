@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-1620 calendar-sources smoke test (v1): boot server.js in-process
 // with a fake CalDAV server, mint an admin session via /api/login, add
 // a calendar source, kick a refresh, hit /api/events/merged, and
