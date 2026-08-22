@@ -68,6 +68,51 @@
   `VALUES (...) AS alias` via `db.exec`. Semantically identical,
   supported on every SQLite since 3.7.
 
+### Enable/disable event instrumentation (PHA-2220)
+
+- **`module_events` table.** Raw event log: one row per successful
+  enable/disable call, written from inside the `enableModule` /
+  `disableModule` transactions (PHA-2204). Carries `(user_id,
+  module_key, action, ts)` with FK to `users(id)` ON DELETE CASCADE
+  and a CHECK constraint enforcing `action IN ('enable','disable')`.
+  Two indexes: `(user_id, ts)` for per-user history reads, `(ts)`
+  for cron-window scans. The write site captures pre-state so only
+  real state transitions emit an event — idempotent re-enables and
+  re-disables do NOT pollute the log. Cascade enable/disable emits
+  one event per cascade key that actually transitioned.
+- **`user_signals` table.** Denormalized rollup rebuilt by the
+  cohort cron. One row per user with at least one enable event,
+  carrying `first_module_key` + `first_module_enabled_at`,
+  `second_module_key` + `second_module_enabled_at`, and
+  `total_modules_enabled` (distinct module count, not current
+  enabled state — a user who toggled off still has their enable in
+  the count because the product question is "what did they turn
+  on"). FK to `users(id)` ON DELETE CASCADE.
+- **API surface.** `userModel.summarizeModuleEvents(db)` rebuilds
+  the rollup in a single transaction (idempotent, re-runnable at
+  any cadence); `userModel.getUserSignals(db, userId)` reads the
+  rollup for one user (returns `null` when no enable events
+  exist). Both exported from `lib/user-model.js`.
+- **Daily cron.** `scripts/cron-module-events-summary.js` is the
+  system-cron entry point: opens `$DATA_DIR/life.db`, calls
+  `summarizeModuleEvents`, logs a one-line summary to stdout
+  (`rows_written=… users_with_signals=… total_module_events=…
+  started=… duration_ms=…`), exits non-zero on failure so cron
+  can mail the alert. Exits 2 when the DB is missing. The cron
+  schedule itself (system cron) is an ops task, not in this PR.
+- **Tests.** `scripts/test-module-events.js` covers 51 assertions:
+  schema (FKs, CHECK, indexes, both tables empty on fresh DB),
+  enable event on real transition, no event on idempotent
+  re-enable, disable event on real transition, cascade enable
+  emits per cascade-key, cascade disable emits per cascade-key,
+  summarize produces correct first/second/total, idempotent across
+  re-runs, migration is idempotent on existing DB, multi-user
+  isolation.
+- **Why now.** The "second module enabled" signal is the cheapest
+  way to answer "what is Homestead actually for" and is impossible
+  to backfill — adding instrumentation in v0.4.0 means losing the
+  entire v0.3.0 cohort.
+
 ## v0.2.0 (2026-08-19) — Porch Wall (PHA-2147)
 
 - **Media storage primitive.** Content-addressed uploads at `/data/media/...`,
