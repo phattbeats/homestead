@@ -1,94 +1,324 @@
 # Changelog
 
-<<<<<<< HEAD
-## Unreleased — PHA-2149 (PHA-2147.1) — media storage primitive
+## v0.4.1 (2026-08-21) — Events webhook outbound dispatcher (PHA-1900 / PHA-1617.7)
 
-- **`lib/media.js`.** General-purpose content-addressed media store —
-  the foundation Porch walls (PHA-2147.2), entity-graph covers,
-  list-item photos, and Popcorn Vote (PHA-2052) build on.
-  - `media_uploads` table, migrated in the same boot-migration chain
-    as `entityGraph`/`agentTokens`/`calendarSources`.
-  - `POST /api/media` (auth, multipart `file` field): `sharp`
-    downscales images over 2048px and generates a 320px JPEG thumb;
-    videos pass through raw (transcoding is out of scope). Size caps
-    `image 10MB / video 50MB`, mime allowlist (jpeg/png/webp,
-    mp4/webm/quicktime). Uploads are deduped by sha256 — a
-    byte-identical re-upload returns the existing row's id instead of
-    writing a second copy.
-  - `GET /api/media/:id` / `/api/media/:id/thumb` — `res.sendFile`
-    with `Cache-Control: private, max-age=3600`. Video thumb requests
-    fall back to the original file (no video thumbnailing yet).
-  - `DELETE /api/media/:id` (owner or admin) — soft-delete
-    (`deleted_at`), 24h grace window before the retention sweep reaps
-    the file + row so posts referencing the media don't 404
-    mid-transition.
-  - Retention sweep (`cleanupSweep`) piggybacks on the existing
-    30-minute scheduler tick — reaps expired (`expires_at`) and
-    grace-expired soft-deleted rows.
-  - Storage path: `DATA_DIR/media/{yyyy-mm}/{sha256-prefix}/{sha256}.{ext}`.
-- New deps: `sharp`, `multer`. Both resolve via prebuilt binaries on
-  `node:22-bookworm-slim` (Dockerfile stage 1) — no libvips apt
-  package needed.
-- Tests: `scripts/test-media.js` (happy path, dedupe, mime allowlist,
-  oversized rejection, retention expiry, soft-delete + grace window),
-  `scripts/smoke-media.js` (end-to-end upload/fetch/thumb against a
-  live server, `Cache-Control` header check). Both wired into
-  `npm test` / `npm run test:smoke`.
-- Fixed `scripts/smoke-push.js`, which required a hardcoded
-  contributor-local absolute path to `server.js` and broke the
-  `npm run test:smoke` chain for anyone else.
+Design doc §6.1/6.5. Depends on PHA-1617.4 (`agent_endpoints`, already
+shipped) and reuses the exact HTTP/retry/circuit-breaker mechanics
+from the drawer dispatcher (PHA-1617.6/PHA-1899) via
+`drawerDispatch.httpPostOnce` so both dispatchers share one HTTP/SSE/
+JSON parser and can't drift.
 
-## v0.1.21 (2026-08-19) — PHA-1899 (PHA-1617.6)
+- **`lib/events-dispatch.js` (new).** Fans a household event out to
+  every enabled `kind='events'` `agent_endpoints` row for the target
+  user(s), gated by that endpoint's `event_filter` — opt-in only, a
+  missing/falsy key means the endpoint does NOT receive that category
+  (matches the `{task_created: true, chore_rotated: true}` example in
+  `lib/agent-endpoints.js`'s §6.1 comment). Same signed-header shape
+  as the drawer (`X-Homestead-User/-Request-Id/-Timestamp/-Signature`,
+  `sha256=HMAC_SHA256(secret, ts + "." + body)`), plus
+  `X-Homestead-Event-Category`. Same retry schedule (1s/4s/16s/60s,
+  4 retries) and circuit breaker (5 consecutive failures →
+  `enabled=0`), tracked in a **separate** in-memory streak map
+  (`app.locals.eventsStreakMap`) so a dead events harness and a dead
+  drawer harness on the same box trip independently.
+- **Fire-and-forget, unlike the drawer.** The drawer is a synchronous
+  chat reply the browser is waiting on; events dispatch is a
+  background fan-out nothing is waiting on. Route handlers call
+  `dispatchEvent`/`dispatchEventForAssignee` without awaiting — a dead
+  events harness never turns into a slow or failed task/chore/event/
+  push response.
+- **Wired at four lifecycle points:** `POST /api/tasks` →
+  `task_created`; `POST /api/tasks/:id/toggle` → `chore_rotated` (to
+  the **new** assignee, for a recurring+rotating task) or
+  `task_completed`/`task_uncompleted` (plain toggle); `POST
+  /api/events` → `event_created`; every attempted `notify()` delivery
+  (the existing web-push chokepoint used by chore digests, mentions,
+  wall posts, etc.) → `push`, carrying the underlying push category,
+  title/body/url/tag and delivered/error counts.
+- **Assignee/owner fan-out.** `'all'` resolves to every household user
+  (each gets their own dispatch, scoped to their own endpoints); a
+  specific username resolves to just that user.
+- Tests: `scripts/test-events-dispatcher.js` (39 assertions) — module
+  surface, HMAC signing, category opt-in gating, all four trigger
+  points end-to-end through the live routes (polling past the
+  fire-and-forget boundary), retry/backoff, and circuit-breaker
+  auto-disable independent of the drawer's streak map.
 
-- **Drawer backend — HMAC-signed outbound forwarder.** `POST /api/drawer`
-  no longer returns a stub: it looks up the caller's enabled drawer
-  `agent_endpoints` row, signs the payload with the row's HMAC secret,
-  POSTs to the configured URL with `X-Homestead-User`,
-  `X-Homestead-Request-Id`, `X-Homestead-Timestamp`,
-  `X-Homestead-Signature: sha256=<HMAC_SHA256(secret, ts + "." + body)>`,
-  `X-Homestead-Conversation-Id`, and a `Homestead/<version>` User-Agent,
-  then consumes the response. Supports the two wire shapes the
-  frontend already understands: `text/event-stream` with `event: chunk` /
-  `event: done` (Design Trap #4: never make a human watch an LLM think),
-  and `Accept: application/json` single-shot. Anything else returns
-  200 with `{ignored:true}` so a misbehaving harness doesn't fail the
-  drawer.
-- **Morning-brief snapshot envelope.** The signed body includes a
-  `snapshot` block built by `lib/snapshot.build()` so the user's
-  harness gets today_tasks / today_events / overdue_tasks /
-  active_lists / recent_activity without an extra round-trip.
-- **Retry + circuit breaker.** Exponential backoff (1s, 4s, 16s, 60s;
-  up to 4 retries, 30s first-chunk timeout, 60s total deadline). On
-  every dispatch, `agent_endpoints.last_used_at`,
-  `last_status_code`, `last_error` are updated. An in-memory
-  consecutive-failure streak per endpoint id trips after 5 failures
-  in a single dispatch and auto-disables the endpoint
-  (`enabled = 0`); subsequent calls return 404 from the dispatcher
-  (the user re-enables in Settings).
-- **`lib/drawer-dispatch.js`** — the new dispatcher module; pure
-  dispatch (no Express), takes `db` + caller `me` + opts. Exposes
-  `dispatchDrawer`, `buildBody`, `sign`, `parseSseBlock`,
-  `findEndpoint`, `getUserGroups`, `httpPostOnce` for unit tests.
+## v0.4.0 (2026-08-21) — Notification granularity + @mentions (PHA-2218)
 
-  covering the dispatcher module shape, HMAC contract, SSE reply,
-  JSON reply, retry/backoff, circuit breaker, cross-user refusal,
-  kind/disabled refusal, endpoint-offline path, and the snapshot
-  envelope. Replaces the old `test-drawer.js` (which targeted the
-  stub and would hang against the real dispatcher).
+Sequenced after v0.3.0's module work (PHA-2202/PHA-2203) so wall
+membership and module gating were stable underneath it. Design doc
+(schema + resolution + bundling rules) posted and approved on the
+PHA-2218 issue before implementation started.
 
-## v0.1.20 (2026-08-15) — PHA-2001
+- **Per-wall notification level.** New `wall_notification_prefs
+  (wall_id, user_id, level, via)` table — `level` is `all` |
+  `mentions` | `none`, composite PK, UPSERT via
+  `PUT /api/walls/:slug/notifications`. Replaces the implicit
+  `wall_memberships.notifications` boolean (left in place,
+  deprecated) as the actual gate. Default for a genuinely new join is
+  `mentions`; a one-time backfill preserves today's behavior for
+  every member who already existed when this migration ran (direct
+  walls: `notifications=1/0` → `all`/`none`; group walls: everyone
+  backfilled to `all`, since they never had an opt-out before).
+- **`@mentions`.** New `mentions(post_id XOR comment_id,
+  mentioned_user_id, mentioned_by)` table, inserted atomically with
+  the post/comment it belongs to. Parsing is wall-scoped only — you
+  cannot `@mention` someone who isn't a member; non-member and
+  self-mentions are silently dropped, no error toast. A mention
+  notification fires regardless of `all`/`mentions` level; only
+  `none` or the recipient's own quiet hours suppress it. Composer
+  autocomplete and `@handle` → member-link rendering ship in
+  `public/porch.js`.
+- **Per-thread mute.** New `thread_mutes(user_id, post_id)` table.
+  `POST`/`DELETE /api/walls/:slug/posts/:postId/mute`. Mute always
+  wins — it overrides even a `mentions`-level match, on the theory
+  that the user explicitly asked to stop hearing about this one
+  thread.
+- **Resolver (`lib/notifications.js`, new).** `resolve()` composes
+  level → thread mute → quiet hours (PHA-1619), in that order —
+  level decides *if*, quiet hours decide *when*. A quiet-hours skip
+  still leaves an audit row (`delivered=0, skipped_reason
+  ='quiet_hours'`) so nothing is silently lost, it just doesn't push.
+  `lib/walls.js`'s old `emitActivity` (flat per-recipient INSERT, no
+  gating at all) is replaced by resolver-driven `emitForPost` /
+  `emitForComment`.
+- **Bundling.** N wall posts within a 15-minute window
+  (`BUNDLE_WINDOW_MS`) collapse into one `notification_log` row
+  ("3 new posts on Memes") instead of one push per post. Mentions and
+  posts on `direct`-visibility walls never bundle — the act of
+  addressing someone is its own trigger, distinct from ambient
+  activity.
+- **Badge-clearing (PHA-1617 promise).** `notification_log.seen_at`
+  (additive column). Three clear paths: opening the push target
+  (service worker's `notificationclick` now posts to
+  `/api/me/notifications/seen`), the activity feed's bulk clear
+  (`{clearAll:true}`), and a natural 30-day-old data footprint. New
+  `GET /api/me/notifications` (`?unseen=1` for the badge view,
+  distinct from the unfiltered `/api/me/snapshot` dashboard feed).
+- **Routes.** `GET /api/walls/:slug/members` (autocomplete source),
+  `GET`/`PUT /api/walls/:slug/notifications`, `POST`/`DELETE
+  /api/walls/:slug/posts/:postId/mute`, `GET /api/me/notifications`,
+  `POST /api/me/notifications/seen`.
+- **Frontend.** `public/porch.js`: `@` composer autocomplete over
+  wall members, `@handle` rendered as a member link in posts and
+  comments, a per-wall notification-level selector on the wall
+  header itself (not buried in global settings), a per-post
+  mute/unmute toggle next to the comments control.
+- **Tests.** `scripts/test-notifications-resolver.js` (24
+  assertions — level gating, mute override, quiet-hours composition,
+  the default-window fallback), `scripts/test-mentions-parser.js`
+  (21 — wall-scoping, self/non-member drop, dedup, the mentions CHECK
+  constraint, an end-to-end pass through `walls.createPost`/
+  `createComment`), `scripts/test-thread-mutes.js` (11 — persistence,
+  idempotence, CASCADE on post delete, no self-suppression),
+  `scripts/smoke-notifications.js` (25 — full HTTP surface against a
+  booted server). `scripts/test-walls.js` grows two assertions
+  confirming the new default doesn't silently demote an already-`all`
+  member and does correctly gate a fresh joiner without a mention.
 
-- **CRASH-LOOP HOTFIX: include `lib/` in the runtime image.** The
-  runtime stage of the Dockerfile was missing `COPY lib ./lib`, so
-  the built container had an empty `/app/lib/` directory and Node
-  crashed on boot with `Error: Cannot find module './lib/user-model'`
-  at `server.js:33`. PHA-1618 (v0.0.5) introduced the `lib/`
-  directory but the runtime-stage COPY list was never updated to
-  pull it in. This release adds the missing `COPY lib ./lib` line;
-  no other code or config changes are required. `life.phatt.vip`
-  was offline until this landed; once Brandon's Docker pulls
-  `:latest` it will be back. (PHA-2001.)
-=======
+## v0.3.0 (2026-08-21) — Modular Homestead: user_modules + module registry (PHA-2202, PHA-2203)
+
+### Module registry (PHA-2203 / PHA-2200.2)
+
+- **Static module registry.** New `lib/modules.js` exports
+  `REGISTRY` (six built-in entries: `wall`, `lists`, `calendar`,
+  `chores`, `apps`, `agent`) plus `DEFAULT_ENABLED = ['wall']`.
+  Every entry carries the full 16-field PHA-2201 manifest contract
+  (`key, name, description, icon, room, requires, tier, version,
+  author, url, open_mode, scopes, mcp, webhooks, entity_kinds,
+  default_enabled`). Third-party apps merge into the same shape via
+  the PHA-2201 install flow — built-ins dogfood the same contract.
+  Pure data, no DB access, no plugin loader. Frozen at module load
+  so a bug can't silently extend the whitelist.
+- **`lib/registry-validate.js`** — runtime sanity check. Validates
+  every entry against the manifest contract (field names + types),
+  every `requires[]` ref points to a registered key, `DEFAULT_ENABLED`
+  references are valid, and the registry's keys are a subset of the
+  `user_modules` CHECK constraint. Throws on the first drift; warns
+  on legacy CHECK-only keys (informational, not fatal).
+- **`getEnabledModules(db, userId)`** in `lib/user-model.js` joins
+  `user_modules` against the registry and returns the enabled set in
+  `REGISTRY_ORDER`, with `enabled_at` appended. Unknown /
+  legacy module_key rows are silently skipped so the API surface
+  only sees registered modules.
+- **Helpers.** `getModule(key)`, `getRoomRoute(key)`,
+  `getDefaultEnabled()`, `isModuleKey(key)`, `listModules()`,
+  `getDefaultEnabledModules()` all live in `lib/modules.js` or
+  `lib/user-model.js`. `USER_MODULE_KEYS` / `isUserModuleKey` in
+  `user-model.js` now delegate to the registry so the CHECK
+  constraint, the whitelist, and the helpers cannot drift.
+- **Tests.** `scripts/test-modules.js` covers 81 assertions: six
+  built-ins present, `DEFAULT_ENABLED === ['wall']`, manifest
+  shape validator catches drift in 6 directions, `requires[]`
+  references, registry order, `getEnabledModules` ordering +
+  skip-unknown, helper purity (mutation isolation), live
+  `validateAndThrow` against the live DB.
+
+### Per-user module enablement (PHA-2202)
+
+- **Per-user module enablement.** New `user_modules(user_id, module_key,
+  enabled_at)` table with `(user_id, module_key)` PK and FK cascade on
+  user delete. CHECK constraint enforces the canonical module whitelist
+  (`wall`, `lists`, `calendar`, `chores`, `apps`, `agent`). `enabled_at
+  NULL` = disabled, timestamp = enabled. Toggle is `UPDATE
+  user_modules SET enabled_at = ...`; rows are never deleted, so
+  disabling the `chores` module does NOT wipe the `tasks` rows that
+  chores wrote. Idempotent backfill runs on every boot and uses
+  `INSERT OR IGNORE` so user-toggled state is preserved across
+  re-migrations.
+- **API helpers.** `lib/user-model.js` exports `USER_MODULE_KEYS`,
+  `isUserModuleKey(key)`, `getUserModules(db, userId)` (returns full
+  keyed map), and `setUserModule(db, userId, key, enabled)` (upsert
+  via `INSERT ... ON CONFLICT DO UPDATE`). The HTTP surface
+  (`/api/me/modules`, `/api/me/layout`) lands in PHA-2200.3.
+- **Tests.** `scripts/test-user-modules.js` covers 44 assertions:
+  schema creation, index, backfill row count = users * 6, idempotent
+  re-migration, disable+re-enable preserves data tables (tasks /
+  events), unknown module_key rejection in JS + by CHECK constraint,
+  new user picked up on next boot, deterministic
+  `getUserModules` shape, `ON DELETE CASCADE` purge.
+- **Schema note.** The PHA-2202 spec uses the `VALUES (...) AS
+  alias(col)` syntax from the issue body; the runtime uses the
+  equivalent portable `SELECT ... UNION ALL` subquery because the
+  better-sqlite3 prebuilt ships a SQLite build that does not accept
+  `VALUES (...) AS alias` via `db.exec`. Semantically identical,
+  supported on every SQLite since 3.7.
+
+### Settings → Apps UI (PHA-2201.4 / PHA-2232)
+
+- **Apps list, per-app detail, revoke, install — the user-facing
+  surface for the whole install/consent/revoke contract.** Avatar menu
+  → **📦 Apps** opens the new Settings → Apps sheet.
+- **Unified apps list.** `lib/app-install.js`'s `listApps()`/`getApp()`
+  now merge BOTH halves of the PHA-2201 dogfood contract through the
+  same read path: enabled built-in modules (`user_modules`, tagged
+  `builtin: true`) and active third-party installs (`agent_tokens.app_id`,
+  tagged `builtin: false`). `getApp()` also returns `entity_kinds` so
+  the client can describe generic entity-CRUD scopes (`read:{kind}`)
+  without a second lookup.
+- **Per-app detail** renders "what this app can do" via the shared
+  `lib/scope-display.js` mapping (PHA-2230) and, for third-party apps,
+  a paginated **Activity** view over real `app_api_log` rows
+  (PHA-2231, `GET /api/apps/:key/activity`, "Load more" accumulates
+  pages). Built-ins show neither Activity nor Revoke — they have no
+  app-scoped token to log or kill; the UI states this rather than
+  hitting an endpoint that would 404.
+- **Revoke is one action.** The detail sheet's Revoke button calls
+  `POST /api/apps/:key/revoke` directly — no separate disable step —
+  and returns to the (now tile-free) Apps list on success.
+- **Install flow** (paste manifest URL → resolve → consent → install)
+  reuses the PHA-2230 consent screen's `window.HomesteadConsent.
+  renderConsentScreen` verbatim, embedded in a Settings sheet instead
+  of standalone `consent.html` — same copy, same scope mapping, no
+  reimplementation. `public/consent.js`'s demo `boot()` gained a guard
+  (`if (!document.getElementById('demoBanner')) return;`) so it's safe
+  to load as a shared script on a page (`index.html`) that also has an
+  `id="app"` root. The freshly-minted app token is shown once via the
+  existing copy-once reveal modal (PHA-1617.3 pattern).
+- **`lib/scope-display.js` gained `read:services`** (the `apps`
+  built-in's scope per design note §6) — an existing vocabulary gap
+  that only surfaced once built-ins started rendering through this
+  same mapping.
+- **Tests.** `scripts/smoke-apps-settings-ui.js` (new, wired into
+  `npm run test:smoke`): source assertions that the SPA wires up every
+  acceptance-listed sheet/call, plus a live HTTP round trip — built-in
+  present in `GET /api/apps` pre-install, resolve → consent → install,
+  both builtin + third-party rows post-install, scopes describable,
+  a real app-token call produces a real `app_api_log` row the activity
+  view renders, revoke removes the tile, and the same token gets 401
+  on its very next call, all within one run.
+
+### Third-party app install flow (PHA-2201.1 / PHA-2229)
+
+- **Six endpoints**, the server-side state machine from the PHA-2201
+  design note §2/§7: `POST /api/apps/resolve`, `POST
+  /api/apps/consent`, `POST /api/apps/install`, `GET /api/apps`, `GET
+  /api/apps/:key`, `POST /api/apps/:key/revoke`, `POST
+  /api/apps/:key/reinstall`. New `lib/app-install.js` (pure DB/business
+  logic, no express) backs all six; `server.js` handlers are auth +
+  status-code mapping only.
+- **`resolve` never writes to the DB** (verified by the acceptance
+  suite) — it fetches a manifest URL (in-memory cache, keyed by URL,
+  ETag revalidation, 5-minute TTL), validates its shape via
+  `lib/registry-validate.js`'s `validateEntryShape` and its `scopes[]`
+  against `lib/scope-display.js`'s §3 vocabulary — reusing both, not
+  forking — and rejects built-in-key collisions (`409
+  manifest_key_conflict`, e.g. a manifest claiming `key: "wall"`).
+  Unknown scopes fail with the valid vocabulary listed in the error.
+- **URL security.** Third-party `url` (the manifest fetch target and
+  the manifest's own iframe/tab target) must be `https://` with a
+  non-loopback host; `dev: true` on the request body — never a
+  manifest property — relaxes this for pointing Homestead at a
+  locally-running app under development.
+- **Consent tokens.** 60s TTL, single-use, bound to `(user,
+  manifest_url)`, backed by a new `app_consent_tokens` table
+  (sha256-hashed, not bcrypt — a 60-second exchange token doesn't need
+  bcrypt's offline-brute-force cost). The manifest is snapshotted onto
+  the token at consent time so install commits exactly what was shown
+  on the consent screen even if the remote manifest changes in the
+  intervening window.
+- **Install is one transaction**: consumes the consent token,
+  inserts/reactivates the shared `installed_apps` row (keyed
+  household-wide, not per-user — a second household member installing
+  the same app reuses the existing row instead of re-inserting),
+  mints an app-scoped PAT (`agent_tokens.app_id`, scopes from the
+  consented manifest) via `agentTokens.issue()`'s new `appId` param,
+  and enables the `apps` launcher module for the installing user
+  (`user_modules` is CHECK-constrained to the six built-in keys —
+  third-party apps launch from the existing `apps` tiled launcher,
+  PHA-1863, rather than minting their own `user_modules` row). Any
+  failure rolls back everything, including the consent-token
+  consumption.
+- **Revoke** soft-deletes this user's app-scoped token(s) (immediate
+  401 on their next call), disables `apps` for them if it was their
+  last third-party app, and archives the shared `installed_apps` row
+  once no household member holds an active token for it — "remove the
+  tile" without disturbing another member's install of the same app.
+  **Reinstall** mints a fresh token with the same scopes for a user
+  with prior install history, without repeating consent.
+- **Tests.** `scripts/test-app-install.js` covers 64 assertions across
+  direct calls (resolve DB-purity, shape/scope/URL rejections,
+  built-in collision, full consent+install lifecycle, shared-app
+  multi-user semantics, revoke/reinstall, manifest caching) and one
+  end-to-end HTTP round trip against a live `server.js` (resolve ->
+  consent -> install -> tile appears in `GET /api/apps` -> token
+  authenticates a real call -> revoke -> 401 on the very next call).
+
+### Scope enforcement + Popcorn Vote dogfood (PHA-2052)
+
+- **Scope enforcement was missing.** Bearer app tokens minted by the
+  PHA-2201 install flow carried scopes, but no route ever checked
+  them — `authenticate()` synthesized the same full-access
+  `session.user` for an app token as for the underlying household
+  member. New `requireScope(scope)` / `requireWallReadScope`
+  middleware in `server.js`, applied to `GET`/`POST
+  /api/walls/:slug/posts`, actually enforces `read:walls[:slug]` and
+  `write:walls:post` against the token's granted scopes; unscoped
+  session/header-trust auth and legacy `scopes:'user'` PATs are
+  unaffected.
+- **Popcorn Vote** is the first third-party app proven end-to-end
+  through the PHA-2201 contract: a deliberately small manifest
+  (`read:walls:media_club`, `write:walls:post`), posting link-kind
+  announcements to `media-club` that ride the existing
+  `wall_posts` → `notification_log` pipeline. `scripts/test-pa-2201-install.js`
+  (29 assertions) proves both the positive case (can read media-club)
+  and the negative case (cannot read a wall the underlying human
+  belongs to but the token was never granted) working as designed.
+
+## v0.2.0 (2026-08-19) — Porch Wall (PHA-2147)
+
+- **Media storage primitive.** Content-addressed uploads at `/data/media/...`,
+  server-side sharp downscale + 320px thumbnail generation, configurable
+  retention per upload, sweep job on the existing 30-min scheduler.
+- **Walls, posts, reactions, comments.** Group-scoped (media-club,
+  household) and direct-share walls. Membership gate at the auth layer;
+  strictly chronological feed; constitutional: no ranking, no discovery,
+  no strangers. Emoji reactions toggle idempotently; flat comment threads.
+- **Porch UI.** `public/porch.html` + `porch.{css,js}` + top-bar entry.
+  Drag-drop / paste-from-clipboard composer, 5-emoji reaction row,
+  paginated Older button (no infinite scroll), mobile-first.
+
 ## v0.1.22 (2026-08-21) — PHA-2219
 
 - **PWA install coach (option A only).** First-login flow that
@@ -157,7 +387,57 @@
   and the full closed-enum validation + 400 on unknown + 401 on
   anonymous for the new endpoint, plus a SQLite-level assertion
   that 9 funnel rows land and the JSON `meta` round-trips.
->>>>>>> 9529ccb (PHA-2219: PWA install coach (option A — no native apps))
+
+## v0.1.21 (2026-08-19) — PHA-1899 (PHA-1617.6)
+
+- **Drawer backend — HMAC-signed outbound forwarder.** `POST /api/drawer`
+  no longer returns a stub: it looks up the caller's enabled drawer
+  `agent_endpoints` row, signs the payload with the row's HMAC secret,
+  POSTs to the configured URL with `X-Homestead-User`,
+  `X-Homestead-Request-Id`, `X-Homestead-Timestamp`,
+  `X-Homestead-Signature: sha256=<HMAC_SHA256(secret, ts + "." + body)>`,
+  `X-Homestead-Conversation-Id`, and a `Homestead/<version>` User-Agent,
+  then consumes the response. Supports the two wire shapes the
+  frontend already understands: `text/event-stream` with `event: chunk` /
+  `event: done` (Design Trap #4: never make a human watch an LLM think),
+  and `Accept: application/json` single-shot. Anything else returns
+  200 with `{ignored:true}` so a misbehaving harness doesn't fail the
+  drawer.
+- **Morning-brief snapshot envelope.** The signed body includes a
+  `snapshot` block built by `lib/snapshot.build()` so the user's
+  harness gets today_tasks / today_events / overdue_tasks /
+  active_lists / recent_activity without an extra round-trip.
+- **Retry + circuit breaker.** Exponential backoff (1s, 4s, 16s, 60s;
+  up to 4 retries, 30s first-chunk timeout, 60s total deadline). On
+  every dispatch, `agent_endpoints.last_used_at`,
+  `last_status_code`, `last_error` are updated. An in-memory
+  consecutive-failure streak per endpoint id trips after 5 failures
+  in a single dispatch and auto-disables the endpoint
+  (`enabled = 0`); subsequent calls return 404 from the dispatcher
+  (the user re-enables in Settings).
+- **`lib/drawer-dispatch.js`** — the new dispatcher module; pure
+  dispatch (no Express), takes `db` + caller `me` + opts. Exposes
+  `dispatchDrawer`, `buildBody`, `sign`, `parseSseBlock`,
+  `findEndpoint`, `getUserGroups`, `httpPostOnce` for unit tests.
+- **`scripts/test-drawer-backend.js`** — 70-check acceptance suite
+  covering the dispatcher module shape, HMAC contract, SSE reply,
+  JSON reply, retry/backoff, circuit breaker, cross-user refusal,
+  kind/disabled refusal, endpoint-offline path, and the snapshot
+  envelope. Replaces the old `test-drawer.js` (which targeted the
+  stub and would hang against the real dispatcher).
+
+## v0.1.20 (2026-08-15) — PHA-2001
+
+- **CRASH-LOOP HOTFIX: include `lib/` in the runtime image.** The
+  runtime stage of the Dockerfile was missing `COPY lib ./lib`, so
+  the built container had an empty `/app/lib/` directory and Node
+  crashed on boot with `Error: Cannot find module './lib/user-model'`
+  at `server.js:33`. PHA-1618 (v0.0.5) introduced the `lib/`
+  directory but the runtime-stage COPY list was never updated to
+  pull it in. This release adds the missing `COPY lib ./lib` line;
+  no other code or config changes are required. `life.phatt.vip`
+  was offline until this landed; once Brandon's Docker pulls
+  `:latest` it will be back. (PHA-2001.)
 
 ## v0.1.19 (2026-08-12) — PHA-1896 (PHA-1617.3)
 

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Porch — Homestead</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#FFFBF5">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/porch.css">
+</head>
+<body>
+
+<div id="app">
+  <header>
+    <a class="back" href="/" aria-label="Back to Homestead">‹</a>
+    <div class="greet"><small>The Porch</small><span id="wallName">Wall</span></div>
+    <select id="wallPicker" aria-label="Choose wall"></select>
+    <select id="notifyLevel" aria-label="Notification level for this wall">
+      <option value="all">Notify: All</option>
+      <option value="mentions">Notify: Mentions only</option>
+      <option value="none">Notify: None</option>
+    </select>
+  </header>
+
+  <main id="main">
+    <div id="composer" class="card">
+      <div class="composer-tabs">
+        <button type="button" class="ctab on" data-kind="text">Text</button>
+        <button type="button" class="ctab" data-kind="media">Photo/Video</button>
+        <button type="button" class="ctab" data-kind="link">Link</button>
+      </div>
+
+      <div class="cpane on" id="pane-text">
+        <div class="composer-wrap">
+          <textarea id="textBody" maxlength="2000" placeholder="What's happening on the porch?" rows="3"></textarea>
+          <div class="mention-menu" id="mentionMenu"></div>
+        </div>
+        <div class="composer-row">
+          <span class="charcount" id="textCount">0 / 2000</span>
+          <button type="button" class="btn" id="postText">Post</button>
+        </div>
+      </div>
+
+      <div class="cpane" id="pane-media">
+        <div id="dropZone" class="drop-zone">
+          <div class="drop-hint">Drag a photo/video here, paste, or</div>
+          <label class="btn btn-secondary" for="fileInput">Choose file</label>
+          <input type="file" id="fileInput" accept="image/*,video/*" hidden>
+        </div>
+        <div id="uploadStatus" class="upload-status"></div>
+      </div>
+
+      <div class="cpane" id="pane-link">
+        <input type="url" id="linkUrl" placeholder="https://…" class="field">
+        <div id="linkPreview" class="link-preview"></div>
+        <div class="composer-row">
+          <button type="button" class="btn" id="postLink">Post link</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="feed"></div>
+
+    <div class="older-wrap">
+      <button type="button" class="btn btn-secondary" id="olderBtn" hidden>Older</button>
+    </div>
+  </main>
+</div>
+
+<div id="toast"></div>
+
+<script src="/porch.js"></script>
+</body>
+</html>

@@ -35,6 +35,8 @@ const plexSync = require('./lib/sync/plex');
 const kavitaSync = require('./lib/sync/kavita');
 const agentTokens = require('./lib/agent-tokens');
 const agentEndpoints = require('./lib/agent-endpoints');
+const appApiLog = require('./lib/app-api-log');
+const appInstall = require('./lib/app-install');
 
 const healthChecker = require('./lib/health-checker');
 const entityGraph = require('./lib/sync/_schema');
@@ -43,8 +45,10 @@ const calendarSources = require('./lib/calendar-sources');
 const secretBox = require('./lib/secret-box');
 const snapshot = require('./lib/snapshot');
 const drawerDispatch = require('./lib/drawer-dispatch');
+const eventsDispatch = require('./lib/events-dispatch');
 const media = require('./lib/media');
 const walls = require('./lib/walls');
+const notifications = require('./lib/notifications');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -59,6 +63,14 @@ entityGraph.migrate(db);
 // PHA-1617.1: PAT tokens table. Migrated after userModel so the FK
 // to users(id) resolves. Same boot-migration pattern as the others.
 agentTokens.migrate(db);
+// PHA-2201.3 (PHA-2231): third-party app accountability trail. FKs to
+// users(id) and installed_apps(key), so it runs right after
+// agentTokens.migrate (which creates installed_apps).
+appApiLog.migrate(db);
+// PHA-2201.1 (PHA-2229): install flow's consent-token table. FK to
+// users(id), so it runs after userModel.migrate; no dependency on
+// installed_apps (consent tokens exist before an app is installed).
+appInstall.migrate(db);
 // PHA-1617.4: per-user, per-harness endpoint config (drawer POST +
 // events webhook URLs). HMAC secret generated on insert. FK to users;
 // migrated after userModel so the FK resolves, same pattern as
@@ -148,6 +160,13 @@ app.use(session({
 // + last_error columns written by agentEndpoints.recordDispatch.
 app.locals.drawerStreakMap = new Map();
 
+// PHA-1617.7: same in-memory consecutive-failure streak pattern as
+// drawerStreakMap above, but tracked separately — a household's
+// drawer harness and events harness (often the same physical box, but
+// possibly different agent_endpoints rows) trip their circuit
+// breakers independently.
+app.locals.eventsStreakMap = new Map();
+
 // ---- auth middleware ----
 // Four-layer auth:
 //   1. Bearer PAT (PHA-1617.2) — `Authorization: Bearer homestead_pat_...`
@@ -176,6 +195,26 @@ function authenticate(req, res, next) {
       authProvider: 'pat',
       authProviderDetail: { tokenId: tokenRow.id, scopes: tokenRow.scopes },
     };
+    // PHA-2231: third-party app accountability trail. app_id IS NULL is
+    // the existing PHA-1617 user-level PAT and is never logged — this
+    // table is scoped to app-issued tokens only. Written from 'finish'
+    // (fires after the response is already sent) so the log write never
+    // sits on this request's critical path.
+    if (tokenRow.app_id) {
+      res.on('finish', () => {
+        try {
+          appApiLog.log(db, {
+            userId: u.id,
+            appId: tokenRow.app_id,
+            route: `${req.method} ${req.path}`,
+            scopesUsed: tokenRow.scopes,
+            status: res.statusCode,
+          });
+        } catch (err) {
+          console.warn('[app-api-log] write failed:', err.message);
+        }
+      });
+    }
     return next();
   }
   const headerUser = req.get('x-authentik-username');
@@ -203,6 +242,53 @@ function authenticate(req, res, next) {
 }
 // Legacy alias used by route definitions below.
 const auth = authenticate;
+
+// ---- app-scoped token authorization (PHA-2052 dogfood) ----
+// `authenticate()` above accepts a Bearer app token and synthesizes the
+// SAME req.session.user shape a real household member gets — on its own
+// that means an app-scoped PAT is authorized as if it were the full
+// underlying user, regardless of the scopes[] the manifest actually
+// declared and the user actually consented to. `tokenScopes(req)`
+// distinguishes the three auth paths:
+//   * Bearer app token (authProviderDetail.scopes is a JSON array) ->
+//     that array, and ONLY that array, gates what the request may do.
+//   * Legacy user-level PAT (authProviderDetail.scopes === 'user') or
+//     session/header-trust auth (no authProviderDetail at all) -> null,
+//     meaning "full access" — unchanged behavior for every caller that
+//     isn't an installed third-party app.
+function tokenScopes(req) {
+  const detail = req.session.user && req.session.user.authProviderDetail;
+  if (!detail || detail.scopes === undefined || detail.scopes === 'user') return null;
+  try {
+    const arr = JSON.parse(detail.scopes);
+    return Array.isArray(arr) ? arr : null;
+  } catch (_) {
+    return null;
+  }
+}
+// requireScope(scope): the token must carry this exact scope string.
+function requireScope(scope) {
+  return function (req, res, next) {
+    const scopes = tokenScopes(req);
+    if (scopes === null || scopes.includes(scope)) return next();
+    return res.status(403).json({ error: 'insufficient_scope', required: scope });
+  };
+}
+// requireWallReadScope: read:walls (any wall) or read:walls:<slug>
+// (this wall only) — mirrors the two-tier vocabulary in
+// lib/scope-display.js (§3: the fixed `read:walls` phrase vs. the
+// per-wall `read:walls:{id}` pattern). Scope names use underscores
+// (lib/scope-display.js's fixed `read:walls:media_club` entry) while
+// wall slugs use dashes (`walls.seed()`'s `media-club`) — the §3
+// vocabulary is locked as written, so the slug is normalized to match
+// it here rather than the other way around.
+function requireWallReadScope(req, res, next) {
+  const scopes = tokenScopes(req);
+  if (scopes === null) return next();
+  const scopeSlug = req.params.slug.replace(/-/g, '_');
+  if (scopes.includes('read:walls') || scopes.includes(`read:walls:${scopeSlug}`)) return next();
+  return res.status(403).json({ error: 'insufficient_scope', required: `read:walls:${scopeSlug}` });
+}
 
 // ---- VAPID keypair (PHA-1619) ----
 // Generated once on first startup, persisted to DATA_DIR/vapid.json.
@@ -314,6 +400,17 @@ async function notify(userId, payload, opts = {}) {
     }
   }
   logNotification(userId, category, payload, delivered, delivered === 0 && errors > 0 ? 'all_endpoints_failed' : null);
+  // PHA-1617.7: mirror every attempted push out to the user's opted-in
+  // events endpoints (category 'push'). Fire-and-forget — a dead
+  // events harness must never affect push delivery to the browser.
+  const pushUser = db.prepare('SELECT id, username, display, color FROM users WHERE id = ?').get(userId);
+  if (pushUser) {
+    eventsDispatch.dispatchEvent(db, app.locals.eventsStreakMap, pushUser, 'push', {
+      category, title: payload.title || '', body: payload.body || '',
+      url: payload.url || '/', tag: payload.tag || category,
+      delivered, errors,
+    }).catch(() => {});
+  }
   return { delivered, skipped: 0, errors };
 }
 
@@ -548,6 +645,92 @@ app.delete('/api/users/:username/agent-tokens/:id', auth, requireAdmin, (req, re
   const revoked = agentTokens.revoke(db, req.params.id, { ownerUserId: target.id });
   if (!revoked) return res.status(404).json({ error: 'not found' });
   res.json({ ok: true });
+});
+
+// ---- app install flow (PHA-2201.1 / PHA-2229) ----
+// State machine: resolve -> consent -> install, plus list/get/revoke/
+// reinstall. All logic lives in lib/app-install.js (pure, no express);
+// these handlers just do auth + status-code mapping. Settings UI that
+// drives this flow is PHA-2201.4 (PHA-2232).
+function sendAppInstallError(res, err) {
+  if (err instanceof appInstall.AppInstallError) {
+    return res.status(err.status).json({ error: err.code, message: err.message, ...err.extra });
+  }
+  console.error('[app-install] unexpected error:', err);
+  return res.status(500).json({ error: 'internal_error' });
+}
+app.post('/api/apps/resolve', auth, async (req, res) => {
+  const { url, dev } = req.body || {};
+  try {
+    const manifest = await appInstall.resolveManifest(db, url, { dev: !!dev });
+    res.json({ manifest });
+  } catch (err) {
+    sendAppInstallError(res, err);
+  }
+});
+app.post('/api/apps/consent', auth, async (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { manifest_url, acknowledged, dev } = req.body || {};
+  try {
+    const result = await appInstall.issueConsent(db, me.id, manifest_url, { acknowledged: !!acknowledged, dev: !!dev });
+    res.json(result);
+  } catch (err) {
+    sendAppInstallError(res, err);
+  }
+});
+app.post('/api/apps/install', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { consent_token } = req.body || {};
+  try {
+    res.json(appInstall.installApp(db, me.id, consent_token));
+  } catch (err) {
+    sendAppInstallError(res, err);
+  }
+});
+app.get('/api/apps', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  res.json(appInstall.listApps(db, me.id));
+});
+app.get('/api/apps/:key', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json(appInstall.getApp(db, me.id, req.params.key));
+  } catch (err) {
+    sendAppInstallError(res, err);
+  }
+});
+app.post('/api/apps/:key/revoke', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json(appInstall.revokeApp(db, me.id, req.params.key));
+  } catch (err) {
+    sendAppInstallError(res, err);
+  }
+});
+app.post('/api/apps/:key/reinstall', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json(appInstall.reinstallApp(db, me.id, req.params.key));
+  } catch (err) {
+    sendAppInstallError(res, err);
+  }
+});
+
+// ---- app activity log (PHA-2201.3 / PHA-2231) ----
+// Read path over app_api_log; the write path lives in authenticate()
+// above.
+app.get('/api/apps/:key/activity', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const appRow = db.prepare('SELECT key FROM installed_apps WHERE key = ?').get(req.params.key);
+  if (!appRow) return res.status(404).json({ error: 'not_found' });
+  res.json(appApiLog.list(db, me.id, req.params.key, { limit: req.query.limit, offset: req.query.offset }));
 });
 
 // ---- agent endpoints (PHA-1617.4) ----
@@ -838,14 +1021,14 @@ app.get('/api/walls', auth, (req, res) => {
   if (!me) return res.status(401).json({ error: 'unknown_user' });
   res.json({ walls: walls.listForUser(me.id) });
 });
-app.get('/api/walls/:slug/posts', auth, (req, res) => {
+app.get('/api/walls/:slug/posts', auth, requireWallReadScope, (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
   if (!me) return res.status(401).json({ error: 'unknown_user' });
   try {
     res.json({ posts: walls.postsForWall(req.params.slug, me.id, req.query.cursor, req.query.limit) });
   } catch (e) { wallsErr(res, e); }
 });
-app.post('/api/walls/:slug/posts', auth, (req, res) => {
+app.post('/api/walls/:slug/posts', auth, requireScope('write:walls:post'), (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
   if (!me) return res.status(401).json({ error: 'unknown_user' });
   try {
@@ -888,6 +1071,128 @@ app.post('/api/walls/posts/:postId/comments', auth, (req, res) => {
   } catch (e) { wallsErr(res, e); }
 });
 
+// ---- notification prefs + mentions (PHA-2218) ----
+// Per-wall level (all/mentions/none), wall-scoped @mention autocomplete,
+// per-thread mute, and the badge-clearing endpoints. Membership gate is
+// the same walls.assertMember() the wall routes above already trust — a
+// wall's members and notification prefs are only visible/settable to
+// its own members. Plain `auth` (not scope-gated): these are personal
+// preference routes, same tier as /api/push/prefs, not something a
+// third-party app's manifest scopes cover yet.
+app.get('/api/walls/:slug/members', auth, requireWallReadScope, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    const { wall } = walls.assertMember(req.params.slug, me.id);
+    const members = notifications.membersForWall(wall).map((m) => ({
+      username: m.username,
+      display: m.display,
+      color: m.color,
+      isMemberSince: m.joined_at || null,
+    }));
+    res.json({ members });
+  } catch (e) { wallsErr(res, e); }
+});
+
+app.get('/api/walls/:slug/notifications', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    const { wall } = walls.assertMember(req.params.slug, me.id);
+    res.json({ level: notifications.getLevel(wall.id, me.id) });
+  } catch (e) { wallsErr(res, e); }
+});
+app.put('/api/walls/:slug/notifications', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    const { wall } = walls.assertMember(req.params.slug, me.id);
+    const via = wall.visibility === 'group' ? 'user_groups' : 'wall_memberships';
+    res.json(notifications.setLevel(wall.id, me.id, (req.body || {}).level, via));
+  } catch (e) { wallsErr(res, e); }
+});
+
+app.post('/api/walls/:slug/posts/:postId/mute', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    const { post } = walls.getPostInWall(req.params.slug, req.params.postId, me.id);
+    res.json(notifications.muteThread(me.id, post.id));
+  } catch (e) { wallsErr(res, e); }
+});
+app.delete('/api/walls/:slug/posts/:postId/mute', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    const { post } = walls.getPostInWall(req.params.slug, req.params.postId, me.id);
+    res.json(notifications.unmuteThread(me.id, post.id));
+  } catch (e) { wallsErr(res, e); }
+});
+
+// GET /api/me/notifications: the badge/activity-feed list backing PHA-1617's
+// clearable-badge promise. ?unseen=1 filters to seen_at IS NULL. Distinct
+// from /api/me/snapshot's activity_recent (the morning-brief dashboard
+// feed, unfiltered) — this one is the badge itself.
+app.get('/api/me/notifications', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  res.json({ notifications: notifications.listForUser(me.id, { unseen: req.query.unseen === '1', limit: req.query.limit }) });
+});
+// POST /api/me/notifications/seen: three clear paths funnel here — a
+// push click (SW posts {tag}), opening the target post ({postId}), or
+// the activity feed's "clear all" ({clearAll: true}). Always scoped to
+// the caller's own rows.
+app.post('/api/me/notifications/seen', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const b = req.body || {};
+  const cleared = notifications.markSeen(me.id, { tag: b.tag, postId: b.postId, clearAll: !!b.clearAll });
+  res.json({ ok: true, cleared });
+});
+
+// ---- link preview (PHA-2151) ----
+// Best-effort server-side fetch + lightweight <title>/description scrape
+// for the Porch Wall's "link" post composer. No new dependency (no
+// cheerio/jsdom) — a couple of forgiving regexes over the raw HTML.
+// Never throws a 500 for a bad/slow remote page: any failure just comes
+// back as empty strings so the composer can still let the post through.
+function extractMeta(html) {
+  let title = '';
+  let description = '';
+  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (titleMatch) title = titleMatch[1].trim();
+  const metaRe = /<meta\s+[^>]*>/gi;
+  let m;
+  while ((m = metaRe.exec(html))) {
+    const tag = m[0];
+    const nameMatch = tag.match(/\b(?:name|property)\s*=\s*["']([^"']+)["']/i);
+    const contentMatch = tag.match(/\bcontent\s*=\s*["']([^"']*)["']/i);
+    if (!nameMatch || !contentMatch) continue;
+    const name = nameMatch[1].toLowerCase();
+    if (name === 'og:title' && !titleMatch) title = contentMatch[1].trim();
+    if ((name === 'og:description' || name === 'description') && !description) description = contentMatch[1].trim();
+  }
+  const decode = (s) => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  return { title: decode(title).slice(0, 300), description: decode(description).slice(0, 500) };
+}
+app.get('/api/link-preview', auth, async (req, res) => {
+  const url = req.query.url;
+  if (!url || typeof url !== 'string') return res.json({ title: '', description: '' });
+  let parsed;
+  try { parsed = new URL(url); } catch (_) { return res.json({ title: '', description: '' }); }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return res.json({ title: '', description: '' });
+  try {
+    const r = await fetch(parsed.toString(), {
+      signal: AbortSignal.timeout(2000),
+      headers: { 'User-Agent': 'Homestead-LinkPreview/1.0' },
+    });
+    const html = await r.text();
+    res.json(extractMeta(html));
+  } catch (e) {
+    res.json({ title: '', description: '' });
+  }
+});
+
 // ---- groups ----
 // Read-only view (PHA-1618: authentik owns the group lifecycle). The
 // `?mine=1` query param returns just the authenticated user's groups so
@@ -919,7 +1224,12 @@ app.post('/api/tasks', auth, (req, res) => {
   const alt = rotate && alt_assignee ? alt_assignee : null;
   const r = db.prepare('INSERT INTO tasks (title,notes,assignee,alt_assignee,due_date,recur,rotate,created_by) VALUES (?,?,?,?,?,?,?,?)')
     .run(title, notes, assignee, alt, due_date, recur, rotate ? 1 : 0, req.session.user.username);
-  res.json(db.prepare('SELECT * FROM tasks WHERE id = ?').get(r.lastInsertRowid));
+  const created = db.prepare('SELECT * FROM tasks WHERE id = ?').get(r.lastInsertRowid);
+  // PHA-1617.7: fire-and-forget events webhook fan-out. Never awaited on
+  // the request path — a dead events harness must not slow down or fail
+  // task creation.
+  eventsDispatch.dispatchEventForAssignee(db, app.locals.eventsStreakMap, assignee, 'task_created', { task: created }).catch(() => {});
+  res.json(created);
 });
 app.put('/api/tasks/:id', auth, (req, res) => {
   const t = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
@@ -942,7 +1252,8 @@ function bumpDate(dateStr, recur) {
 app.post('/api/tasks/:id/toggle', auth, (req, res) => {
   const t = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (!t) return res.status(404).json({ error: 'not found' });
-  if (!t.done && t.recur) {
+  const wasRotation = !t.done && t.recur;
+  if (wasRotation) {
     let assignee = t.assignee;
     let alt = t.alt_assignee;
     if (t.rotate && alt) {
@@ -956,7 +1267,20 @@ app.post('/api/tasks/:id/toggle', auth, (req, res) => {
     db.prepare('UPDATE tasks SET done=?, done_by=?, done_at=datetime(\'now\') WHERE id=?')
       .run(t.done ? 0 : 1, req.session.user.username, t.id);
   }
-  res.json(db.prepare('SELECT * FROM tasks WHERE id = ?').get(t.id));
+  const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(t.id);
+  // PHA-1617.7: fire-and-forget events webhook fan-out. A rotating chore
+  // that just handed off to the next assignee fires 'chore_rotated' (to
+  // the NEW assignee, since that's who needs to know); a plain task
+  // toggle fires 'task_completed'/'task_uncompleted'.
+  if (wasRotation) {
+    eventsDispatch.dispatchEventForAssignee(db, app.locals.eventsStreakMap, updated.assignee, 'chore_rotated',
+      { task: updated, previous_assignee: t.assignee }).catch(() => {});
+  } else {
+    const category = updated.done ? 'task_completed' : 'task_uncompleted';
+    eventsDispatch.dispatchEventForAssignee(db, app.locals.eventsStreakMap, updated.assignee, category,
+      { task: updated }).catch(() => {});
+  }
+  res.json(updated);
 });
 app.delete('/api/tasks/:id', auth, (req, res) => {
   db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.id);
@@ -977,7 +1301,10 @@ app.post('/api/events', auth, (req, res) => {
   if (!userModel.validateAssignee(db, owner)) return res.status(400).json({ error: 'unknown owner' });
   const r = db.prepare('INSERT INTO events (title,date,time,notes,owner,created_by) VALUES (?,?,?,?,?,?)')
     .run(title, date, time, notes, owner, req.session.user.username);
-  res.json(db.prepare('SELECT * FROM events WHERE id = ?').get(r.lastInsertRowid));
+  const created = db.prepare('SELECT * FROM events WHERE id = ?').get(r.lastInsertRowid);
+  // PHA-1617.7: fire-and-forget events webhook fan-out (see /api/tasks).
+  eventsDispatch.dispatchEventForAssignee(db, app.locals.eventsStreakMap, owner, 'event_created', { event: created }).catch(() => {});
+  res.json(created);
 });
 app.put('/api/events/:id', auth, (req, res) => {
   const e = db.prepare('SELECT * FROM events WHERE id = ?').get(req.params.id);
@@ -1949,6 +2276,16 @@ app.post('/api/review-queue/:id/reject', auth, requireAdmin, (req, res) => {
 
 // 404 JSON for unknown /api/* paths.
 app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
+
+// lib/scope-display.js (PHA-2201.2 / PHA-2230) is the single source for
+// third-party app scope → plain-language mapping, shared between the
+// consent screen (public/consent.js) and the future Settings "what this
+// app can do" view (PHA-2201.4). It's the only lib/ file served to the
+// browser — everything else in lib/ is server-only DB/HTTP logic.
+app.get('/lib/scope-display.js', (req, res) => {
+  res.type('application/javascript');
+  res.sendFile(path.join(__dirname, 'lib', 'scope-display.js'));
+});
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/favicon.ico', (req, res) => {

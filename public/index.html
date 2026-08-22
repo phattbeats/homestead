@@ -136,8 +136,8 @@ main{padding:14px 18px;max-width:680px;margin:0 auto}
 nav{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:space-around;
   padding:10px 16px calc(env(safe-area-inset-bottom) + 12px);
   background:rgba(255,251,245,.85);backdrop-filter:blur(18px);border-top:1px solid var(--line);z-index:30}
-nav button{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:600;
-  color:var(--muted);padding:4px 14px;border-radius:14px;transition:color .3s var(--ease)}
+nav button,nav a{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:600;
+  color:var(--muted);padding:4px 14px;border-radius:14px;transition:color .3s var(--ease);text-decoration:none}
 nav button.on{color:var(--accent)}
 nav .ico{font-size:20px}
 
@@ -339,6 +339,42 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 .secret-card .copy-row .link:active{background:rgba(255,255,255,.18)}
 .secret-card .copied{color:#9eb48a;font-size:12px;font-weight:700;font-family:'Plus Jakarta Sans',sans-serif;align-self:center;display:none}
 .secret-card .copied.on{display:inline-block}
+
+/* PHA-2201.4 (PHA-2232): Settings → Apps. Rows reuse the .tok-row
+   shape (connected agents); .app-row adds a chevron + pointer cursor
+   since rows are tappable (open per-app detail). */
+.app-row{cursor:pointer}
+.app-row .tok-mark{background:var(--accent-soft)}
+.app-chevron{color:var(--muted);font-size:18px;flex-shrink:0}
+.act-list{display:flex;flex-direction:column;gap:6px}
+.act-row{display:flex;justify-content:space-between;gap:10px;padding:9px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);font-size:12px}
+.act-row .act-route{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;color:var(--ink);word-break:break-all}
+.act-row .act-meta{color:var(--muted);white-space:nowrap;flex-shrink:0;text-align:right}
+.act-row .act-status{font-weight:700}
+.act-row .act-status.err{color:#b3453a}
+
+/* Embedded consent screen (public/consent.js's renderConsentScreen,
+   reused here per the PHA-2201 design note §4 — same copy, same
+   mapping, different host markup). Scoped under .consent-embed so it
+   doesn't touch this page's own .btn/.app-icon-style rules. */
+.consent-embed .app-preview{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.consent-embed .app-icon{font-size:36px;line-height:1;width:52px;height:52px;display:flex;align-items:center;justify-content:center;background:var(--surface);border-radius:16px;box-shadow:0 6px 30px rgba(0,0,0,.035);flex-shrink:0}
+.consent-embed .app-meta{min-width:0}
+.consent-embed #appName{font-weight:800;font-size:17px;letter-spacing:-.02em}
+.consent-embed #appAuthorVersion{font-size:12px;color:var(--muted);margin-top:2px}
+.consent-embed #appDescription{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.4}
+.consent-embed #consentIntro{font-size:14px;line-height:1.5;margin-bottom:16px}
+.consent-embed .scope-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+.consent-embed .scope-card h2{font-size:12px;font-weight:800;letter-spacing:.02em;margin-bottom:8px}
+.consent-embed .scope-card.will h2{color:#4C7A4F}
+.consent-embed .scope-card.will-not h2{color:#b3453a}
+.consent-embed .scope-list{list-style:none}
+.consent-embed .scope-list li{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.4;padding:4px 0}
+.consent-embed .scope-list li::before{flex-shrink:0;font-weight:800;width:16px}
+.consent-embed .will .scope-list li::before{content:"\2713";color:#4C7A4F}
+.consent-embed .will-not .scope-list li::before{content:"\2717";color:#b3453a}
+.consent-embed #consentFooter{font-size:12px;color:var(--muted);line-height:1.5;margin:14px 0;white-space:pre-line}
+.consent-embed .consent-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:6px}
 </style>
 </head>
 <body>
@@ -397,6 +433,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
     <button data-p="tasks"><span class="ico">✓</span>Tasks</button>
     <button data-p="cal"><span class="ico">📅</span>Calendar</button>
     <button data-p="svc"><span class="ico">🛰️</span>Apps</button>
+    <a href="/porch.html" data-tile="porch" id="navPorch" style="display:none"><span class="ico">📸</span>Porch</a>
   </nav>
 </div>
 
@@ -436,6 +473,11 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
   </div>
 </div>
 
+<!-- PHA-2201.4 (PHA-2232): shared scope mapping + the reusable consent
+     screen renderer (window.HomesteadConsent.renderConsentScreen),
+     same source consent.html uses — see .consent-embed CSS above. -->
+<script src="/lib/scope-display.js"></script>
+<script src="/consent.js"></script>
 <script>
 const $=s=>document.querySelector(s);
 const api=async(m,u,b)=>{const r=await fetch(u,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined,sameSite:'lax'});if(!r.ok){let e;try{e=await r.json()}catch{failed:e=await r.text().catch(()=>r.status+'');throw{error:failed||('HTTP '+r.status)}}throw e}return r.json()};
@@ -542,6 +584,12 @@ async function boot(user){
   const d=new Date();calY=d.getFullYear();calM=d.getMonth();
   await refreshUsersFromServer();
   await refresh();
+  // PHA-2151: Porch tile is hidden unless the user is a member of at
+  // least one wall (GET /api/walls returns {walls:[]} otherwise).
+  try{
+    const {walls}=await api('GET','/api/walls');
+    if(walls&&walls.length)$('#navPorch').style.display='';
+  }catch(_){}
   // PHA-1619: if the browser already has permission + a subscription,
   // re-register it against this session so a returning user on a fresh
   // device doesn't have to click "Enable" again. Best-effort: any error
@@ -931,6 +979,7 @@ $('#avatarBtn').onclick=()=>{
   openSheet(`<h2>${esc(ME.display)}</h2>
     <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-calendar-sources">📅 Calendar sources</button>
     <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-connected-agents">🔌 Connected agents</button>
+    <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-apps">📦 Apps</button>
     ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-settings">⚙️ Settings · manage household</button>`:''}
     <h3>Push notifications</h3>
     <p style="font-size:13px;color:var(--muted);margin:-4px 0 10px">Get reminders for chores due today and your turn to take a rotating chore.</p>
@@ -948,6 +997,7 @@ $('#avatarBtn').onclick=()=>{
   }
   $('#f-calendar-sources').onclick=()=>openCalendarSourcesSheet();
   $('#f-connected-agents').onclick=()=>openConnectedAgentsSheet();
+  $('#f-apps').onclick=()=>openAppsSheet();
   renderInstallChip();
   pushRenderButton('#f-push');
   renderPushPrefs();
@@ -1481,6 +1531,191 @@ function platformTokenLabel(){
     if (/cros/.test(ua)) return 'Chromebook';
   } catch {}
   return '';
+}
+
+/* ---- Settings → Apps (PHA-2201.4 / PHA-2232) ----
+   Design note PHA-2201 §2 (install flow) / §5 (revoke). Three sheets:
+     1. openAppsSheet() — every app the user has on, built-in AND
+        third-party, from the same GET /api/apps registry read path
+        (lib/app-install.js's listApps()).
+     2. openAppDetailSheet(key) — "what this app can do" (scopes via
+        the shared window.ScopeDisplay mapping, PHA-2230) + paginated
+        activity (app_api_log, PHA-2231) + Revoke (third-party only —
+        built-ins have no app-scoped token to revoke).
+     3. openAppInstallSheet() → openAppConsentSheet() — paste a
+        manifest URL, resolve, then render the SAME consent screen
+        consent.html uses (window.HomesteadConsent.renderConsentScreen,
+        PHA-2230) inside this sheet, then consent -> install. The
+        newly-minted app token is shown exactly once via the existing
+        copy-once reveal (openTokenRevealSheet, PHA-1617.3 pattern). */
+async function openAppsSheet(){
+  const apps = await api('GET','/api/apps');
+  openAppsSheetWith(apps);
+}
+
+function openAppsSheetWith(apps){
+  const rows = apps.map(a=>`
+    <div class="tok-row app-row" data-key="${esc(a.key)}">
+      <div class="tok-mark" aria-hidden="true">${esc(a.icon||'📦')}</div>
+      <div class="tok-info">
+        <div class="tok-label">${esc(a.name)}${a.builtin?' <span class="badge">built-in</span>':''}</div>
+        <div class="tok-meta">v${esc(a.version||'?')} · ${esc(a.author||'unknown')}</div>
+        <div class="tok-meta">installed ${a.installed_at?esc(new Date(a.installed_at+'Z').toLocaleDateString()):'—'}</div>
+      </div>
+      <div class="app-chevron" aria-hidden="true">›</div>
+    </div>`).join('');
+
+  openSheet(`<h2>Apps</h2>
+    <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">Every app you've turned on — built-in and third-party. Tap one to see what it can do, its activity, or revoke access.</p>
+    <div class="tok-list">${rows || '<div class="empty" style="padding:24px 4px">No apps installed yet.</div>'}</div>
+    <button class="btn" id="app-add" style="margin-top:14px">+ Install app</button>
+    <button class="link" style="margin-top:14px;width:100%;text-align:center" onclick="closeSheet()">Done</button>`);
+
+  document.querySelectorAll('.app-row').forEach(row=>{
+    row.onclick=()=>openAppDetailSheet(row.dataset.key);
+  });
+  $('#app-add').onclick=()=>openAppInstallSheet();
+}
+
+async function openAppDetailSheet(key){
+  let app;
+  try { app = await api('GET', `/api/apps/${encodeURIComponent(key)}`); }
+  catch(e){ alert((e&&e.error)||'Could not load app'); return openAppsSheet(); }
+  openAppDetailSheetWith(app);
+}
+
+function openAppDetailSheetWith(app){
+  let willPhrases;
+  try {
+    willPhrases = window.ScopeDisplay.describeScopes(app.scopes||[], { entityKinds: app.entity_kinds||[] });
+  } catch(e){
+    willPhrases = (app.scopes||[]).map(s=>s); // shouldn't happen — install validates every scope
+  }
+  const scopesHtml = willPhrases.map(p=>`<li>${esc(p)}</li>`).join('') || '<li>No scopes granted</li>';
+
+  const activityBlock = app.builtin
+    ? `<p style="font-size:12px;color:var(--muted)">Built-in modules aren't tracked in the app activity log — calls go through your own session, not an app-scoped token.</p>`
+    : `<div id="app-activity"><p class="empty" style="padding:14px 0">Loading activity…</p></div>`;
+
+  openSheet(`<h2>${esc(app.icon||'📦')} ${esc(app.name)}${app.builtin?' <span class="badge">built-in</span>':''}</h2>
+    <p style="font-size:13px;color:var(--muted);margin:-10px 0 14px">v${esc(app.version||'?')} · by ${esc(app.author||'unknown')}${app.description?' — '+esc(app.description):''}</p>
+    <h3>What this app can do</h3>
+    <ul class="scope-list" style="list-style:none;margin-bottom:14px">${scopesHtml}</ul>
+    <h3>Activity</h3>
+    ${activityBlock}
+    ${app.builtin?'':`<button class="link danger" id="app-revoke" style="margin-top:18px;width:100%;text-align:center">Revoke access</button>`}
+    <button class="link" style="margin-top:14px;width:100%;text-align:center" onclick="openAppsSheet()">← Back to Apps</button>`);
+
+  if (!app.builtin){
+    loadAppActivity(app.key, 0, []);
+    $('#app-revoke').onclick = async () => {
+      if (!confirm(`Revoke "${app.name}"?\n\nThis deletes the app's access token immediately — its next API call gets a 401 — and removes its tile. This cannot be undone.`)) return;
+      try {
+        await api('POST', `/api/apps/${encodeURIComponent(app.key)}/revoke`);
+        await openAppsSheet();
+      } catch(e){
+        alert((e&&e.error)||'Revoke failed');
+      }
+    };
+  }
+}
+
+async function loadAppActivity(key, offset, priorItems){
+  const box = $('#app-activity');
+  if (!box) return;
+  let page;
+  try { page = await api('GET', `/api/apps/${encodeURIComponent(key)}/activity?limit=20&offset=${offset}`); }
+  catch(e){ box.innerHTML = '<p class="empty">Could not load activity</p>'; return; }
+  const items = priorItems.concat(page.items);
+  const rows = items.map(it=>{
+    const isErr = it.status >= 400;
+    return `<div class="act-row">
+      <span class="act-route">${esc(it.route)}</span>
+      <span class="act-meta"><span class="act-status${isErr?' err':''}">${it.status}</span> · ${esc(new Date(it.created_at+'Z').toLocaleString())}</span>
+    </div>`;
+  }).join('');
+  box.innerHTML = `<div class="act-list">${rows || '<div class="empty" style="padding:14px 0">No activity yet.</div>'}</div>
+    ${page.nextOffset!=null?`<button class="link" id="app-activity-more" style="margin-top:10px;width:100%;text-align:center">Load more (${Math.max(page.total-items.length,0)} more)</button>`:''}`;
+  const more = $('#app-activity-more');
+  if (more) more.onclick = () => loadAppActivity(key, page.nextOffset, items);
+}
+
+function openAppInstallSheet(){
+  openSheet(`<h2>Install app</h2>
+    <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">Paste the app's manifest URL. Homestead fetches it and shows you exactly what it's asking for — it only installs after you say yes.</p>
+    <label>Manifest URL</label>
+    <input class="field" id="app-url" type="url" placeholder="https://example.com/manifest.json" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+    <button class="btn" id="app-resolve" style="margin-top:14px">Continue</button>
+    <button class="link" style="margin-top:14px;width:100%;text-align:center" onclick="openAppsSheet()">Cancel</button>
+    <div class="err" id="app-install-err"></div>`);
+
+  $('#app-resolve').onclick = async () => {
+    const url = ($('#app-url').value||'').trim();
+    if (!url){ $('#app-install-err').textContent = 'Manifest URL is required'; return; }
+    const btn = $('#app-resolve');
+    btn.disabled = true;
+    try {
+      const { manifest } = await api('POST', '/api/apps/resolve', { url });
+      openAppConsentSheet(url, manifest);
+    } catch(e){
+      $('#app-install-err').textContent = (e && (e.message || e.error)) || 'Could not resolve manifest';
+    } finally {
+      btn.disabled = false;
+    }
+  };
+}
+
+function openAppConsentSheet(manifestUrl, manifest){
+  openSheet(`<div class="consent-embed" id="app-consent-root">
+    <div class="app-preview">
+      <div class="app-icon" id="appIcon"></div>
+      <div class="app-meta">
+        <div id="appName"></div>
+        <div id="appAuthorVersion"></div>
+      </div>
+    </div>
+    <div id="appDescription"></div>
+    <p id="consentIntro"></p>
+    <div class="scope-card will">
+      <h2>This app will be able to:</h2>
+      <ul class="scope-list" id="willList"></ul>
+    </div>
+    <div class="scope-card will-not">
+      <h2>This app will NOT be able to:</h2>
+      <ul class="scope-list" id="willNotList"></ul>
+    </div>
+    <p id="consentFooter"></p>
+    <div class="consent-actions">
+      <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
+      <button type="button" class="btn" id="installBtn"></button>
+    </div>
+    <div class="err" id="app-consent-err"></div>
+  </div>`);
+
+  const root = $('#app-consent-root');
+  window.HomesteadConsent.renderConsentScreen(root, manifest, manifest.scopes || [], {
+    onCancel(){ openAppsSheet(); },
+    onInstall(){ runAppInstall(manifestUrl, root); },
+  });
+}
+
+async function runAppInstall(manifestUrl, root){
+  const btn = root.querySelector('#installBtn');
+  const errEl = root.querySelector('#app-consent-err');
+  const prevLabel = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Installing…';
+  try {
+    const { consent_token } = await api('POST', '/api/apps/consent', { manifest_url: manifestUrl, acknowledged: true });
+    const installed = await api('POST', '/api/apps/install', { consent_token });
+    openTokenRevealSheet({
+      label: `App: ${installed.app.name}`,
+      token_prefix: installed.token_plaintext.slice(0, 14),
+      token_plaintext: installed.token_plaintext,
+    }, async () => { await openAppsSheet(); });
+  } catch(e){
+    errEl.textContent = (e && (e.message || e.error)) || 'Install failed';
+    btn.disabled = false; btn.textContent = prevLabel;
+  }
 }
 
 /* ---- init ---- */
