@@ -1,5 +1,48 @@
 # Changelog
 
+## v0.5.0 (2026-08-22) — Modular Homestead: acceptance suite + invite-to-wall + licensing
+
+Backports the v0.3.0 acceptance suite (PHA-2209), invite-to-wall flow
+(PHA-2207), modules/layout API (PHA-2204), feed-component extraction
+(PHA-2206), and AGPL-3.0-or-later + DCO licensing (PHA-2222) onto the
+v0.4.1 base. v0.5.0 is what a fresh `git clone` of `main` would build
+and run if the v0.3.0 release-branch chain had been rebased instead of
+left as a parallel stack.
+
+- **Acceptance suite (PHA-2209 / PHA-2200.8)** — 6 new scripts gate
+  the v0.3.0 acceptance criteria from PHA-2200 design-note §7 + the
+  three amendments. 193 assertions across `test-modular-layout` (63),
+  `test-disable-reenable` (41), `test-requires-cascade` (25),
+  `test-default-off-future` (16), `test-shared-registry-third-party`
+  (37), `test-registry-no-hardcoded-keys` (11 — Amendment 3 audit).
+- **Invite-to-wall (PHA-2207 / PHA-2200.6)** — `lib/invites.js` +
+  `lib/wall-members.js` + `POST /api/invites`, `POST
+  /api/invites/:code/redeem`, `GET /api/walls/:slug/members`,
+  `public/invite.html`, `public/welcome.html`. Reframes the PHA-1575
+  wall-less legacy path so `wall_slug` is REQUIRED (returns 400 with a
+  hint otherwise).
+- **Modules/layout API (PHA-2204 / PHA-2200.3)** — `GET /api/me`
+  returns `enabled_modules` + `defaultRoute`; `GET /api/me/layout`
+  returns the layout shape (`empty` / `feed-only` / `feed-tabs` /
+  `meadow`); `GET /api/modules` returns the registry; `GET
+  /api/me/modules` returns the user's enabled set.
+- **Feed component extraction (PHA-2206 / PHA-2200.5)** — the wall
+  feed surface (composer + post list + reactions + comments +
+  pagination) moved out of `public/porch.js` into
+  `public/components/feed.js` so it can mount in both
+  `public/porch.html` (single-surface) and `public/index.html`'s
+  `#page-wall` (meadow layout) without a rewrite. `notifyLevel`
+  (PHA-2218) was threaded into the component's chrome header.
+- **Licensing (PHA-2222)** — `LICENSE` (AGPL-3.0-or-later),
+  `LICENSE-docs` (CC BY 4.0), `CONTRIBUTING.md` (DCO policy),
+  `.github/workflows/dco.yml` (CI gate), SPDX headers in all 64
+  source files, `package.json` license + repo metadata fields.
+  Dependency-license audit: all 116 transitive deps are
+  redistribution-compatible with AGPL.
+
+**Test chain: 33 tests, all green** (v0.3.0 acceptance suite + v0.4.x
+existing tests; combined `npm test` wiring in `package.json`).
+
 ## v0.4.1 (2026-08-21) — Events webhook outbound dispatcher (PHA-1900 / PHA-1617.7)
 
 Design doc §6.1/6.5. Depends on PHA-1617.4 (`agent_endpoints`, already
