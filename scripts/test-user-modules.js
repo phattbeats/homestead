@@ -22,6 +22,7 @@ const os = require('os');
 const Database = require('better-sqlite3');
 
 const userModel = require('../lib/user-model');
+const modules = require('../lib/modules');
 
 let pass = 0;
 let fail = 0;
@@ -172,25 +173,26 @@ console.log('PHA-2202 user-modules tests\n');
   fs.rmSync(tmpDir, { recursive: true, force: true });
 }
 
-// ---- Test 6: new user inserted via CLAIM gets backfilled on next boot ----
+// ---- Test 6: new user inserted post-migration gets DEFAULT_ENABLED only ----
 {
-  console.log('\nTest 6: new user added post-migration gets backfilled on next migrate()');
+  console.log('\nTest 6: new user added post-migration gets DEFAULT_ENABLED-only backfill (not all 6)');
   const { db, tmpDir } = freshDb();
 
   // Add a 4th user directly (no module rows yet).
   db.prepare(`INSERT INTO users (username, display, pass_hash) VALUES (?, ?, '')`).run('alex', 'Alex');
   const beforeCount = db.prepare('SELECT COUNT(*) c FROM user_modules').get().c;
-  // 3 users * 6 = 18 rows after Test 1's seed; alex has 0.
+  // 3 users * 6 = 18 rows after Test 1's seed (grandfathered); alex has 0.
   assertEq(beforeCount, 3 * MODULES.length, 'pre: alex has no module rows');
 
-  userModel.migrate(db); // re-run
+  userModel.migrate(db); // re-run — table already exists, so the one-time
+                         // grandfather pass must NOT re-fire for alex.
 
   const alexId = db.prepare(`SELECT id FROM users WHERE username = 'alex'`).get().id;
-  const alexMods = db.prepare(`SELECT COUNT(*) c FROM user_modules WHERE user_id = ?`).get(alexId).c;
-  assertEq(alexMods, MODULES.length, 'alex now has 6 module rows after re-migration');
+  const alexModKeys = db.prepare(`SELECT module_key FROM user_modules WHERE user_id = ? ORDER BY module_key`).all(alexId).map(r => r.module_key);
+  assertEq(alexModKeys, modules.DEFAULT_ENABLED.slice().sort(), 'alex only gets the registry DEFAULT_ENABLED set, not all 6');
 
   const afterTotal = db.prepare('SELECT COUNT(*) c FROM user_modules').get().c;
-  assertEq(afterTotal, 4 * MODULES.length, 'total = 4 users * 6 modules');
+  assertEq(afterTotal, 3 * MODULES.length + modules.DEFAULT_ENABLED.length, 'total = grandfathered 3 users * 6 + alex DEFAULT_ENABLED');
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
 }
