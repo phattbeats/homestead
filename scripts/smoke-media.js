@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-2149 smoke test: boot server.js on an ephemeral port, log in,
 // upload a small PNG fixture via /api/media, fetch + thumb it back,
 // and confirm the 1h private Cache-Control header. Same boot pattern

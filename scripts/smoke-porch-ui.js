@@ -1,13 +1,23 @@
 #!/usr/bin/env node
-// PHA-2151 smoke test: boot server.js on an ephemeral port and exercise
-// the Porch Wall frontend surface — static asset delivery plus the one
-// new server route (GET /api/link-preview) that porch.js depends on but
-// that isn't covered by scripts/smoke-walls.js or scripts/smoke-media.js.
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
+// PHA-2200.5 / PHA-2206 smoke test (extends PHA-2151's smoke-porch-ui):
+// verify BOTH placements of the wall feed component — /porch.html (the
+// standalone thin shell) and /index.html (the in-place #page-wall
+// mount) — load the SAME /components/feed.js and reference the SAME
+// backend endpoints. The component extraction moved all the
+// composer/feed/reactions/comments logic into public/components/feed.js;
+// porch.js no longer exists. This smoke covers:
 //
-// This doesn't drive a real browser (no build/test-runner DOM available
-// here), so it does what scripts/smoke-token-manager-ui.js does: assert
-// the HTML/JS source the browser would load contains the markup/wiring
-// the spec calls for, and exercise the API surface end-to-end.
+//   1. Static asset shape (extraction is real — no inlined porch.js
+//      logic in porch.html).
+//   2. The shared component file is reachable as /components/feed.js
+//      and exposes window.HomesteadFeed.
+//   3. The /api/link-preview backend route (added in PHA-2151) still
+//      works (composer depends on it).
+//   4. /index.html references /components/feed.js for the in-place
+//      mount and the wall module visibility check.
 //
 // Run after `npm test`: node scripts/smoke-porch-ui.js
 
@@ -87,40 +97,73 @@ function startFixtureServer() {
   try {
     // ---- 1. Static assets exist and reference the right endpoints. ----
     const htmlPath = path.join(__dirname, '..', 'public', 'porch.html');
-    const jsPath = path.join(__dirname, '..', 'public', 'porch.js');
+    const componentPath = path.join(__dirname, '..', 'public', 'components', 'feed.js');
     const cssPath = path.join(__dirname, '..', 'public', 'porch.css');
     assert(fs.existsSync(htmlPath), 'public/porch.html exists');
-    assert(fs.existsSync(jsPath), 'public/porch.js exists');
-    assert(fs.existsSync(cssPath), 'public/porch.css exists');
+    assert(fs.existsSync(componentPath), 'public/components/feed.js exists (extraction)');
+    assert(!fs.existsSync(path.join(__dirname, '..', 'public', 'porch.js')),
+      'public/porch.js removed (logic moved into components/feed.js)');
+    assert(fs.existsSync(cssPath), 'public/porch.css exists (shared styles)');
     const html = fs.readFileSync(htmlPath, 'utf8');
-    const js = fs.readFileSync(jsPath, 'utf8');
+    const componentJs = fs.readFileSync(componentPath, 'utf8');
 
     assert(html.includes('porch.css'), 'porch.html links porch.css');
-    assert(html.includes('porch.js'), 'porch.html loads porch.js');
-    assert(html.includes('id="dropZone"'), 'porch.html has a drop zone for the composer');
-    assert(html.includes('id="fileInput"'), 'porch.html has a file input');
-    assert(html.includes('id="textBody"'), 'porch.html has a text composer');
-    assert(html.includes('id="linkUrl"'), 'porch.html has a link composer');
-    assert(html.includes('id="olderBtn"'), 'porch.html has an explicit Older button (no infinite scroll)');
+    assert(html.includes('/components/feed.js'), 'porch.html loads /components/feed.js (shared component)');
+    assert(html.includes('HomesteadFeed.mount'), 'porch.html calls HomesteadFeed.mount()');
 
-    assert(js.includes('/api/walls'), 'porch.js references /api/walls');
-    assert(js.includes('/api/media'), 'porch.js references /api/media');
-    assert(js.includes('/api/link-preview'), 'porch.js references /api/link-preview');
-    assert(js.includes('reactions'), 'porch.js wires up reactions');
-    assert(js.includes('comments'), 'porch.js wires up comments');
-    assert(js.includes('paste'), 'porch.js listens for clipboard paste');
-    assert(js.includes('413'), 'porch.js handles the 413 (too-large) upload error');
+    // Component file shape — must be the canonical extraction.
+    assert(componentJs.includes('window.HomesteadFeed'), 'feed.js exposes window.HomesteadFeed');
+    assert(componentJs.includes("'paste'") || componentJs.includes('"paste"'),
+      'feed.js still listens for clipboard paste');
+    assert(componentJs.includes('413'),
+      'feed.js still handles the 413 (too-large) upload error');
+    // The component builds URLs via apiBase+path, so /api/walls doesn't
+    // appear as a literal — instead look for the path segments the
+    // composer / feed / reactions / comments use.
+    assert(componentJs.includes("'/walls'") || componentJs.includes('"/walls"'),
+      'feed.js composes /walls path (joined with apiBase at fetch time)');
+    assert(componentJs.includes("'/media'") || componentJs.includes('"/media"'),
+      'feed.js composes /media path');
+    assert(componentJs.includes('reaction') && componentJs.includes('emoji'),
+      'feed.js wires up reactions (POST with emoji payload)');
+    assert(componentJs.includes('comment') && componentJs.includes('comments'),
+      'feed.js wires up comments (GET + POST)');
+    assert(componentJs.includes('/api/link-preview'), 'feed.js references /api/link-preview');
+    assert(componentJs.includes('reactions'), 'feed.js wires up reactions');
+    assert(componentJs.includes('comments'), 'feed.js wires up comments');
+    assert(componentJs.includes('Older'), 'feed.js wires up the Older pagination button');
 
-    // index.html nav entry, visibility-gated the same way other tiles are.
+    // index.html — in-place #page-wall mount and wall-module visibility.
     const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
-    assert(indexHtml.includes('/porch.html'), 'index.html links to /porch.html');
-    assert(indexHtml.includes('data-tile="porch"'), 'index.html nav entry carries data-tile="porch"');
+    assert(/id=["']page-porch["']/.test(indexHtml),
+      'index.html has a #page-porch page container (in-place mount)');
+    assert(/data-p=["']porch["']/.test(indexHtml),
+      'index.html nav entry uses data-p="porch" (in-place tab, not a link; matches room discriminator, not the module key)');
+    assert(indexHtml.includes('/components/feed.js'),
+      'index.html loads the SAME /components/feed.js (single canonical file)');
+    assert(indexHtml.includes('HomesteadFeed.mount'),
+      'index.html calls HomesteadFeed.mount() for the in-place mount');
 
     // ---- 2. GET /porch.html is actually served. ----
     let r = await fetch('http://127.0.0.1:3096/porch.html');
     assertEq(r.status, 200, 'GET /porch.html returns 200');
     const served = await r.text();
-    assert(served.includes('porch.js'), 'served porch.html references porch.js');
+    assert(served.includes('/components/feed.js'),
+      'served porch.html references /components/feed.js (shared component)');
+
+    // ---- 2b. GET /components/feed.js is reachable as a static asset. ----
+    r = await fetch('http://127.0.0.1:3096/components/feed.js');
+    assertEq(r.status, 200, 'GET /components/feed.js returns 200 (shared asset)');
+    const servedComp = await r.text();
+    assert(servedComp.includes('window.HomesteadFeed'),
+      'served /components/feed.js exposes window.HomesteadFeed');
+
+    // ---- 2c. GET /index.html serves the in-place mount target. ----
+    r = await fetch('http://127.0.0.1:3096/');
+    assertEq(r.status, 200, 'GET / returns 200');
+    const indexServed = await r.text();
+    assert(/id=["']page-porch["']/.test(indexServed),
+      'served /index.html has the in-place #page-porch container');
 
     // ---- 3. /api/link-preview: happy path against a local fixture. ----
     const fixture = await startFixtureServer();
@@ -155,7 +198,7 @@ function startFixtureServer() {
 
     fixture.close();
 
-    // ---- 7. End-to-end: porch.js's whole flow against the real walls/
+    // ---- 7. End-to-end: components/feed.js's whole flow against the real walls/
     //         media API (upload -> post -> react -> comment -> feed). ----
     const Database = require('better-sqlite3');
     const db = new Database(path.join(tmpDir, 'life.db'));
@@ -166,7 +209,7 @@ function startFixtureServer() {
 
     r = await fetch('http://127.0.0.1:3096/api/walls', { headers: { Cookie: brandonCookie } });
     const wallsBody = await r.json();
-    assert(wallsBody.walls.some((w) => w.slug === 'media-club'), 'GET /api/walls (what porch.js calls on boot) lists media-club');
+    assert(wallsBody.walls.some((w) => w.slug === 'media-club'), 'GET /api/walls (what feed.js calls on boot) lists media-club');
 
     r = await fetch('http://127.0.0.1:3096/api/walls/media-club/posts', {
       method: 'POST',
@@ -183,7 +226,7 @@ function startFixtureServer() {
     });
     assertEq(r.status, 200, 'reaction toggle (reaction row flow) returns 200');
 
-    // Idempotent toggle-off, matching porch.js's optimistic-toggle logic.
+    // Idempotent toggle-off, matching feed.js's optimistic-toggle logic.
     r = await fetch(`http://127.0.0.1:3096/api/walls/media-club/posts/${post.id}/reactions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: brandonCookie },

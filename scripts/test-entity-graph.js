@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-1872 acceptance tests for the entity graph (Phase A: schema + read API).
 //
 // Follows the style of scripts/test-user-model.js / scripts/test-health-checker.js:
