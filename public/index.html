@@ -203,6 +203,14 @@ nav .ico{font-size:20px}
 .sheet h2{font-size:19px;font-weight:800;letter-spacing:-.01em;margin-bottom:18px}
 .sheet h3{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
   margin:18px 0 8px}
+/* ---- PHA-2219: install coach ---- */
+.coach-visual{text-align:center}
+.coach-steps{margin:8px 0 4px;padding:0 0 0 22px;font-size:14px;line-height:1.55;color:var(--ink)}
+.coach-steps li{margin-bottom:10px}
+.coach-steps b{color:var(--ink);font-weight:700}
+.coach-generic{color:var(--muted);font-size:14px;margin:8px 0}
+.install-chip{transition:transform .25s var(--ease)}
+.install-chip:active{transform:scale(.96)}
 .row{display:flex;gap:10px}.row>*{flex:1}
 label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12px 0 6px}
 .checkbox{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink);font-weight:500;cursor:pointer}
@@ -598,6 +606,11 @@ async function boot(user){
       await api('POST','/api/push/subscribe',{endpoint:json.endpoint,keys:json.keys});
     }
   }catch(_){}
+  // PHA-2219: install coach — fires once per browser, only when
+  // not installed and not previously dismissed. Runs after the
+  // push re-subscribe block so a returning user with push already
+  // enabled is never prompted.
+  maybeShowInstallCoach();
 }
 async function refreshMerged(){
   // Fetch the merged feed for the current calendar month. Called both
@@ -969,7 +982,8 @@ $('#avatarBtn').onclick=()=>{
     <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-apps">📦 Apps</button>
     ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-settings">⚙️ Settings · manage household</button>`:''}
     <h3>Push notifications</h3>
-    <p style="font-size:13px;color:var(--muted);margin:-4px 0 10px">Get reminders for chores due today and your turn to take a rotating chore. iPhone users: add Homestead to your Home Screen first (iOS 16.4+ required for push).</p>
+    <p style="font-size:13px;color:var(--muted);margin:-4px 0 10px">Get reminders for chores due today and your turn to take a rotating chore.</p>
+    <div id="install-chip-host"></div>
     <button class="btn btn-secondary" id="f-push">…</button>
     <div id="push-prefs"></div>
     <h3>Change your password</h3>
@@ -984,6 +998,7 @@ $('#avatarBtn').onclick=()=>{
   $('#f-calendar-sources').onclick=()=>openCalendarSourcesSheet();
   $('#f-connected-agents').onclick=()=>openConnectedAgentsSheet();
   $('#f-apps').onclick=()=>openAppsSheet();
+  renderInstallChip();
   pushRenderButton('#f-push');
   renderPushPrefs();
   $('#f-pw').onclick=async()=>{
@@ -1813,6 +1828,272 @@ async function renderPushPrefs(){
     }catch(e){$('#np-err').textContent=(e&&e.error)||'Failed';$('#np-err').style.color=''}
   };
 }
+
+/* ---- PHA-2219: PWA install coach ----
+// First-login flow that helps non-technical friends get from
+// "I have the URL in Safari" to "I get a real push notification."
+// The PWA + VAPID pipeline (PHA-1619) already works; this layer
+// closes the install-friction gap that the decision comment calls
+// out as the actual blocker.
+//
+// Design rules (Brandon, 2026-08-19):
+//   1. Platform-detected instructions (iOS Safari vs Android Chrome),
+//      shown with a visual, not a paragraph.
+//   2. One-line WHY: notifications do not work until installed.
+//   3. Deferred, not dismissed-forever: a quiet chip remains in the
+//      avatar menu after a dismiss; never a repeating modal.
+//   4. Permission is requested ONLY after install AND after a
+//      meaningful moment. The coach never calls
+//      Notification.requestPermission() itself — that lives in the
+//      avatar-menu push button, gated by the existing pushState().
+//   5. Detect installed state and never show any of this to a
+//      user who already installed.
+//   6. Every step is funnel-instrumented so the analytics pipeline
+//      (PHA-2210) can build the install funnel. Closed-enum steps
+//      are validated server-side; see POST /api/funnel/install. */
+
+// LS key for the dismissed-forever flag. We keep this per-browser
+// (localStorage) rather than per-user so a friend who installs on
+// their phone and then visits on a laptop doesn't see the coach
+// again on the laptop — install detection handles that, but the
+// dismissal flag is the second line of defence. NOT a flag for
+// "saw once" (we want to keep showing it until installed, just
+// without re-prompting if they explicitly hit Not now).
+const INSTALL_DISMISSED_LS = 'homestead.installCoach.dismissed.v1';
+// LS key for "did the user EVER see the coach" — used so we don't
+// auto-open the coach on every login. The coach only auto-opens
+// once per browser; after that, it lives behind the chip.
+const INSTALL_FIRSTPROMPT_LS = 'homestead.installCoach.firstPrompted.v1';
+
+function isInstalled(){
+  // iOS Safari installs as standalone (navigator.standalone is the
+  // historical check, still set on iOS 16.4+).
+  if(typeof navigator!=='undefined'&&navigator.standalone===true)return true;
+  // Android Chrome + desktop Chrome set display-mode via the manifest.
+  if(typeof window!=='undefined'&&window.matchMedia){
+    try{
+      if(window.matchMedia('(display-mode: standalone)').matches)return true;
+      if(window.matchMedia('(display-mode: fullscreen)').matches)return true;
+      if(window.matchMedia('(display-mode: minimal-ui)').matches)return true;
+    }catch(_){}
+  }
+  // Reference app detection (Android) — fires if Homestead is
+  // installed via Play Store with the digital-asset-links check
+  // wired (future work; harmless to call now).
+  if(typeof navigator!=='undefined'&&navigator.getInstalledRelatedApps){
+    try{
+      // Promise-returning; can't await here synchronously, but the
+      // sync path (matchMedia/navigator.standalone) covers the
+      // vast majority of installs. The async variant is wired into
+      // the boot path below.
+    }catch(_){}
+  }
+  return false;
+}
+
+// Returns 'ios-safari' | 'android-chrome' | 'desktop-other' | 'unknown'.
+// Drives which instruction card the coach shows. iPadOS 13+ reports
+// as Mac (desktop) with Safari touch; we treat it as iOS for coach
+// purposes because the Share-sheet install path is identical.
+function installPlatform(){
+  try{
+    const ua=(navigator.userAgent||'').toLowerCase();
+    const plat=(navigator.platform||'').toLowerCase();
+    const isIPhone=/iphone|ipod/.test(ua);
+    const isIPad=/ipad/.test(ua)||(/mac/.test(plat)&&typeof navigator.maxTouchPoints==='number'&&navigator.maxTouchPoints>1);
+    if(isIPhone||isIPad)return 'ios-safari';
+    if(/android/.test(ua))return 'android-chrome';
+    if(/crios|chrome/.test(ua)&&!/android/.test(ua))return 'desktop-chrome';
+    return 'desktop-other';
+  }catch(_){return 'unknown'}
+}
+
+// Funnel emitter. Best-effort: errors swallowed because the coach
+// is a UX nicety, not a critical path. The analytics worker reads
+// these via the install_funnel_events table.
+async function funnelEmit(step, extra){
+  try{
+    await api('POST','/api/funnel/install',Object.assign({
+      step,
+      platform:installPlatform(),
+    },extra||{}));
+  }catch(_){}
+}
+
+// Should the coach auto-open on this boot? Conservative — only when
+// the user is genuinely not installed AND has never seen the coach
+// in this browser AND hasn't explicitly dismissed it.
+function installCoachShouldPrompt(){
+  if(isInstalled())return false;
+  try{
+    if(localStorage.getItem(INSTALL_DISMISSED_LS)==='1')return false;
+    if(localStorage.getItem(INSTALL_FIRSTPROMPT_LS)==='1')return false;
+  }catch(_){}
+  // No point prompting on a browser that can't install (e.g. desktop
+  // Firefox). Desktop users get the chip on first attempt anyway.
+  const p=installPlatform();
+  if(p!=='ios-safari'&&p!=='android-chrome')return false;
+  // Don't prompt if the user has already turned on push — they
+  // either installed on their own or this is a desktop where push
+  // is irrelevant.
+  if(typeof Notification!=='undefined'&&Notification.permission==='granted')return false;
+  return true;
+}
+
+// Render the platform-specific install instructions. Pure HTML —
+// caller is responsible for opening the sheet. The card includes
+// an inline SVG visual (no external image load, no CDN).
+function installCoachInstructions(platform){
+  if(platform==='ios-safari'){
+    return `
+      <div class="coach-visual" aria-hidden="true">
+        <svg viewBox="0 0 220 140" width="100%" style="max-width:280px;margin:6px auto 10px;display:block">
+          <rect x="6" y="6" width="208" height="128" rx="18" fill="#fff" stroke="rgba(43,38,34,.15)"/>
+          <rect x="14" y="14" width="80" height="100" rx="6" fill="#F8E9DE"/>
+          <rect x="100" y="22" width="60" height="10" rx="3" fill="rgba(43,38,34,.5)"/>
+          <rect x="100" y="40" width="92" height="6" rx="3" fill="rgba(43,38,34,.2)"/>
+          <rect x="100" y="52" width="80" height="6" rx="3" fill="rgba(43,38,34,.2)"/>
+          <rect x="100" y="64" width="70" height="6" rx="3" fill="rgba(43,38,34,.2)"/>
+          <circle cx="160" cy="118" r="12" fill="var(--accent)"/>
+          <path d="M155 118 L159 122 L166 114" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <rect x="170" y="108" width="36" height="22" rx="6" fill="var(--accent)"/>
+          <path d="M188 105 L188 112 M188 122 L188 119" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/>
+          <rect x="180" y="98" width="16" height="6" rx="2" fill="var(--accent)"/>
+        </svg>
+      </div>
+      <ol class="coach-steps">
+        <li><b>Tap the Share button</b> at the bottom of Safari (the square with the arrow pointing up).</li>
+        <li><b>Scroll down</b> and tap <b>“Add to Home Screen.”</b></li>
+        <li>Tap <b>“Add.”</b> Homestead will appear on your home screen like a real app.</li>
+      </ol>`;
+  }
+  if(platform==='android-chrome'){
+    return `
+      <div class="coach-visual" aria-hidden="true">
+        <svg viewBox="0 0 220 140" width="100%" style="max-width:280px;margin:6px auto 10px;display:block">
+          <rect x="6" y="6" width="208" height="128" rx="18" fill="#fff" stroke="rgba(43,38,34,.15)"/>
+          <rect x="14" y="14" width="192" height="22" rx="4" fill="var(--accent-soft)"/>
+          <rect x="22" y="20" width="100" height="10" rx="3" fill="var(--accent)"/>
+          <rect x="130" y="18" width="60" height="14" rx="3" fill="#fff" stroke="rgba(43,38,34,.2)"/>
+          <rect x="22" y="50" width="170" height="8" rx="3" fill="rgba(43,38,34,.2)"/>
+          <rect x="22" y="64" width="140" height="8" rx="3" fill="rgba(43,38,34,.2)"/>
+          <rect x="22" y="84" width="80" height="22" rx="11" fill="var(--accent)"/>
+          <rect x="24" y="86" width="76" height="18" rx="9" fill="none" stroke="#fff" stroke-width="1.5"/>
+          <text x="62" y="100" text-anchor="middle" fill="#fff" font-size="11" font-weight="700" font-family="system-ui">INSTALL</text>
+        </svg>
+      </div>
+      <ol class="coach-steps">
+        <li><b>Tap the menu</b> at the top right (⋮) and choose <b>“Install app”</b> (or “Add to Home screen”).</li>
+        <li>Tap <b>“Install.”</b> Homestead will appear on your home screen.</li>
+        <li>If you don't see the menu, open Chrome's address bar and look for the install icon.</li>
+      </ol>`;
+  }
+  // desktop / unknown — show generic copy that points at the avatar menu chip
+  return `
+    <p class="coach-generic">You can always revisit this from the avatar menu under <b>“Set up notifications.”</b></p>`;
+}
+
+// Open the coach sheet. The single entry point — boot auto-opens
+// it (if !installCoachShouldPrompt) and the avatar-menu chip opens
+// it on tap.
+async function openInstallCoach(source){
+  // source: 'first_boot' | 'chip' — used for funnel attribution.
+  await funnelEmit('instructions_opened',{meta:{source:source||'manual'}});
+  const platform=installPlatform();
+  const whyLine=platform==='ios-safari'
+    ?'Notifications only work once Homestead is on your Home Screen.'
+    :platform==='android-chrome'
+    ?'Notifications only work once Homestead is installed as an app.'
+    :'Notifications only work once Homestead is installed to your device.';
+  openSheet(`
+    <h2>${platform==='ios-safari'?'Add Homestead to your Home Screen':platform==='android-chrome'?'Install Homestead as an app':'Set up notifications'}</h2>
+    <p style="color:var(--muted);font-size:14px;margin:-4px 0 12px">${whyLine}</p>
+    ${installCoachInstructions(platform)}
+    <button class="btn" id="coach-done" style="margin-top:14px">Got it</button>
+    <button class="link" style="margin-top:6px;width:100%;text-align:center;display:block" id="coach-later">Not now</button>
+  `);
+  $('#coach-done').onclick=()=>{
+    // Mark the dismissed flag so we don't auto-open again on next
+    // login from this browser. We do NOT mark installed — if the
+    // friend didn't actually install, the chip still surfaces the
+    // coach next time they tap it.
+    try{localStorage.setItem(INSTALL_DISMISSED_LS,'1')}catch(_){}
+    funnelEmit('dismissed',{meta:{outcome:'done'}});
+    closeSheet();
+  };
+  $('#coach-later').onclick=()=>{
+    try{localStorage.setItem(INSTALL_DISMISSED_LS,'1')}catch(_){}
+    funnelEmit('dismissed',{meta:{outcome:'later'}});
+    closeSheet();
+  };
+}
+
+// Boot-time coach trigger. Called from boot() AFTER refresh() and
+// the walls check have settled, so the friend sees the feed first
+// ("after they are situated" — Brandon's directive). Fires only
+// once per browser, never if installed, never if dismissed.
+async function maybeShowInstallCoach(){
+  if(!installCoachShouldPrompt())return;
+  try{localStorage.setItem(INSTALL_FIRSTPROMPT_LS,'1')}catch(_){}
+  funnelEmit('prompt_shown');
+  // Open on the next tick so the boot's render cycles finish first.
+  setTimeout(()=>openInstallCoach('first_boot'),50);
+}
+
+// Renders the quiet persistent chip in the avatar menu when the
+// browser is not installed yet. Per Brandon's directive ("never a
+// repeating modal" + "a quiet, findable affordance remains"),
+// the chip is small, sits below the helper paragraph, and only
+// shows when there is genuinely work left to do.
+function renderInstallChip(){
+  const host=$('#install-chip-host');
+  if(!host)return;
+  if(isInstalled()){
+    host.innerHTML='';
+    return;
+  }
+  // If notifications are already granted but the app isn't
+  // installed (desktop Chrome with a granted exception, or a
+  // user who subscribed via the legacy flow), don't show the
+  // chip — push works for them as-is.
+  if(typeof Notification!=='undefined'&&Notification.permission==='granted'){
+    host.innerHTML='';
+    return;
+  }
+  const platform=installPlatform();
+  const label=platform==='ios-safari'
+    ?'\ud83d\udcf1 Set up notifications on iPhone'
+    :platform==='android-chrome'
+    ?'\ud83d\udcf1 Set up notifications on Android'
+    :'\ud83d\udcf1 Set up notifications';
+  host.innerHTML=`
+    <button class="install-chip" id="install-chip-btn" type="button"
+      style="display:inline-flex;align-items:center;gap:8px;padding:7px 12px;
+        margin:2px 0 10px;border-radius:99px;border:1px solid var(--accent-soft);
+        background:var(--accent-soft);color:var(--accent);font-size:12px;
+        font-weight:700;letter-spacing:.01em">
+      ${label}
+    </button>`;
+  $('#install-chip-btn').onclick=()=>{
+    funnelEmit('install_chip_tapped',{meta:{platform}});
+    openInstallCoach('chip');
+  };
+}
+
+// Install-completed detection. When the user backgrounds the app
+// (e.g. goes to install), then returns, the display-mode may have
+// flipped to standalone. We poll on `visibilitychange` so the
+// funnel gets a clean `install_completed` event without waiting
+// for the next page load. Best-effort.
+document.addEventListener('visibilitychange',async()=>{
+  if(document.visibilityState!=='visible')return;
+  try{
+    if(localStorage.getItem(INSTALL_FIRSTPROMPT_LS)==='1'&&isInstalled()){
+      localStorage.setItem(INSTALL_DISMISSED_LS,'1');
+      funnelEmit('install_completed');
+    }
+  }catch(_){}
+});
 
 /* ---- PHA-1872: entity graph — entity page + cmd-k search palette ---- */
 /* Route: /entity/:id (design doc §10.2 deep_links + nav are id-based). */

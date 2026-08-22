@@ -124,6 +124,22 @@ CREATE TABLE IF NOT EXISTS notification_log (
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_notification_log_user ON notification_log(user_id, created_at DESC);
+-- v0.1.22: install-funnel telemetry (PHA-2219). Every step the
+-- install coach emits lands here as a row; the analytics funnel
+-- pipeline (PHA-2210) consumes these rows to build the
+-- invite → accepted → installed → push-enabled funnel. Steps are
+-- intentionally a closed enum (validated at the route handler) so
+-- dashboards can group on step without parsing free text.
+CREATE TABLE IF NOT EXISTS install_funnel_events (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  step TEXT NOT NULL,
+  platform TEXT,
+  meta TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_install_funnel_user ON install_funnel_events(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_install_funnel_step ON install_funnel_events(step, created_at DESC);
 `);
 
 const app = express();
@@ -1982,6 +1998,52 @@ app.post('/api/notify', auth, async (req, res) => {
   if (!target) return res.status(404).json({ error: 'unknown_user' });
   const result = await notify(target.id, payload, { force: !!body.force });
   res.json({ userId: target.id, username: target.username, ...result });
+});
+
+// ---- /api/funnel/install (PHA-2219) ----
+// Auth-gated funnel event intake for the install coach. The client
+// emits a row per step; PHA-2210 (analytics funnel umbrella) reads
+// these rows to compute install-rate / time-to-install /
+// permission-grant-rate. We deliberately do NOT add a get-list
+// endpoint here — funnel data is for the analytics worker, not the
+// SPA. If the SPA later needs to read its own funnel state, expose
+// it via /api/me/install-funnel on a separate route.
+//
+// Body shape:
+//   { step: <enum>, platform?: <string>, meta?: <object> }
+// step is REQUIRED and must be one of:
+//   prompt_shown, instructions_opened, dismissed, install_chip_tapped,
+//   install_completed, permission_requested, permission_granted,
+//   permission_denied, first_push_delivered
+// Unknown steps return 400 (we'd rather fail loudly on typos in the
+// client than silently pollute the funnel with junk rows).
+const INSTALL_FUNNEL_STEPS = new Set([
+  'prompt_shown', 'instructions_opened', 'dismissed',
+  'install_chip_tapped', 'install_completed',
+  'permission_requested', 'permission_granted', 'permission_denied',
+  'first_push_delivered',
+]);
+app.post('/api/funnel/install', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const body = req.body || {};
+  const step = typeof body.step === 'string' ? body.step : '';
+  if (!INSTALL_FUNNEL_STEPS.has(step)) {
+    return res.status(400).json({
+      error: 'invalid_step',
+      allowed: Array.from(INSTALL_FUNNEL_STEPS).sort(),
+    });
+  }
+  const platform = typeof body.platform === 'string' && body.platform.length <= 32
+    ? body.platform : null;
+  let metaJson = null;
+  if (body.meta && typeof body.meta === 'object') {
+    try { metaJson = JSON.stringify(body.meta); } catch (_) { metaJson = null; }
+  }
+  db.prepare(`INSERT INTO install_funnel_events (user_id, step, platform, meta)
+              VALUES (?,?,?,?)`)
+    .run(me.id, step, platform, metaJson);
+  res.json({ ok: true, step });
 });
 
 // ---- /api/services/health (PHA-1623) ----
