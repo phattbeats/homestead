@@ -260,6 +260,26 @@ re-open Homestead from the Home Screen icon (not from Safari) and the
 "Enable push notifications" button in the avatar menu will request
 permission normally.
 
+### First-login install coach (v0.1.22+)
+
+Non-technical friends don't always know to install a PWA to the Home
+Screen. On the very first login from a fresh browser, Homestead
+auto-opens an install coach sheet (PHA-2219) with platform-specific
+instructions and an inline visual. Dismiss is sticky: a quiet
+"Set up notifications" chip lives in the avatar menu thereafter and
+opens the same sheet on tap — no nagging.
+
+The coach never asks for notification permission itself. Permission
+is requested only after the user installs, and only when they tap
+"Enable push notifications" in the avatar menu (iOS denies are
+painful to reverse, so we don't ask at the door).
+
+Every step of the funnel (prompt shown → instructions opened →
+installed → permission granted → first push delivered) is recorded
+in `install_funnel_events` via `POST /api/funnel/install`. The
+analytics dashboard (PHA-2210) reads those rows; until that ships,
+ad-hoc SQL on the table is fine.
+
 ### Testing without a real device
 
 ```bash
