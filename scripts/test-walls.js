@@ -44,6 +44,24 @@ while ((m = orderByRe.exec(wallsSrc))) {
 }
 assert(!badOrderBy, 'no ORDER BY sorts by anything other than created_at', badOrderBy);
 
+// ---- Guard (PHA-2153): the activity-feed query (recentActivity, backing
+// activity_recent in lib/snapshot.js) is held to the same chronological-
+// only contract as the wall itself. Scoped to that one function — the rest
+// of snapshot.js legitimately sorts tasks/events by due_date/date.
+console.log('Guard: activity-feed ORDER BY defensive grep');
+const snapshotSrc = fs.readFileSync(path.join(__dirname, '..', 'lib', 'snapshot.js'), 'utf8');
+const activityFnMatch = snapshotSrc.match(/function recentActivity\([^)]*\)\s*{[\s\S]*?\n}/);
+assert(!!activityFnMatch, 'recentActivity() found in lib/snapshot.js');
+const activityFnSrc = activityFnMatch ? activityFnMatch[0] : '';
+const snapshotOrderByRe = /ORDER BY\s+([^\n]+?)(?:LIMIT|`|\n)/gi;
+let sm;
+let badSnapshotOrderBy = null;
+while ((sm = snapshotOrderByRe.exec(activityFnSrc))) {
+  const clause = sm[1].trim();
+  if (!/created_at/i.test(clause)) { badSnapshotOrderBy = clause; break; }
+}
+assert(!badSnapshotOrderBy, 'recentActivity() ORDER BY sorts by created_at only', badSnapshotOrderBy);
+
 (async () => {
   const tmpDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-walls-test-'));
   process.env.DATA_DIR = tmpDataDir;
@@ -167,6 +185,62 @@ assert(!badOrderBy, 'no ORDER BY sorts by anything other than created_at', badOr
   assertEq(exactly1k.body.length, 1000, 'exactly-1k comment accepted');
 
   assertThrowsStatus(() => walls.createComment(p2.id, stranger.id, 'nope'), 404, 'non-member cannot comment');
+
+  // ---- Test 7: activity-feed wiring (PHA-2153) ----
+  console.log('\nTest 7: activity-feed wiring');
+  const snapshot = require('../lib/snapshot');
+  const notifications = require('../lib/notifications');
+
+  // emily is a media-club member too (added alongside brandon above minus
+  // the dup-group insert — give emily membership explicitly here). She
+  // joins AFTER walls.migrate()'s backfillPrefs already ran, so she gets
+  // the PHA-2218 default level ('mentions'), not a backfilled 'all' — set
+  // her explicitly to 'all' so this test still exercises the plain
+  // activity-feed wiring path independent of level-gating (that gating
+  // is Test 8's job).
+  db.prepare('INSERT OR IGNORE INTO user_groups (user_id, group_id) VALUES (?, ?)').run(emily.id, mcGroup.id);
+  notifications.setLevel(seeded.id, emily.id, 'all', 'user_groups');
+  // Disable quiet hours for this test (start===end means "no window" per
+  // isInQuietHours) — otherwise whether this suite passes depends on the
+  // wall-clock hour it happens to run at (default window is 21-8).
+  db.prepare('INSERT OR REPLACE INTO notification_prefs (user_id, quiet_start_hour, quiet_end_hour) VALUES (?, 0, 0)').run(emily.id);
+
+  const activityPost = walls.createPost('media-club', brandon.id, { kind: 'text', text_body: 'activity feed check' });
+
+  // recentActivity() is the exact function GET /api/me/snapshot's
+  // activity_recent field is built from — same source, same shape.
+  const emilyActivity = snapshot.recentActivity(db, emily.id, 25);
+  const activityRow = emilyActivity.find((a) => a.tag === `wall_post:media-club:bundle`);
+  assert(!!activityRow, 'wall post surfaces in a fellow member\'s activity_recent');
+  assert(!!activityRow && activityRow.url.includes('wall=media-club'), 'activity row url carries the wall slug');
+  assert(!!activityRow && activityRow.url.includes(activityPost.id), 'activity row url carries the post id');
+  assertEq(activityRow && activityRow.category, 'wall_post', 'activity row category is wall_post');
+  assertEq(activityRow && activityRow.delivered, true, 'activity row is marked delivered (level=all)');
+
+  const brandonActivity = snapshot.recentActivity(db, brandon.id, 25);
+  const selfRow = brandonActivity.find((a) => a.tag === `wall_post:media-club:bundle`);
+  assert(!selfRow, 'author does not get an activity row for their own post');
+
+  // ---- Test 8: PHA-2218 default level gates plain activity ----
+  console.log('\nTest 8: PHA-2218 default level (mentions) suppresses a plain post');
+  db.prepare("INSERT OR IGNORE INTO users (username, display, color, pass_hash, is_admin) VALUES ('kevin','Kevin','#111',?,0)").run('x');
+  const kevin = db.prepare('SELECT id FROM users WHERE username = ?').get('kevin');
+  db.prepare('INSERT OR IGNORE INTO user_groups (user_id, group_id) VALUES (?, ?)').run(kevin.id, mcGroup.id);
+  db.prepare('INSERT OR REPLACE INTO notification_prefs (user_id, quiet_start_hour, quiet_end_hour) VALUES (?, 0, 0)').run(kevin.id);
+  assertEq(notifications.getLevel(seeded.id, kevin.id), 'mentions', 'freshly-joined member defaults to level=mentions');
+
+  const plainPost = walls.createPost('media-club', brandon.id, { kind: 'text', text_body: 'no mention here' });
+  const kevinActivity = snapshot.recentActivity(db, kevin.id, 25);
+  const kevinRow = kevinActivity.find((a) => a.url && a.url.includes(plainPost.id));
+  assert(!!kevinRow, 'a skip row still lands in notification_log for audit (recentActivity does not filter delivered)');
+  assertEq(kevinRow && kevinRow.delivered, false, 'level=mentions with no @mention is not delivered');
+
+  const mentionPost = walls.createPost('media-club', brandon.id, { kind: 'text', text_body: 'hey @kevin check this out' });
+  const kevinActivity2 = snapshot.recentActivity(db, kevin.id, 25);
+  const mentionRow = kevinActivity2.find((a) => a.url && a.url.includes(mentionPost.id));
+  assert(!!mentionRow, 'mention row lands for the level=mentions user');
+  assertEq(mentionRow && mentionRow.delivered, true, '@mention is delivered even under level=mentions');
+  assertEq(mentionRow && mentionRow.category, 'mention', 'mention row category is mention');
 
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
