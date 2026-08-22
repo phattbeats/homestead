@@ -8,6 +8,10 @@ Mobile-first PWA — install it to a phone home screen and it behaves like a
 native app. Single-container Node app with SQLite; no external runtime
 dependencies.
 
+## Commit authorship
+
+Homestead accepts commits authored only by `phattbeats <obiwouldjablowme@protonmail.com>` and rejects every `Co-authored-by` trailer. See [the authorship policy](docs/AUTHORSHIP.md) before contributing.
+
 ## Features
 
 - **Tasks** — assign to any user or to Everyone. Due dates, repeat
