@@ -49,6 +49,7 @@ const eventsDispatch = require('./lib/events-dispatch');
 const media = require('./lib/media');
 const walls = require('./lib/walls');
 const notifications = require('./lib/notifications');
+const analytics = require('./lib/analytics');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -86,6 +87,7 @@ media.migrate(db);
 // media_uploads(id), so it runs after userModel.migrate and media.migrate.
 walls.migrate(db);
 walls.seed(db);
+analytics.migrate(db);
 
 // v0.1.0: web push subscriptions (PHA-1619)
 db.exec(`
@@ -167,6 +169,13 @@ app.locals.drawerStreakMap = new Map();
 // breakers independently.
 app.locals.eventsStreakMap = new Map();
 
+function recordSessionStart(req, user, device) {
+  if (!req.session || req.session.analyticsSessionStartedAt) return;
+  req.session.analyticsSessionStartedAt = Date.now();
+  analytics.logEvent(db, { userId: user.id, kind: 'session_started', subjectType: 'user', subjectId: user.id, meta: { device } });
+  analytics.logFirst(db, { userId: user.id, kind: 'first_login', subjectType: 'user', subjectId: user.id, meta: { device } });
+}
+
 // ---- auth middleware ----
 // Four-layer auth:
 //   1. Bearer PAT (PHA-1617.2) — `Authorization: Bearer homestead_pat_...`
@@ -235,6 +244,7 @@ function authenticate(req, res, next) {
       isAdmin: !!u.is_admin,
       authProvider: 'header_trust',
     };
+    recordSessionStart(req, u, 'header_trust');
     return next();
   }
   if (req.session.user) return next();
@@ -389,6 +399,8 @@ async function notify(userId, payload, opts = {}) {
       await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, json, { TTL: 60 * 60 * 24 });
       db.prepare('UPDATE push_subscriptions SET last_success_at=datetime(\'now\'), failure_count=0 WHERE id=?').run(s.id);
       delivered++;
+      analytics.logEvent(db, { userId, kind: 'push_delivered', subjectType: 'push_subscription', subjectId: s.id,
+        meta: { category, request_tag: payload.tag || category } });
     } catch (err) {
       errors++;
       const status = err.statusCode || 0;
@@ -397,6 +409,10 @@ async function notify(userId, payload, opts = {}) {
       } else {
         db.prepare('UPDATE push_subscriptions SET last_failure_at=datetime(\'now\'), failure_count=failure_count+1 WHERE id=?').run(s.id);
       }
+      if (status !== 404 && status !== 410) analytics.logEvent(db, {
+        userId, kind: 'push_failed', subjectType: 'push_subscription', subjectId: s.id,
+        meta: { category, status_code: status, error: err.message || null },
+      });
     }
   }
   logNotification(userId, category, payload, delivered, delivered === 0 && errors > 0 ? 'all_endpoints_failed' : null);
@@ -464,9 +480,19 @@ app.post('/api/login', (req, res) => {
     isAdmin: !!u.is_admin,
     authProvider: 'password',
   };
+  recordSessionStart(req, u, 'password');
   res.json({ user: req.session.user });
 });
-app.post('/api/logout', (req, res) => req.session.destroy(() => res.json({ ok: true })));
+app.post('/api/logout', (req, res) => {
+  const username = req.session && req.session.user && req.session.user.username;
+  const startedAt = req.session && req.session.analyticsSessionStartedAt;
+  const user = username && userModel.getMe(db, username);
+  req.session.destroy(() => {
+    if (user) analytics.logEvent(db, { userId: user.id, kind: 'session_ended', subjectType: 'user', subjectId: user.id,
+      durationSeconds: Math.max(0, Math.round((Date.now() - (startedAt || Date.now())) / 1000)) });
+    res.json({ ok: true });
+  });
+});
 app.get('/api/logout', (req, res) => res.status(405).json({ error: 'method_not_allowed', allow: 'POST' }));
 app.get('/api/me', (req, res) => {
   // Header-trust probe (PHA-1574): when SWAG forwards X-authentik-username,
@@ -888,6 +914,15 @@ app.post('/api/drawer', auth, async (req, res) => {
     message,
     endpointId,
     conversationId,
+  });
+  analytics.logEvent(db, {
+    userId: me.id,
+    kind: result.ok ? 'drawer_call_completed' : 'drawer_call_failed',
+    subjectType: 'agent_endpoint',
+    subjectId: endpointId,
+    durationSeconds: Math.round((result.durationMs || 0) / 1000),
+    meta: { status_code: result.lastStatus || null, request_id: result.requestId || null,
+      conversation_id: conversationId, error: result.lastError || null },
   });
 
   // Update the streak after dispatch.

@@ -69,6 +69,7 @@ assert(!badSnapshotOrderBy, 'recentActivity() ORDER BY sorts by created_at only'
   const userModel = require('../lib/user-model');
   const media = require('../lib/media');
   const walls = require('../lib/walls');
+  const analytics = require('../lib/analytics');
 
   const dbPath = path.join(tmpDataDir, 'life.db');
   const db = new Database(dbPath);
@@ -76,6 +77,26 @@ assert(!badSnapshotOrderBy, 'recentActivity() ORDER BY sorts by created_at only'
   media.migrate(db);
   walls.migrate(db);
   walls.seed(db);
+  // PHA-2210: dual-write helpers in lib/walls.js (wall_post_created,
+  // wall_reaction_added, wall_comment_added) hit both notification_log
+  // and analytics_events. Mirror the inline CREATE TABLE in server.js so
+  // the test DB has both — the analytics layer is best-effort so a missing
+  // table wouldn't fail the test, but the noise in stderr is ugly.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notification_log (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      category TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT,
+      url TEXT,
+      tag TEXT,
+      delivered INTEGER NOT NULL DEFAULT 0,
+      skipped_reason TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+  analytics.migrate(db);
 
   const brandon = db.prepare('SELECT id FROM users WHERE username = ?').get('brandon');
   const emily = db.prepare('SELECT id FROM users WHERE username = ?').get('emily');
