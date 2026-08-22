@@ -86,15 +86,18 @@ function freshStack() {
       id INTEGER PRIMARY KEY, actor TEXT, verb TEXT, target TEXT,
       ts TEXT DEFAULT (datetime('now')), payload TEXT
     );
-    INSERT OR IGNORE INTO tasks (id, title, assignee, due_date, done)
-      VALUES (1, 'Take out trash', 'brandon', date('now'), 0);
-    INSERT OR IGNORE INTO events (id, title, date, time, owner)
-      VALUES (1, 'Movie night', date('now'), '20:00', 'all');
     INSERT OR IGNORE INTO groups (id, name, display_name)
       VALUES (1, 'admins', 'Admins');
     INSERT OR IGNORE INTO groups (id, name, display_name)
       VALUES (2, 'homestead-users', 'Users');
   `);
+  // Match snapshot.build's local-time definition of "today". SQLite's
+  // date('now') is UTC and diverges near local midnight.
+  const today = snapshot.isoDateLocal(Date.now());
+  db.prepare(`INSERT OR IGNORE INTO tasks (id, title, assignee, due_date, done)
+    VALUES (1, 'Take out trash', 'brandon', ?, 0)`).run(today);
+  db.prepare(`INSERT OR IGNORE INTO events (id, title, date, time, owner)
+    VALUES (1, 'Movie night', ?, '20:00', 'all')`).run(today);
   db.prepare('INSERT OR IGNORE INTO user_groups (user_id, group_id) VALUES (?, ?)').run(1, 1);
   db.prepare('INSERT OR IGNORE INTO user_groups (user_id, group_id) VALUES (?, ?)').run(1, 2);
   return { db, tmpDir };
