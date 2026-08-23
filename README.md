@@ -371,6 +371,59 @@ thing the user has to do to unlock all four.
   field, so the envelope can't drift between callers. See the
   meta-agent-socket design doc §7 for the full schema.
 
+## MCP server (PHA-1617.8, v0.1.19)
+
+**`POST /api/mcp`** — Model Context Protocol streamable HTTP endpoint
+(2025-06-18 spec). JSON-RPC 2.0 in, JSON-RPC 2.0 out. Any MCP-speaking
+harness (Claude Desktop, OpenClaw, custom agent) can discover Homestead's
+tools and resources and call them without writing a custom client.
+
+- **Auth**: same `authenticate` middleware as the REST API — session cookie
+  or `Authorization: Bearer homestead_pat_...` PAT. Internal loopback
+  preserves the auth context so tool calls work identically whether the
+  MCP client sent a cookie or a bearer.
+- **8 tools** (thin wrappers over the existing REST surface):
+  - `homestead_get_me` — the authenticated user profile.
+  - `homestead_list_tasks` — list with optional `assignee`, `due_before`,
+    `include_done` filters.
+  - `homestead_create_task` — create a task (`title` required).
+  - `homestead_update_task` — partial-update a task by id.
+  - `homestead_toggle_task` — toggle done/not-done; handles take-turns
+    rotation when `recur` is set.
+  - `homestead_list_events` — list native events with optional `from`/`to`.
+  - `homestead_create_event` — create a native event.
+  - `homestead_list_services` — list service tiles with `visibility`
+    (`mine` / `shared` / `all`).
+- **3 resources** (read snapshots):
+  - `homestead://me` — authenticated user profile.
+  - `homestead://calendar/merged.ics` — RFC 5545 VCALENDAR of the merged
+    calendar (today − 30 d to today + 90 d).
+  - `homestead://activity/recent` — last 50 activity events (backend
+    depends on PHA-1622; v0 returns a structured placeholder).
+- **Transport**: POST is JSON-RPC. GET returns 405 with `Allow: POST`.
+  DELETE is a no-op 200 (v0 is stateless). The server accepts
+  `Accept: application/json, text/event-stream` so clients that need
+  streaming can wire up cleanly when v0.1 adds long-running tools.
+- **Wire shape**: standard JSON-RPC 2.0. Errors use MCP-defined codes
+  (`-32601 METHOD_NOT_FOUND`, `-32602 INVALID_PARAMS`, `-32002
+  RESOURCE_NOT_FOUND`). Tool execution failures come back as
+  `result.isError: true` so the client can choose to retry or surface.
+- **More**: design doc §5. Implementation: `lib/mcp-server.js` + the
+  `lib/mcp-ical.js` multi-event VCALENDAR generator. Tests: 75
+  assertions in `scripts/test-mcp-server.js`.
+
+### Quick handshake
+
+```bash
+curl -X POST https://life.phatt.vip/api/mcp \
+  -H "Authorization: Bearer $HOMESTEAD_PAT" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"my-agent","version":"0.0.1"}}}'
+```
+
+Returns `serverInfo.name = "homestead"` and the negotiated capabilities.
+
 ## Quick start (Docker)
 
 ```bash

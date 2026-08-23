@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.4.2 (2026-08-23) — MCP server merged into release (PHA-2469 / PHA-1617.8)
+
+- **`feature/pha-1901-mcp-server` merged into the release line.** The
+  streamable-HTTP MCP endpoint at `POST /api/mcp` (see the v0.1.19 /
+  PHA-1901 entry below for the full implementation writeup) had been
+  implemented and tested on its own branch since 2026-08-12 but never
+  landed on `main`/the release branch — flagged as a release-gate
+  blocker during the PHA-1617 closeout review. This entry records the
+  merge itself; no functional changes beyond re-verifying auth (PAT +
+  session) and the exposed tool surface (8 `homestead_*` tools, 3
+  resources — unchanged from the original implementation) against the
+  current release branch's user/module/scope model.
+
 ## v0.4.1 (2026-08-21) — Events webhook outbound dispatcher (PHA-1900 / PHA-1617.7)
 
 Design doc §6.1/6.5. Depends on PHA-1617.4 (`agent_endpoints`, already
@@ -478,6 +491,67 @@ PHA-2218 issue before implementation started.
   the token, confirm subsequent list filters it out and a
   Bearer auth attempt with the now-revoked plaintext returns
   401. Wired into `npm run test:smoke`.
+
+## v0.1.19 (2026-08-12) — PHA-1901 (PHA-1617.8)
+
+- **MCP server at `POST /api/mcp`** (streamable HTTP, design doc §5).
+  Implements the Model Context Protocol 2025-06-18 transport — JSON-RPC
+  2.0 messages in, JSON-RPC 2.0 messages out. Any MCP-speaking harness
+  (Claude Desktop, OpenClaw, custom agent) can advertise Homestead's
+  tools and resources to its model without writing a custom client.
+  - **8 tools** (thin wrappers over the existing REST surface):
+    `homestead_get_me`, `homestead_list_tasks`, `homestead_create_task`,
+    `homestead_update_task`, `homestead_toggle_task`,
+    `homestead_list_events`, `homestead_create_event`,
+    `homestead_list_services`. Each tool's `inputSchema` is JSON Schema;
+    validation runs on the way in; errors return `-32602 INVALID_PARAMS`
+    with the offending field named.
+  - **3 resources** (read snapshots):
+    `homestead://me` (authenticated user profile),
+    `homestead://calendar/merged.ics` (RFC 5545 VCALENDAR of the merged
+    calendar; default window = today − 30 d to today + 90 d),
+    `homestead://activity/recent` (last 50 activity events — backend
+    depends on PHA-1622; v0 returns a structured placeholder so the
+    resource shape is stable and clients can wire up before the
+    backend lands).
+  - **Auth**: same `authenticate` middleware as the REST API (PAT
+    bearer or session cookie). The internal loopback forwards the
+    session cookie + Authorization header so PAT-bearer-only agents
+    work without any session state.
+  - **Streamable HTTP transport**: POST handles JSON-RPC requests
+    (single or batch). GET returns 405 with `Allow: POST`. DELETE
+    returns 200 (v0 is stateless; the spec allows servers to no-op
+    DELETE if they don't maintain a session). v0 returns JSON only;
+    the transport still accepts `Accept: text/event-stream` so
+    clients that need streaming can wire up cleanly when v0.1
+    adds long-running tools.
+  - **Notification handling**: requests with no `id` (e.g. the
+    standard `notifications/initialized` handshake message) return
+    HTTP 202 with no body. All-notification batches return 202.
+- **`lib/mcp-server.js` — the dispatcher, tool/resource registries,
+  and JSON-RPC helpers.** Pure JS, no Express; routes are wired in
+  `server.js`. The tool/resource handlers are thin wrappers — each
+  issues an internal HTTP loopback to the same server (the route is
+  reachable, the auth middleware has populated `req.session.user`,
+  and the call is identical to an external client hitting the same
+  endpoint). Zero risk of validation drift between the REST API
+  and the MCP surface.
+- **`lib/mcp-ical.js` — RFC 5545 multi-event VCALENDAR generator**
+  for the merged calendar resource. Reuses `buildVCalendar` from
+  `lib/caldav-source.js` so the wire shape matches the rest of the
+  CalDAV stack. UID format: `<provider>-<id>@homestead.local`.
+- **`scripts/test-mcp-server.js` — 75 acceptance assertions** covering
+  initialize handshake, tools/list + resources/list shape, full
+  tool round-trip (get_me → create_task → list_tasks → toggle_task →
+  update_task), resource read (homestead://me, merged.ics,
+  activity/recent placeholder), PAT bearer auth end-to-end, validation
+  errors (missing required, bad enum, unknown tool, unknown resource),
+  tool execution failure as `isError: true`, malformed JSON-RPC
+  envelopes, batch requests, notifications (HTTP 202), GET → 405,
+  unauthenticated → 401. No mocks — drives the live server.js
+  instance on an ephemeral port.
+- **`package.json` — `test` script now runs `test-mcp-server.js` last**
+  after the other 12 test suites. Full suite green.
 
 ## v0.1.18 (2026-08-12) — PHA-1902 (PHA-1617.9)
 

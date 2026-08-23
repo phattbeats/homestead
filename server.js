@@ -37,6 +37,7 @@ const agentTokens = require('./lib/agent-tokens');
 const agentEndpoints = require('./lib/agent-endpoints');
 const appApiLog = require('./lib/app-api-log');
 const appInstall = require('./lib/app-install');
+const mcpServer = require('./lib/mcp-server');
 
 const healthChecker = require('./lib/health-checker');
 const entityGraph = require('./lib/sync/_schema');
@@ -836,6 +837,23 @@ app.delete('/api/users/:username/agent-endpoints/:id', auth, requireAdmin, (req,
   const removed = agentEndpoints.remove(db, req.params.id, { ownerUserId: target.id });
   if (!removed) return res.status(404).json({ error: 'not found' });
   res.json({ ok: true });
+});
+
+// ---- PHA-1617.8: MCP server (streamable HTTP) ----
+//
+// Model Context Protocol endpoint at POST /api/mcp. Auth is the same
+// `authenticate` middleware (PAT bearer or session cookie); each tool /
+// resource call is a thin wrapper over the existing REST surface reached
+// via an internal HTTP loopback. See lib/mcp-server.js for the JSON-RPC
+// 2.0 dispatcher + tool/resource registry (design doc §5).
+const mcpRoutes = mcpServer.routes(() => server && server.address() && server.address().port);
+let server = null; // bound by `app.listen(...)` below; tests bind via http.createServer(app) and call __setLoopbackServer.
+app.post('/api/mcp', auth, mcpRoutes.post);
+app.get('/api/mcp', auth, mcpRoutes.get);
+app.delete('/api/mcp', auth, (_req, res) => {
+  // Streamable-HTTP spec: servers that maintain a session MUST support
+  // DELETE to terminate. v0 is stateless, so DELETE is a no-op 200.
+  res.status(200).json({ ok: true });
 });
 
 // ---- PHA-1617.6: drawer backend — outbound POST + SSE consumer + retry/circuit breaker ----
@@ -2475,6 +2493,13 @@ if (require.main === module) {
   }
   startScheduler();
   startHealthChecker();
-  app.listen(PORT, () => console.log(`Homestead on :${PORT}`));
+  // Capture the bound server so the MCP loopback (getPort() at the
+  // /api/mcp route) has a real port outside of the test harness, which
+  // binds via http.createServer(app) + __setLoopbackServer instead.
+  server = app.listen(PORT, () => console.log(`Homestead on :${PORT}`));
 }
 module.exports = app;
+// PHA-1617.8: tests bind via http.createServer(app) and call this to
+// register the bound server so the MCP handler's internal loopback can
+// read the listening port. Idempotent + safe in production.
+module.exports.__setLoopbackServer = (s) => { server = s; };
