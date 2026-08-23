@@ -11,8 +11,13 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const Database = require('better-sqlite3');
+const bcrypt = require('bcryptjs');
 
 const userModel = require('../lib/user-model');
+
+// Fresh database tests must exercise the required non-default bootstrap
+// path; individual tests below override this when checking the guard.
+process.env.ADMIN_PASSWORD = 'user-model-test-admin-password';
 
 let pass = 0;
 let fail = 0;
@@ -35,6 +40,36 @@ function freshDb() {
 }
 
 console.log('PHA-1618 user-model tests\n');
+
+// ---- Test 0: insecure bootstrap passwords are rejected ----
+{
+  console.log('Test 0: insecure admin bootstrap is rejected');
+  const saved = process.env.ADMIN_PASSWORD;
+  for (const candidate of ['', 'changeme']) {
+    process.env.ADMIN_PASSWORD = candidate;
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-insecure-admin-'));
+    const db = new Database(path.join(tmpDir, 'life.db'));
+    let threw = false;
+    try { userModel.migrate(db); } catch (err) { threw = /ADMIN_PASSWORD/.test(err.message); }
+    assert(threw, `rejects ${candidate || 'blank'} ADMIN_PASSWORD`);
+    db.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+  process.env.ADMIN_PASSWORD = saved;
+}
+
+// ---- Test 0b: an existing default-hash admin stops boot ----
+{
+  console.log('Test 0b: existing default admin hash stops boot');
+  const { db, tmpDir } = freshDb();
+  db.prepare('UPDATE users SET pass_hash = ? WHERE username = ?')
+    .run(bcrypt.hashSync('changeme', 10), 'admin');
+  let threw = false;
+  try { userModel.migrate(db); } catch (err) { threw = /insecure default password/.test(err.message); }
+  assert(threw, 'refuses an existing admin hash that matches changeme');
+  db.close();
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+}
 
 // ---- Test 1: fresh install seeds ----
 {

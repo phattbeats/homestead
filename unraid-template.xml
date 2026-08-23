@@ -15,7 +15,7 @@ Features:
 
 Storage: a single SQLite file at /data/life.db. Mount /mnt/user/appdata/homestead from the host to keep data across image upgrades.
 
-Seed password (ADMIN_PASSWORD) bootstraps the admin account; admin then creates household users via Settings → Users.
+Set a unique ADMIN_PASSWORD before the first boot. Homestead refuses to start if it is blank or the historical `changeme` default. The seed password bootstraps the admin account; admin then creates household users via Settings → Users.
 
 If you serve Homestead through SWAG (or any TLS-terminating reverse proxy) and want services launched from inside the iframe to work, strip their X-Frame-Options / Content-Security-Policy headers and add `frame-ancestors 'self' https://&lt;your-hostname&gt;`. See the README for the nginx snippet.
 
@@ -32,6 +32,6 @@ Image:  ghcr.io/phattbeats/homestead</Description>
   <Config Name="WebUI Port" Target="3081" Default="3081" Mode="tcp" Description="Host port mapped to the container's internal 3080." Type="Port" Display="always" Required="true" Mask="false">3081</Config>
   <Config Name="Data Path" Target="/data" Default="/mnt/user/appdata/homestead" Mode="rw" Description="Host path that persists the SQLite database and any future uploads." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/homestead</Config>
   <Config Name="SESSION_SECRET" Target="SESSION_SECRET" Default="" Mode="" Description="Long random string used to sign session cookies. Generate one with `openssl rand -hex 32` BEFORE first run; the value is only used to sign cookies and can be set anytime, but rotating it will log everyone out." Type="Variable" Display="always" Required="true" Mask="true"></Config>
-  <Config Name="ADMIN_PASSWORD" Target="ADMIN_PASSWORD" Default="changeme" Mode="" Description="Seed password for the `admin` user — only used on first DB creation. After first login, create real household users via Settings → Users and rotate their passwords in-app." Type="Variable" Display="always" Required="true" Mask="true">changeme</Config>
+  <Config Name="ADMIN_PASSWORD" Target="ADMIN_PASSWORD" Default="" Mode="" Description="REQUIRED before first boot: a long unique seed password for the `admin` user. Blank values and the old `changeme` default are rejected. Only used when the database is created; rotate later in-app." Type="Variable" Display="always" Required="true" Mask="true"></Config>
   <Config Name="Extra Arguments" Target="extra_args" Default="" Mode="" Description="Optional: extra docker run flags (e.g. --memory, --shm-size)." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
 </Container>

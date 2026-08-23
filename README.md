@@ -384,21 +384,22 @@ docker run -d \
   -p 3081:3080 \
   -v /path/to/data:/data \
   -e SESSION_SECRET="$(openssl rand -hex 32)" \
-  -e ADMIN_PASSWORD=changeme \
+  -e ADMIN_PASSWORD="$(openssl rand -base64 36)" \
   ghcr.io/phattbeats/homestead:latest
 ```
 
-Browse to `http://localhost:3081/`. Log in as `admin` with the seed
+Browse to `http://localhost:3081/`. Log in as `admin` with the unique seed
 password, then go to Settings → Users to create household accounts.
 
 ### First-run setup
 
-1. **Log in as `admin`** with the `ADMIN_PASSWORD` you set. The admin
-   account is bootstrapped by the env var on the very first run only —
-   change this password in-app immediately if it was left at the default.
-2. **Create household users** from Settings → Users. Set a username and a
+1. **Before first boot, set `ADMIN_PASSWORD` to a unique value.** Blank
+   values and the historical `changeme` default are rejected at startup.
+2. **Log in as `admin`** with the `ADMIN_PASSWORD` you set. The admin
+   account is bootstrapped by the env var on the very first run only.
+3. **Create household users** from Settings → Users. Set a username and a
    temporary password for each person.
-3. **Each user logs in** and changes their temporary password in-app.
+4. **Each user logs in** and changes their temporary password in-app.
    After that, password rotation is a regular user setting, not an env
    var.
 
@@ -441,11 +442,12 @@ tile and switch "Open mode" to **New tab**.
 | Env var            | Required     | Purpose                                                       |
 |--------------------|--------------|---------------------------------------------------------------|
 | `SESSION_SECRET`   | yes          | Long random string used to sign session cookies.             |
-| `ADMIN_PASSWORD`   | first run only | Seed password for the `admin` user on first DB creation.    |
+| `ADMIN_PASSWORD`   | yes, first boot | Long unique seed password for `admin`; blank and `changeme` are rejected. |
 | `DATA_DIR`         | no           | Where the SQLite file lives. Defaults to `/data`.            |
 | `PORT`             | no           | In-container listen port. Defaults to `3080`.                 |
 
-The seed password is read **only** when the database is first created. Use
+The seed password is read **only** when the database is first created. Set it
+before first boot, then use
 the in-app password change (admin: Settings → Users) to rotate a user's
 password for real.
 

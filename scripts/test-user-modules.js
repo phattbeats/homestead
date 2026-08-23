@@ -24,6 +24,9 @@ const Database = require('better-sqlite3');
 const userModel = require('../lib/user-model');
 const modules = require('../lib/modules');
 
+// Fresh-database migration tests need an explicit secure bootstrap password.
+process.env.ADMIN_PASSWORD = 'user-modules-test-admin-password';
+
 let pass = 0;
 let fail = 0;
 function ok(label) { pass++; console.log(`  ✓ ${label}`); }
