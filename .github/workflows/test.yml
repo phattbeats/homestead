@@ -25,10 +25,21 @@ jobs:
       - name: Install Chromium for browser smoke tests
         run: npx playwright install --with-deps chromium
 
-      - name: Run test suite
+      - name: Run unit test suite
         run: npm test
 
-      # Most existing smoke scripts require deployment-only secrets. This
-      # browser regression is self-contained and must run on every PR.
-      - name: Run SPA page-error regression smoke test
-        run: node scripts/smoke-spa-pageerrors.js
+      # PHA-2501 standing policy — Definition of Done guard. Runs the
+      # browser smoke chain (includes both the SPA page-error regression
+      # and the post-login mobile-viewport screenshot smoke) on every PR
+      # so a closed green check requires artifact-grade evidence. The
+      # browser smoke saves a 390x844 PNG of the post-login home surface
+      # into verify-out/ for human cross-check on the PR page.
+      - name: Run browser smoke suite
+        run: npm run test:smoke
+
+      - name: Upload verify-out screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-out
+          path: verify-out/
