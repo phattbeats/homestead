@@ -28,14 +28,19 @@ jobs:
       - name: Run unit test suite
         run: npm test
 
-      # PHA-2501 standing policy — Definition of Done guard. Runs the
-      # browser smoke chain (includes both the SPA page-error regression
-      # and the post-login mobile-viewport screenshot smoke) on every PR
-      # so a closed green check requires artifact-grade evidence. The
-      # browser smoke saves a 390x844 PNG of the post-login home surface
-      # into verify-out/ for human cross-check on the PR page.
-      - name: Run browser smoke suite
-        run: npm run test:smoke
+      # PHA-2501 standing policy — Definition of Done guard. Two browser
+      # smokes run on every PR: (1) the SPA page-error regression guard
+      # (catches duplicate top-level declarations like PHA-2494), and
+      # (2) the post-login mobile-viewport screenshot smoke (catches
+      # broken renders of the login surface). Both must pass for the
+      # PR to merge. The wider `npm run test:smoke` chain is left for
+      # local + release-gate use; it includes deployment-secret-bound
+      # smokes that don't run in PR-only CI.
+      - name: Run SPA page-error regression smoke
+        run: node scripts/smoke-spa-pageerrors.js
+
+      - name: Run post-login mobile screenshot smoke
+        run: node scripts/smoke-postlogin-screenshot.js
 
       - name: Upload verify-out screenshots
         if: always()
