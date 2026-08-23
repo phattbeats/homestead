@@ -2702,7 +2702,7 @@ app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 // browser — everything else in lib/ is server-only DB/HTTP logic.
 app.get('/lib/scope-display.js', (req, res) => {
   res.type('application/javascript');
-  res.sendFile(path.join(__dirname, 'lib', 'scope-display.js'));
+  res.sendFile('lib/scope-display.js', { root: __dirname });
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -2718,9 +2718,12 @@ app.get(/^\/invite\/([A-Fa-f0-9]{16,64})$/, (req, res) => {
 app.get('/favicon.ico', (req, res) => {
   res.set('Content-Type', 'image/svg+xml');
   res.set('Cache-Control', 'public, max-age=86400');
-  res.sendFile(path.join(__dirname, 'public', 'icon.svg'));
+  res.sendFile('public/icon.svg', { root: __dirname });
 });
-app.get(/^(?!\/api).*/, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+// SPA fallback — every non-/api route renders index.html. sendFile requires
+// a { root } option on Node 22 + send 1.2.x, otherwise the static path
+// resolution fails with ENOENT and the SPA catch-all returns 404.
+app.get(/^(?!\/api).*/, (req, res) => res.sendFile('public/index.html', { root: __dirname }));
 
 const PORT = process.env.PORT || 3080;
 // ---- v0.0.6 health checker boot (PHA-1623) ----
