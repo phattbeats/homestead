@@ -37,6 +37,8 @@ const agentTokens = require('./lib/agent-tokens');
 const agentEndpoints = require('./lib/agent-endpoints');
 const appApiLog = require('./lib/app-api-log');
 const appInstall = require('./lib/app-install');
+const connectorInstall = require('./lib/connector-install');
+const connectorWizard = require('./lib/connector-wizard');
 
 const healthChecker = require('./lib/health-checker');
 const entityGraph = require('./lib/sync/_schema');
@@ -72,6 +74,10 @@ appApiLog.migrate(db);
 // users(id), so it runs after userModel.migrate; no dependency on
 // installed_apps (consent tokens exist before an app is installed).
 appInstall.migrate(db);
+// Connector Forge's immutable specs, encrypted per-user secrets, installs,
+// and surface-cache tables. This must boot before the wizard routes below.
+connectorInstall.migrate(db);
+connectorWizard.migrate(db);
 // PHA-1617.4: per-user, per-harness endpoint config (drawer POST +
 // events webhook URLs). HMAC secret generated on insert. FK to users;
 // migrated after userModel so the FK resolves, same pattern as
@@ -746,6 +752,87 @@ app.post('/api/apps/:key/reinstall', auth, (req, res) => {
   } catch (err) {
     sendAppInstallError(res, err);
   }
+});
+
+// ---- Connector Forge form wizard (PHA-2448) -----------------------------
+// The browser receives template metadata and a redacted preview only. It
+// never receives a ConnectorSpec factory or a stored plaintext API key.
+function sendConnectorWizardError(res, err) {
+  if (err instanceof connectorWizard.ConnectorWizardError || err instanceof connectorInstall.ConnectorInstallError || err instanceof Error && err.name === 'ConnectorSpecError') {
+    return res.status(err.status || 422).json({ error: err.code || 'validation_failed', message: err.message, ...(err.extra || {}) });
+  }
+  console.error('[connector-wizard] unexpected error:', err);
+  return res.status(500).json({ error: 'internal_error' });
+}
+function connectorMe(req, res) {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) { res.status(401).json({ error: 'unknown_user' }); return null; }
+  return me;
+}
+function wizardValues(req) {
+  const body = req.body || {};
+  return {
+    baseUrl: body.baseUrl,
+    secretRef: body.secretRef,
+    installName: body.installName,
+    apiKey: body.apiKey,
+    localNetworkConsent: !!body.localNetworkConsent,
+    homesteadOrigin: `${req.protocol}://${req.get('host')}`,
+  };
+}
+app.get('/api/connectors/templates', auth, (req, res) => {
+  // factories deliberately omitted — this is public picker metadata only.
+  res.json({ templates: require('./lib/connector-templates').listTemplates().map(({ factory, ...template }) => template) });
+});
+app.post('/api/connectors/preview', auth, (req, res) => {
+  try {
+    const result = connectorWizard.validate(req.body && req.body.templateId, wizardValues(req));
+    res.json({ ok: true, preview: result.preview });
+  } catch (err) { sendConnectorWizardError(res, err); }
+});
+app.post('/api/connectors/installations', auth, (req, res) => {
+  const me = connectorMe(req, res);
+  if (!me) return;
+  try {
+    const body = req.body || {};
+    const values = wizardValues(req);
+    const result = connectorWizard.validate(body.templateId, values);
+    let groupId = null;
+    if (body.visibility === 'group') {
+      groupId = Number(body.groupId);
+      if (!Number.isFinite(groupId)) throw new connectorWizard.ConnectorWizardError(422, 'group_required', 'Choose a group to share this connector with.');
+      const member = db.prepare('SELECT 1 FROM user_groups WHERE user_id = ? AND group_id = ?').get(me.id, groupId);
+      if (!member) throw new connectorWizard.ConnectorWizardError(403, 'group_not_available', 'You can only share with a group you belong to.');
+    }
+    const installation = connectorInstall.install(db, me.id, {
+      spec: result.spec,
+      baseUrl: result.baseUrl,
+      secretRef: result.secretRef,
+      secretPlaintext: values.apiKey,
+      installName: result.installName,
+      visibility: body.visibility === 'group' ? 'group' : 'private',
+      source: 'builtin',
+    });
+    if (groupId !== null) {
+      connectorInstall.shareWithGroup(db, me.id, installation.id, groupId);
+    }
+    // Consent is durable but redacted: exact endpoint/field/surface summary,
+    // never the API key or its plaintext-derived values.
+    db.prepare('INSERT INTO connector_consent_log (user_id, installation_id, summary_json) VALUES (?, ?, ?)')
+      .run(me.id, installation.id, JSON.stringify(result.preview));
+    res.status(201).json({ installation: connectorInstall.publicView(connectorInstall.getInstallation(db, me.id, installation.id)), preview: result.preview });
+  } catch (err) { sendConnectorWizardError(res, err); }
+});
+app.get('/api/connectors/installations', auth, (req, res) => {
+  const me = connectorMe(req, res);
+  if (!me) return;
+  res.json({ installations: connectorInstall.getInstallationsForUser(db, me.id).map(connectorInstall.publicView) });
+});
+app.post('/api/connectors/installations/:id/uninstall', auth, (req, res) => {
+  const me = connectorMe(req, res);
+  if (!me) return;
+  try { res.json(connectorInstall.uninstall(db, me.id, Number(req.params.id))); }
+  catch (err) { sendConnectorWizardError(res, err); }
 });
 
 // ---- app activity log (PHA-2201.3 / PHA-2231) ----

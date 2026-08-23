@@ -1,0 +1,19 @@
+'use strict';
+(function(){
+  const $=(s)=>document.querySelector(s); const $$=(s)=>Array.from(document.querySelectorAll(s));
+  let templates=[], selected=null, preview=null;
+  const state=()=>({templateId:selected&&selected.id,installName:$('#installName').value.trim(),baseUrl:$('#baseUrl').value.trim(),secretRef:$('#secretRef').value.trim(),apiKey:$('#apiKey').value,localNetworkConsent:$('#localNetworkConsent').checked,visibility:document.querySelector('input[name=visibility]:checked').value,groupId:$('#groupId').value||null});
+  async function api(method,url,body){const r=await fetch(url,{method,credentials:'same-origin',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});let d={};try{d=await r.json()}catch(_){}if(!r.ok){const e=new Error(d.message||d.error||`HTTP ${r.status}`);e.data=d;throw e}return d}
+  function show(step){['template','details','review'].forEach(s=>{$(`#${s}Step`).hidden=s!==step}); $$('.steps li').forEach((x,i)=>x.classList.toggle('on',['template','details','review'][i]===step));}
+  function notice(el,message,error){el.textContent=message;el.className=`validation on${error?' err':''}`;}
+  function pick(t){selected=t;$('#detailTitle').textContent=`Set up ${t.name}`;$('#installName').value=t.name;$('#baseUrl').value=t.defaults.baseUrl;$('#secretRef').value=t.defaults.secretRef;$('#apiKey').value='';$('#localNetworkConsent').checked=false;$('#validation').className='validation';show('details');}
+  function renderTemplates(){ $('#templates').innerHTML=templates.map(t=>`<button class="template" data-id="${t.id}"><span class="icon">${esc(t.icon)}</span><strong>${esc(t.name)}</strong><p>${esc(t.description)}</p></button>`).join(''); $$('.template').forEach(b=>b.onclick=()=>pick(templates.find(t=>t.id===b.dataset.id))); }
+  function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function renderReview(p){preview=p;$('#reviewIntro').textContent=`${p.title} will poll ${p.pollIntervalLabel.toLowerCase()}.`;$('#consentSummary').innerHTML=`<h3>This connector will be able to:</h3><ul>${p.consent.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;$('#endpoints').innerHTML=p.endpoints.map(x=>`<div class="endpoint"><code>${esc(x.endpoint)}</code><div class="fields">Extracts: ${esc(x.fields.join(', '))}</div></div>`).join('');$('#surfaces').innerHTML=p.surfaces.map(x=>`<li>${esc(x)}</li>`).join('');show('review');}
+  async function boot(){try{const [t,g]=await Promise.all([api('GET','/api/connectors/templates'),api('GET','/api/groups?mine=1')]);templates=t.templates||[];renderTemplates();const mine=g.mine||[];$('#groupId').innerHTML='<option value="">Choose a group</option>'+mine.map(x=>`<option value="${x.id}">${esc(x.display_name||x.name)}</option>`).join('')}catch(e){notice($('#validation'),'Could not load connector templates.',true)}}
+  $('#detailsForm').onsubmit=async(e)=>{e.preventDefault();const s=state();if(s.visibility==='group'&&!s.groupId)return notice($('#validation'),'Choose a group before reviewing.',true);try{const r=await api('POST','/api/connectors/preview',s);notice($('#validation'),'Validation passed. Nothing has been saved yet.',false);renderReview(r.preview)}catch(err){notice($('#validation'),err.message,true)}};
+  $$('input[name=visibility]').forEach(x=>x.onchange=()=>$('#groupId').disabled=document.querySelector('input[name=visibility]:checked').value!=='group');
+  $$('.back').forEach(b=>b.onclick=()=>show(b.dataset.back));
+  $('#installBtn').onclick=async()=>{const btn=$('#installBtn');btn.disabled=true;try{const r=await api('POST','/api/connectors/installations',state());notice($('#installResult'),`${r.installation.install_name} is installed. Its first poll will populate the selected surfaces.`,false);btn.textContent='Installed';}catch(err){notice($('#installResult'),err.message,true);btn.disabled=false}};
+  boot();
+})();
