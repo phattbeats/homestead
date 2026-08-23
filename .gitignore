@@ -17,3 +17,5 @@ dist/
 build/
 .tmp/
 .cache/
+verify-out/
+playwright-report/
