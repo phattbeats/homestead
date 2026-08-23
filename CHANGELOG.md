@@ -1,5 +1,59 @@
 # Changelog
 
+## v0.4.2 (2026-08-23) — Connector Forge surface adapters (PHA-2447)
+
+Wires the four fixed output adapters the engine (PHA-2445) calls into
+the persistent stores. Reuses existing engines where they exist
+(entity graph via `lib/sync/_schema.js`, wall/feed via `lib/walls.js`)
+and adds the missing ones (per-installation tile health, room-card
+cache, feed dedupe ledger). Adds a closed-grammar brace-placeholder
+resolver (`lib/connector-placeholder.js`) so spec surfaces can render
+simple `{name}` strings against named extracted fields without opening
+the floodgates to a general template language.
+
+- **`lib/connector-surfaces.js` (new).** `createAdapters(db)` returns
+  `{tile, card, entities, feed}` — the four async functions the
+  engine's `writeSurfaces()` calls. Each adapter is idempotent
+  (re-runs with identical payloads are no-ops), validates its input
+  shape, and writes only redacted error messages to operator-facing
+  surfaces. Migration: three new tables — `connector_tile_health_state`
+  (per-installation health row mirroring `service_health_state`),
+  `connector_card_cache` (per-installation field map + summary text),
+  `connector_feed_events` (PK `(installation_id, event_fingerprint)`
+  dedupe ledger). Migration is chained from `connector-install.migrate`
+  so a single boot point installs everything.
+- **`lib/connector-placeholder.js` (new).** Closed-grammar resolver:
+  `{name}` only, identifier shape `[A-Za-z_][A-Za-z0-9_]{0,63}`,
+  no `$` inside the brace body, no `{{...}}` / nested braces, no method
+  calls, no expressions. Anything else throws `PlaceholderGrammarError`.
+  The card adapter uses it for `summary_text`; the feed adapter uses
+  it for wall-post bodies.
+- **`scripts/test-connector-surfaces.js` (new).** 52 assertions
+  covering all five acceptance bullets plus the placeholder grammar
+  contract. Wired into the `npm test` chain (52/52 pass).
+
+### Acceptance coverage (PHA-2447 issue body)
+
+- **Tile updates within 1 poll cycle on state change.** `tile_json` +
+  `last_ok_at` refresh on every cycle; classification covers
+  healthy/degraded/down + string statuses (`healthy`/`degraded`/`error`).
+- **Card renders with extracted summary fields.** `card.cache_json`
+  preserves the full field map; `summary_text` is precomputed via the
+  closed-grammar resolver against the default
+  `"{count} {label} · {recent_added} added this week"` template.
+- **Entity graph upsert creates comic_series nodes + available_at
+  edges + deep links.** Reuses `entities` + `entity_edges` tables from
+  PHA-1624. Each installation also gets a `connector_installation`
+  entity so edges have a stable `from_id`.
+- **Feed event emitted exactly once per
+  `(installation_id, event_fingerprint)`.** Dedupe ledger gates every
+  `wall_posts` INSERT. The dispatcher (`lib/notifications.js`) reads
+  `wall_notification_prefs` per recipient, so we don't bypass it.
+- **Adapters reject unknown surface types in the spec validator.**
+  Locked in by PHA-2444 (`ALLOWED_SURFACES_FIELDS = ['tile','card','entities','feed']`);
+  covered in test 5.
+
+EOF
 ## v0.4.1 (2026-08-21) — Events webhook outbound dispatcher (PHA-1900 / PHA-1617.7)
 
 Design doc §6.1/6.5. Depends on PHA-1617.4 (`agent_endpoints`, already
