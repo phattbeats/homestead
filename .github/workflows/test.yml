@@ -28,5 +28,7 @@ jobs:
       - name: Run test suite
         run: npm test
 
-      - name: Run smoke suite
-        run: npm run test:smoke
+      # Most existing smoke scripts require deployment-only secrets. This
+      # browser regression is self-contained and must run on every PR.
+      - name: Run SPA page-error regression smoke test
+        run: node scripts/smoke-spa-pageerrors.js
