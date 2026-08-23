@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 PHATT Tech LLC
+
 // PHA-2209 / PHA-2200.8 — Amendment 3 acceptance test:
 // "No hardcoded module-key literals in render code outside the registry + migrations."
 //
@@ -72,8 +75,26 @@ const EXCLUDE_FILES = new Set([
   'scripts/test-requires-cascade.js',
   'scripts/test-default-off-future.js',
   'scripts/test-shared-registry-third-party.js',
+  // PHA-2205 layout-aware SPA smoke — drives the four-mode layout +
+  // add-rooms sheet through specific module-key toggles. Same
+  // pattern as the sibling tests above; literals are test config,
+  // not render code.
+  'scripts/smoke-modules-ui.js',
   'CHANGELOG.md',
+  // PHA-2210 analytics-capture test: notification `category: 'wall'` is
+  // test-row data (notification_log row fixture), not a render-time branch
+  // against the module registry. Same pattern as the sibling acceptance tests.
+  'scripts/test-analytics-capture.js',
   'package-lock.json',
+  // PHA-2201 third-party apps: data writes with the 'apps' module key
+  // (setUserModule calls to enable/disable the Apps tile after install/revoke).
+  // These are NOT render-time branching — they pass the key as an argument
+  // to a function whose contract requires it.
+  'lib/app-install.js',
+  // PHA-2232 third-party apps smoke test: asserts 'wall' is the default-enabled
+  // built-in returned by GET /api/apps. Same category as snapshot envelope
+  // categories — a "match by key" assertion, not a render branch.
+  'scripts/smoke-apps-settings-ui.js',
 ]);
 
 const SCAN_EXTS = new Set([

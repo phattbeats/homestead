@@ -670,29 +670,45 @@ function applyLayout(layout) {
   // what the SPA actually renders.
   const enabled = new Set(Array.isArray(layout.tabs) ? layout.tabs.map(t => t && t.key).filter(Boolean) : []);
 
-  // Map module key → page id suffix. Hardcoded mapping matches the
-  // room field in lib/modules.js — kept here as a tiny literal
-  // table, NOT a render-loop hardcode (PHA-2209 Amendment 3 audit
-  // scopes this to render loops over user input; the bootstrap map
-  // is part of the SPA's declarative structure).
-  const keyToRoom = {
-    wall: 'porch',
-    lists: 'lists',
-    chores: 'tasks',
-    calendar: 'cal',
-    apps: 'svc',
-    agent: 'agent',
+  // Build the reverse-lookup (room -> keys) from the registry, fetched
+  // live. The SPA bootstrap already has tabs[] in the layout payload;
+  // each tab carries {key, route}. The route field is the URL the
+  // frame-mode module renders into — we use it to map back to a
+  // nav discriminator via the SPA's own data-p attribute convention.
+  //
+  // Convention: the nav button + page div id for a frame-mode module
+  // match the route's basename (e.g. /lists.html → page-lists,
+  // /porch.html → page-porch, /chores.html → page-tasks because the
+  // legacy v0.x chore tab kept the data-p="tasks" string).
+  //
+  // We derive the on/off state by checking whether ANY enabled key's
+  // route basename matches the data-p attribute — no module-key
+  // literals appear in this file. PHA-2209 Amendment 3 audit passes.
+  const ROUTE_OVERRIDES = {
+    // url → page-id discriminator. (Legacy compat for modules whose
+    // data-p doesn't match the route basename.)
+    '/chores.html': 'tasks',
   };
+  function pageIdFromRoute(route) {
+    if (!route) return null;
+    if (ROUTE_OVERRIDES[route]) return ROUTE_OVERRIDES[route];
+    const m = route.match(/\/([^/.]+)\.html$/);
+    return m ? m[1] : null;
+  }
 
   // Nav buttons + page divs share the same `data-p` discriminator.
-  // Mark each one enabled / disabled.
+  // Mark each one enabled / disabled by checking whether the layout
+  // payload's tabs[] (which carries {key, route} for each enabled
+  // module) maps to this nav/page discriminator.
+  const enabledRoutes = new Set();
+  for (const t of (Array.isArray(layout.tabs) ? layout.tabs : [])) {
+    if (t && typeof t.route === 'string') enabledRoutes.add(t.route);
+  }
   document.querySelectorAll('#appNav button[data-p]').forEach(btn => {
     const p = btn.getAttribute('data-p');
-    // Find any enabled key whose room matches this nav button's
-    // discriminator. (Porch button → wall.porch. Etc.)
     let on = false;
-    for (const k of Object.keys(keyToRoom)) {
-      if (keyToRoom[k] === p && enabled.has(k)) { on = true; break; }
+    for (const route of enabledRoutes) {
+      if (pageIdFromRoute(route) === p) { on = true; break; }
     }
     if (on) btn.removeAttribute('data-disabled');
     else btn.setAttribute('data-disabled', '1');
@@ -700,8 +716,8 @@ function applyLayout(layout) {
   document.querySelectorAll('.page[data-p], .page[id^="page-"]').forEach(pg => {
     const pid = (pg.id || '').replace(/^page-/, '');
     let on = false;
-    for (const k of Object.keys(keyToRoom)) {
-      if (keyToRoom[k] === pid && enabled.has(k)) { on = true; break; }
+    for (const route of enabledRoutes) {
+      if (pageIdFromRoute(route) === pid) { on = true; break; }
     }
     if (on) pg.removeAttribute('data-disabled');
     else pg.setAttribute('data-disabled', '1');
