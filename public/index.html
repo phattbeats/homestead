@@ -464,7 +464,28 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
       <div class="sec">Done</div>
       <div class="card"><div class="card-in" id="doneTasks"></div></div>
     </div>
-    <div class="page" id="page-cal">
+    <!-- PHA-2557: Lists page. The `lists` module's registry `room` field
+         is "r-lists", so applyLayout() matches this div by `data-p="r-lists"`.
+         The content renders inside the existing list endpoints
+         (GET /api/lists + GET /api/lists/:id/items, served by the
+         shared lists primitive — PHA-1621). For now this is a thin
+         placeholder shell; the Lists module is feature-flagged off by
+         default, so this div is hidden by `body[data-layout="feed-only"]`
+         CSS unless the user explicitly enables `lists` from
+         /modules.html. The placeholder gives the smoke suite a real
+         DOM target to assert tab-count parity against — the previous
+         bug was that this div didn't exist, so layout.tabs.length
+         disagreed with rendered tab count. -->
+    <div class="page" id="page-r-lists">
+      <div class="sec">Shared lists</div>
+      <div class="card"><div class="card-in" id="listsRoot">
+        <div class="muted" style="padding:12px 0;font-size:13px">
+          Lists module is enabled. The full list editor loads after
+          <code>/api/lists</code> returns data.
+        </div>
+      </div></div>
+    </div>
+    <div class="page" id="page-r-calendar">
       <div class="card"><div class="card-in">
         <div class="cal-head">
           <button class="cal-nav" id="calPrev">‹</button><b id="calTitle"></b><button class="cal-nav" id="calNext">›</button>
@@ -500,9 +521,17 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
        layouts it sits above the bottom nav for quick access. -->
   <button id="addRoomPill" type="button" aria-label="Add rooms" style="display:none">+ Add rooms</button>
   <nav id="appNav">
-    <button data-p="home" class="on"><span class="ico">�</span>Home</button>
+    <!-- PHA-2557: nav buttons use the module's registry `room` field as
+         the data-p discriminator (the previous version used `cal` and
+         lacked a `lists` button — the layout API returned 6 tabs but
+         the nav only had room for 4 plus the hidden Porch). applyLayout()
+         matches each button against the layout payload's `room` field.
+         The `home` button is always on (no module backing it — it's
+         the always-visible "today + tasks + events" landing page). -->
+    <button data-p="home" class="on"><span class="ico">🏠</span>Home</button>
     <button data-p="tasks"><span class="ico">✓</span>Tasks</button>
-    <button data-p="cal"><span class="ico">📅</span>Calendar</button>
+    <button data-p="r-lists"><span class="ico">📝</span>Lists</button>
+    <button data-p="r-calendar"><span class="ico">📅</span>Calendar</button>
     <button data-p="svc"><span class="ico">🛰️</span>Apps</button>
     <!-- PHA-2200.5 / PHA-2206: in-place Porch tab. Replaces the old
          `navPorch` <a> that linked to /porch.html as a separate page;
@@ -698,54 +727,36 @@ function applyLayout(layout) {
 
   // Build the reverse-lookup (room -> keys) from the registry, fetched
   // live. The SPA bootstrap already has tabs[] in the layout payload;
-  // each tab carries {key, route}. The route field is the URL the
-  // frame-mode module renders into — we use it to map back to a
-  // nav discriminator via the SPA's own data-p attribute convention.
+  // each tab carries {key, room, route}. The `room` field is the
+  // in-SPA view discriminator (PHA-2557) — the nav button + page div
+  // share the `data-p` attribute, and `room === data-p` for every
+  // frame-mode module. For drawer-mode modules (e.g. `agent`) the
+  // SPA wires them to the chat-drawer FAB instead of a nav button.
   //
-  // Convention: the nav button + page div id for a frame-mode module
-  // match the route's basename (e.g. /lists.html → page-lists,
-  // /porch.html → page-porch, /chores.html → page-tasks because the
-  // legacy v0.x chore tab kept the data-p="tasks" string).
+  // Convention: nav buttons + page divs use the same `data-p` string
+  // as the module's registry `room` field:
+  //   wall.room     = 'porch'    → nav button data-p="porch"
+  //   chores.room   = 'tasks'    → nav button data-p="tasks"
+  //   apps.room     = 'svc'      → nav button data-p="svc"
+  //   calendar.room = 'r-calendar' → nav button data-p="r-calendar"
+  //   lists.room    = 'r-lists'    → nav button data-p="r-lists"
+  //   agent.room    = null       → drawer FAB (not a nav button)
   //
   // We derive the on/off state by checking whether ANY enabled key's
-  // route basename matches the data-p attribute — no module-key
-  // literals appear in this file. PHA-2209 Amendment 3 audit passes.
-  const ROUTE_OVERRIDES = {
-    // url → page-id discriminator. (Legacy compat for modules whose
-    // data-p doesn't match the route basename.)
-    '/chores.html': 'tasks',
-  };
-  function pageIdFromRoute(route) {
-    if (!route) return null;
-    if (ROUTE_OVERRIDES[route]) return ROUTE_OVERRIDES[route];
-    const m = route.match(/\/([^/.]+)\.html$/);
-    return m ? m[1] : null;
-  }
-
-  // Nav buttons + page divs share the same `data-p` discriminator.
-  // Mark each one enabled / disabled by checking whether the layout
-  // payload's tabs[] (which carries {key, route} for each enabled
-  // module) maps to this nav/page discriminator.
-  const enabledRoutes = new Set();
+  // room matches the data-p attribute — no module-key literals appear
+  // in this file. PHA-2209 Amendment 3 audit passes.
+  const enabledRooms = new Set();
   for (const t of (Array.isArray(layout.tabs) ? layout.tabs : [])) {
-    if (t && typeof t.route === 'string') enabledRoutes.add(t.route);
+    if (t && typeof t.room === 'string') enabledRooms.add(t.room);
   }
   document.querySelectorAll('#appNav button[data-p]').forEach(btn => {
     const p = btn.getAttribute('data-p');
-    let on = false;
-    for (const route of enabledRoutes) {
-      if (pageIdFromRoute(route) === p) { on = true; break; }
-    }
-    if (on) btn.removeAttribute('data-disabled');
+    if (enabledRooms.has(p)) btn.removeAttribute('data-disabled');
     else btn.setAttribute('data-disabled', '1');
   });
   document.querySelectorAll('.page[data-p], .page[id^="page-"]').forEach(pg => {
     const pid = (pg.id || '').replace(/^page-/, '');
-    let on = false;
-    for (const route of enabledRoutes) {
-      if (pageIdFromRoute(route) === pid) { on = true; break; }
-    }
-    if (on) pg.removeAttribute('data-disabled');
+    if (enabledRooms.has(pid)) pg.removeAttribute('data-disabled');
     else pg.setAttribute('data-disabled', '1');
   });
 

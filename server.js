@@ -2705,13 +2705,16 @@ app.get('/lib/scope-display.js', (req, res) => {
   res.sendFile('lib/scope-display.js', { root: __dirname });
 });
 
-app.use(express.static(path.join(__dirname, 'public')));
 // PHA-2207 (PHA-2200.6): invite redemption handshake. Visiting
 // https://life.phatt.vip/invite/{code} serves the redemption page
 // (public/invite.html). The page itself does the POST to /api/invites/:code/redeem
 // once the SWAG/authentik layer has authenticated the user. Codes
 // contain only hex chars (32 chars from crypto.randomUUID without
 // dashes), so the regex anchor is safe — no path-confusion risk.
+//
+// PHA-2557: registered BEFORE the express.static handler (which
+// now uses fallthrough:false) so the route still resolves for paths
+// the static middleware would otherwise 404.
 app.get(/^\/invite\/([A-Fa-f0-9]{16,64})$/, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'invite.html'));
 });
@@ -2720,10 +2723,23 @@ app.get('/favicon.ico', (req, res) => {
   res.set('Cache-Control', 'public, max-age=86400');
   res.sendFile('public/icon.svg', { root: __dirname });
 });
-// SPA fallback — every non-/api route renders index.html. sendFile requires
-// a { root } option on Node 22 + send 1.2.x, otherwise the static path
-// resolution fails with ENOENT and the SPA catch-all returns 404.
-app.get(/^(?!\/api).*/, (req, res) => res.sendFile('public/index.html', { root: __dirname }));
+
+// PHA-2557: catch-all tightening. The previous express.static default
+// (fallthrough: true) let unknown paths like /lists.html /calendar.html
+// /chores.html /apps.html fall through to the SPA fallback regex,
+// which then served public/index.html with status 200 — the same
+// masking class as the PHA-1704/1707/1708 /api bug (a user deep-linking
+// or a nav honoring the layout API's `route` field gets the SPA shell
+// instead of a real 404). With fallthrough:false the static handler
+// returns 404 directly for any path that doesn't match a real file
+// in public/, and the SPA fallback regex is removed entirely. `/` still
+// resolves to public/index.html (express.static serves index files for
+// directory requests). The /api routes were already excluded from the
+// catch-all via the `(?!/api)` lookahead — they retain their explicit
+// 404/handler paths and are untouched here.
+//
+// Removed: app.get(/^(?!\/api).*/, ...) — see git history.
+app.use(express.static(path.join(__dirname, 'public'), { fallthrough: false }));
 
 const PORT = process.env.PORT || 3080;
 // ---- v0.0.6 health checker boot (PHA-1623) ----
