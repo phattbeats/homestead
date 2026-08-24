@@ -58,44 +58,54 @@ async function login(username, password) {
   if (!ready) throw new Error('homestead did not become ready');
   ok('server boots');
 
-  // Both brandon and emily into media-club (household seed alone doesn't
-  // cover it), and disable quiet hours for both so this smoke test's
-  // pass/fail doesn't depend on the wall-clock hour it runs at.
-  const db = new Database(path.join(tmpDir, 'life.db'));
-  const brandon = db.prepare("SELECT id FROM users WHERE username = 'brandon'").get();
-  const emily = db.prepare("SELECT id FROM users WHERE username = 'emily'").get();
-  const mediaClub = db.prepare("SELECT id FROM groups WHERE name = 'media-club'").get();
-  db.prepare('INSERT OR IGNORE INTO user_groups (user_id, group_id) VALUES (?, ?)').run(brandon.id, mediaClub.id);
-  db.prepare('INSERT OR IGNORE INTO user_groups (user_id, group_id) VALUES (?, ?)').run(emily.id, mediaClub.id);
-  db.prepare('INSERT OR REPLACE INTO notification_prefs (user_id, quiet_start_hour, quiet_end_hour) VALUES (?, 0, 0)').run(brandon.id);
-  db.prepare('INSERT OR REPLACE INTO notification_prefs (user_id, quiet_start_hour, quiet_end_hour) VALUES (?, 0, 0)').run(emily.id);
-  db.close();
-
+  // PHA-2556: the previous version open-coded INSERT INTO user_groups
+  // to put brandon + emily into 'media-club', then tested against a
+  // wall that wasn't seeded visible to anyone. Same anti-pattern the
+  // PHA-2556 issue flags in scripts/smoke-walls.js. Now both seeded
+  // users are already in `household` (the seeded wall), so the wall
+  // is reachable via the API alone. The remaining DB write below sets
+  // notification_prefs.quiet_{start,end}_hour to 0/0 — this is a
+  // legitimate test-infrastructure override (the product has no public
+  // API for these fields yet), NOT the "missing feature" anti-pattern
+  // the PHA-2556 spec calls out. It exists so the smoke's pass/fail
+  // doesn't depend on the wall-clock hour it runs at.
   const brandonCookie = await login('brandon', 'smoke-notif-brandon-pw');
   const emilyCookie = await login('emily', 'smoke-notif-emily-pw');
 
+  // Disable quiet hours for both users (test infra override; see
+  // comment above). If/when a PUT /api/me/notification-prefs route
+  // lands, switch this to that.
+  {
+    const db = new Database(path.join(tmpDir, 'life.db'));
+    const brandon = db.prepare("SELECT id FROM users WHERE username = 'brandon'").get();
+    const emily = db.prepare("SELECT id FROM users WHERE username = 'emily'").get();
+    db.prepare('INSERT OR REPLACE INTO notification_prefs (user_id, quiet_start_hour, quiet_end_hour) VALUES (?, 0, 0)').run(brandon.id);
+    db.prepare('INSERT OR REPLACE INTO notification_prefs (user_id, quiet_start_hour, quiet_end_hour) VALUES (?, 0, 0)').run(emily.id);
+    db.close();
+  }
+
   // ---- members autocomplete ----
-  const membersRes = await fetch(`${BASE}/api/walls/media-club/members`, { headers: { Cookie: brandonCookie } });
+  const membersRes = await fetch(`${BASE}/api/walls/household/members`, { headers: { Cookie: brandonCookie } });
   assertEq(membersRes.status, 200, 'GET members returns 200');
   const membersBody = await membersRes.json();
-  assert(membersBody.members.some((m) => m.username === 'emily'), 'emily appears in media-club members list');
+  assert(membersBody.members.some((m) => m.username === 'emily'), 'emily appears in household members list');
 
   // ---- level GET default + PUT ----
-  const levelRes = await fetch(`${BASE}/api/walls/media-club/notifications`, { headers: { Cookie: emilyCookie } });
+  const levelRes = await fetch(`${BASE}/api/walls/household/notifications`, { headers: { Cookie: emilyCookie } });
   assertEq(levelRes.status, 200, 'GET notifications level returns 200');
   const levelBody = await levelRes.json();
   assertEq(levelBody.level, 'mentions', 'default level is mentions before any explicit set');
 
-  const putRes = await fetch(`${BASE}/api/walls/media-club/notifications`, {
+  const putRes = await fetch(`${BASE}/api/walls/household/notifications`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Cookie: emilyCookie },
     body: JSON.stringify({ level: 'all' }),
   });
   assertEq(putRes.status, 200, 'PUT notifications level returns 200');
-  const afterPut = await (await fetch(`${BASE}/api/walls/media-club/notifications`, { headers: { Cookie: emilyCookie } })).json();
+  const afterPut = await (await fetch(`${BASE}/api/walls/household/notifications`, { headers: { Cookie: emilyCookie } })).json();
   assertEq(afterPut.level, 'all', 'level persists as all after PUT');
 
-  const badLevelRes = await fetch(`${BASE}/api/walls/media-club/notifications`, {
+  const badLevelRes = await fetch(`${BASE}/api/walls/household/notifications`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Cookie: emilyCookie },
     body: JSON.stringify({ level: 'nonsense' }),
@@ -103,7 +113,7 @@ async function login(username, password) {
   assertEq(badLevelRes.status, 400, 'invalid level is rejected with 400');
 
   // ---- plain post -> emily (level=all) gets a delivered notification ----
-  const plainPostRes = await fetch(`${BASE}/api/walls/media-club/posts`, {
+  const plainPostRes = await fetch(`${BASE}/api/walls/household/posts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: brandonCookie },
     body: JSON.stringify({ kind: 'text', text_body: 'no mention here' }),
@@ -117,7 +127,7 @@ async function login(username, password) {
   assertEq(plainRow && plainRow.delivered, true, 'plain post is delivered under level=all');
 
   // ---- mentioned post -> mention row, distinct category ----
-  const mentionPostRes = await fetch(`${BASE}/api/walls/media-club/posts`, {
+  const mentionPostRes = await fetch(`${BASE}/api/walls/household/posts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: brandonCookie },
     body: JSON.stringify({ kind: 'text', text_body: 'hey @emily check this out' }),
@@ -130,7 +140,7 @@ async function login(username, password) {
   assert(mentionRow && mentionRow.title.includes('mentioning you'), 'mention title calls out "mentioning you"');
 
   // ---- thread mute ----
-  const muteRes = await fetch(`${BASE}/api/walls/media-club/posts/${plainPost.id}/mute`, {
+  const muteRes = await fetch(`${BASE}/api/walls/household/posts/${plainPost.id}/mute`, {
     method: 'POST', headers: { Cookie: emilyCookie },
   });
   assertEq(muteRes.status, 200, 'mute returns 200');
@@ -148,7 +158,7 @@ async function login(username, password) {
   assert(!!mutedMentionRow, 'a row still lands for the muted-thread mention (audit trail)');
   assertEq(mutedMentionRow && mutedMentionRow.delivered, false, 'muted-thread mention is not delivered');
 
-  const unmuteRes = await fetch(`${BASE}/api/walls/media-club/posts/${plainPost.id}/mute`, {
+  const unmuteRes = await fetch(`${BASE}/api/walls/household/posts/${plainPost.id}/mute`, {
     method: 'DELETE', headers: { Cookie: emilyCookie },
   });
   assertEq(unmuteRes.status, 200, 'unmute returns 200');
@@ -167,7 +177,7 @@ async function login(username, password) {
   assertEq(unseenAfter.notifications.length, 0, 'badge is clearable — unseen count drops to 0 after clearAll');
 
   // ---- non-member cannot see members or set level ----
-  const stranger = await fetch(`${BASE}/api/walls/media-club/members`);
+  const stranger = await fetch(`${BASE}/api/walls/household/members`);
   assertEq(stranger.status, 401, 'unauthenticated members fetch returns 401');
 
   console.log(`\n${pass} passed, ${fail} failed`);

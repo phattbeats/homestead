@@ -63,7 +63,7 @@ if [[ ! -d node_modules/playwright ]]; then
 fi
 
 # 2. Run the SPA page-error guard.
-echo "==> Step 1/3 — SPA page-error guard"
+echo "==> Step 1/4 — SPA page-error guard"
 if ! node scripts/smoke-spa-pageerrors.js; then
   echo "✗ SPA page-error guard FAILED — see output above" >&2
   exit 1
@@ -71,7 +71,7 @@ fi
 echo
 
 # 3. Run the post-login screenshot smoke (Definition of Done artifact).
-echo "==> Step 2/3 — Post-login 390px mobile screenshot smoke"
+echo "==> Step 2/4 — Post-login 390px mobile screenshot smoke"
 VERIFY_OUT="$VERIFY_OUT" \
 DATA_DIR="$TMP_DATA" \
 PORT="$PORT" \
@@ -82,8 +82,26 @@ NODE_ENV=production \
   node scripts/smoke-postlogin-screenshot.js
 echo
 
+# PHA-2556: fresh-install Porch acceptance smoke — logs in as brandon,
+# taps the Porch tab, posts a text message, and captures 390x844
+# screenshots of (1) Porch with composer visible and (2) Porch with
+# the new post landed. This is the user-visible acceptance criterion
+# for the PHA-2556 fix; the previous Porch flow had a wall that was
+# invisible on a fresh boot, so a smoke that walks the actual user
+# path is what proves the fix works.
+echo "==> Step 3/4 — PHA-2556 fresh-install Porch smoke"
+VERIFY_OUT="$VERIFY_OUT" \
+DATA_DIR="$TMP_DATA" \
+PORT="$PORT" \
+ADMIN_PASSWORD="verify-admin-pw" \
+BRANDON_PASSWORD="verify-brandon-pw" \
+SESSION_SECRET="verify-secret" \
+NODE_ENV=production \
+  node scripts/smoke-2556-porch-default.js
+echo
+
 # 4. Curl transcript of /api/health (proof of life on the same scratch instance).
-echo "==> Step 3/3 — /api/health curl transcript"
+echo "==> Step 4/4 — /api/health curl transcript"
 DATA_DIR="$TMP_DATA" PORT="$PORT" ADMIN_PASSWORD="verify-admin-pw" \
 SESSION_SECRET="verify-secret" NODE_ENV=production \
   node -e "const app = require('./server.js'); app.listen($PORT, '127.0.0.1');" &

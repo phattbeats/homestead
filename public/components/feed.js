@@ -280,6 +280,15 @@
 
     async function boot() {
       aborter = new AbortController();
+      // Render the static shell (header, composer, feed container)
+      // BEFORE the first network round-trip — that way the user sees
+      // a populated UI immediately, and the caller's `state: 'visible'`
+      // selectors (Playwright smokes, screenshots) find their targets
+      // even on a slow network. The pre-fix boot() didn't call
+      // renderShell(), leaving an empty <div class="feed-root"> until
+      // loadPosts() succeeded — a regression in the PHA-2206 extraction
+      // (renderShell was defined but never invoked).
+      renderShell();
       try {
         const me = await api('GET', '/me', null, false, aborter.signal);
         ME = me && me.user;

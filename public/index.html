@@ -1309,6 +1309,7 @@ $('#avatarBtn').onclick=()=>{
     <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-connected-agents">🔌 Connected agents</button>
     <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-apps">📦 Apps</button>
     ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-settings">⚙️ Settings · manage household</button>`:''}
+    ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-walls">🧱 Walls · manage walls</button>`:''}
     <h3>Push notifications</h3>
     <p style="font-size:13px;color:var(--muted);margin:-4px 0 10px">Get reminders for chores due today and your turn to take a rotating chore.</p>
     <div id="install-chip-host"></div>
@@ -1322,6 +1323,7 @@ $('#avatarBtn').onclick=()=>{
     <div class="err" id="f-err"></div>`);
   if(isAdmin){
     $('#f-settings').onclick=()=>openSettingsSheet();
+    $('#f-walls').onclick=()=>openWallsAdminSheet();
   }
   $('#f-calendar-sources').onclick=()=>openCalendarSourcesSheet();
   $('#f-connected-agents').onclick=()=>openConnectedAgentsSheet();
@@ -1401,6 +1403,131 @@ function openSettingsSheet(){
       renderLoginChips();
       openSettingsSheet();
     }catch(e){$('#f-err').textContent=(e&&e.error)||'Failed'}
+  };
+}
+
+// ---- PHA-2556: walls admin sheet ----
+// Renders a list of every wall in the system (visibility, members),
+// a "Create wall" form, and an inline member-management UI per wall.
+// Lives in its own sheet so the household-members form above doesn't
+// grow into a kitchen-sink. Reach it from the avatar menu via
+// "Walls · manage walls" (admin-only).
+async function openWallsAdminSheet(){
+  if(!ME||!ME.isAdmin)return;
+  let wallsList=[];
+  let groupsList=[];
+  let errMsg='';
+  try{
+    [wallsList, groupsList] = await Promise.all([
+      api('GET','/api/walls/all'),
+      api('GET','/api/groups'),
+    ]);
+  }catch(e){errMsg=(e&&e.error)||'Failed to load walls';}
+
+  const wallsHtml=(wallsList||[]).map(w=>`
+    <div class="wall-row" data-slug="${esc(w.slug)}" style="border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div>
+          <div style="font-weight:600">${esc(w.name)}</div>
+          <div style="font-size:12px;color:var(--muted)">/${esc(w.slug)} · ${esc(w.visibility)}${w.group_name? ' · group='+esc(w.group_name):''}</div>
+        </div>
+      </div>
+      <div class="wall-members" data-slug="${esc(w.slug)}" style="margin-top:8px;font-size:13px"></div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <input class="field" data-add="${esc(w.slug)}" placeholder="Add user (username)" style="flex:1">
+        <button class="btn btn-secondary" data-add-btn="${esc(w.slug)}">Add</button>
+      </div>
+    </div>
+  `).join('') || '<div class="empty">No walls yet</div>';
+
+  const groupOptions=(groupsList&&groupsList.groups||[])
+    .map(g=>`<option value="${esc(g.name)}">${esc(g.display_name||g.name)}</option>`).join('');
+
+  openSheet(`<h2>Walls · manage walls</h2>
+    <h3>Existing walls</h3>
+    <div id="walls-list">${wallsHtml}</div>
+    <h3 style="margin-top:18px">Create wall</h3>
+    <input class="field" id="w-slug" placeholder="Slug (a-z, 0-9, dashes)" autocapitalize="none" autocorrect="off" spellcheck="false">
+    <input class="field" id="w-name" placeholder="Display name">
+    <select class="field" id="w-visibility">
+      <option value="group">Group-scoped (visibility follows a group)</option>
+      <option value="direct">Direct (only invited users)</option>
+    </select>
+    <select class="field" id="w-group" style="display:none">
+      <option value="">— pick a group —</option>
+      ${groupOptions}
+    </select>
+    <div class="err" id="w-err"></div>
+    <button class="btn" id="w-create">+ Create wall</button>
+    <button class="link" style="margin-top:18px;width:100%;text-align:center" onclick="openSettingsSheet()">← Back to settings</button>
+    ${errMsg?`<div class="err" style="margin-top:8px">${esc(errMsg)}</div>`:''}`);
+
+  // Show/hide the group picker when visibility flips.
+  $('#w-visibility').onchange=()=>{
+    $('#w-group').style.display=$('#w-visibility').value==='group'?'block':'none';
+  };
+
+  // Member rows: render then wire add/remove. async-IIFE because we
+  // want each wall's member list fetched independently and the rows
+  // to render as they arrive (small N here — there's at most a couple
+  // of walls in the typical install).
+  for(const w of (wallsList||[])){
+    try{
+      const m=await api('GET',`/api/walls/${encodeURIComponent(w.slug)}/members`);
+      const host=document.querySelector(`.wall-members[data-slug="${w.slug}"]`);
+      if(!host)continue;
+      const membersHtml=(m.members||[]).map(u=>`
+        <span style="display:inline-flex;align-items:center;gap:4px;background:var(--chip);border-radius:999px;padding:2px 8px;margin:2px 4px 2px 0">
+          <span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${esc(u.color)}"></span>
+          @${esc(u.username)}${u.role==='admin'?' · admin':''}
+          <button class="link" style="padding:0 0 0 4px;color:var(--muted)" data-rm="${esc(w.slug)}:${esc(u.username)}" title="Remove">×</button>
+        </span>
+      `).join('') || '<span style="color:var(--muted)">No members yet</span>';
+      host.innerHTML=membersHtml;
+      host.querySelectorAll('[data-rm]').forEach(btn=>{
+        btn.onclick=async()=>{
+          const[slug,username]=btn.dataset.rm.split(':');
+          if(!confirm(`Remove @${username} from ${slug}?`))return;
+          try{
+            await api('DELETE',`/api/walls/${encodeURIComponent(slug)}/members/${encodeURIComponent(username)}`);
+            await openWallsAdminSheet();
+          }catch(e){alert((e&&e.error)||'Failed');}
+        };
+      });
+    }catch(_){/* wall exists but caller isn't a member (404-private) — skip member list */}
+  }
+
+  // Wire "Add" buttons (one per existing wall).
+  document.querySelectorAll('[data-add-btn]').forEach(btn=>{
+    btn.onclick=async()=>{
+      const slug=btn.dataset.addBtn;
+      const inp=document.querySelector(`[data-add="${slug}"]`);
+      const username=(inp&&inp.value||'').trim();
+      if(!username){alert('Username required');return;}
+      try{
+        await api('POST',`/api/walls/${encodeURIComponent(slug)}/members`,{username});
+        inp.value='';
+        await openWallsAdminSheet();
+      }catch(e){alert((e&&e.error||'')+(e&&e.message?': '+e.message:''))||'Failed';}
+    };
+  });
+
+  // Create wall submit.
+  $('#w-create').onclick=async()=>{
+    const body={
+      slug:$('#w-slug').value.trim(),
+      name:$('#w-name').value.trim(),
+      visibility:$('#w-visibility').value,
+    };
+    if(body.visibility==='group')body.group_name=$('#w-group').value;
+    if(!body.slug||!body.name){$('#w-err').textContent='Slug and name required';return;}
+    if(body.visibility==='group'&&!body.group_name){$('#w-err').textContent='Pick a group for group-scoped walls';return;}
+    try{
+      await api('POST','/api/walls',body);
+      await openWallsAdminSheet();
+    }catch(e){
+      $('#w-err').textContent=(e&&e.error&&e.message?e.message:(e&&e.error))||'Failed';
+    }
   };
 }
 

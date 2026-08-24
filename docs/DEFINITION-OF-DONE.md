@@ -33,6 +33,45 @@ reproduce.
 Self-review does not count as verification. The evidence must be reproducible
 by someone else from what is posted.
 
+## Policy — fresh-install acceptance (PHA-2556 amendment)
+
+Acceptance criteria must be phrased as a **user-visible outcome from a fresh
+install**: an operator who has just booted the appliance — no manual config,
+no out-of-band DB writes, no human-judged first-time grants — must reach the
+promised state via the documented UI/API surface alone. **If a verification
+script needs a manual DB write to pass, that write is the missing feature.**
+
+This rule closes the PHA-2493 / PHA-2556 class of "closed green, broken in
+the user's hands" defects: a smoke test that open-codes an
+`INSERT INTO user_groups` to grant the test user access to a wall, then
+asserts the wall is visible, proves nothing — it reproduces the manual
+setup the bug is *about*, and the test passes whether the product works
+or not.
+
+Test patterns that violate this rule:
+
+- Direct `INSERT` / `UPDATE` / `DELETE` against the SQLite file to set up
+  state that the API itself can set.
+- Disabling auth or permission gates by hand to reach the test path.
+- Reaching into `users`/`groups`/`wall_memberships` to simulate an
+  admin grant when the admin UI / `requireAdmin` API exists.
+
+Allowed test-infrastructure DB writes (NOT covered by this rule):
+
+- **Quiet-hours override** (`notification_prefs.quiet_*_hour`) so a smoke's
+  pass/fail is wall-clock-independent — the product has no public API for
+  these fields yet, and the override is unrelated to the user-visible
+  state under test.
+- **Seeding a fresh DB** (booting server.js with an ephemeral DATA_DIR)
+  — the seed path is itself a product surface.
+- **Schema additions** in the test harness (`CREATE TABLE IF NOT EXISTS
+  notification_log` etc.) that mirror server.js's inline DDL for test
+  isolation — the running server doesn't depend on them being absent.
+
+The boundary is: **if the DB write exists to set up state the product
+should set up via the API, the product is missing a feature, and the
+test should fail loudly until that feature lands.**
+
 ## Enforcement layers
 
 The policy is enforced at three layers so that closing an issue without evidence

@@ -25,6 +25,22 @@ by someone else from what is posted. **An issue closed without evidence gets
 reopened by whoever notices, no discussion needed — the policy is the
 authority.**
 
+### Fresh-install acceptance (PHA-2556 amendment)
+
+Acceptance criteria must be phrased as a **user-visible outcome from a fresh
+install**. A verification script may not perform setup the product itself
+cannot perform: if the script needs an `INSERT INTO user_groups` (or any
+similar hand-rolled DB grant) to reach the state under test, that grant is
+the missing feature, and the script should fail loudly until the API exposes
+the same operation.
+
+The only legitimate test-infrastructure DB writes are: a quiet-hours
+override so a smoke's pass/fail doesn't depend on the wall-clock hour; a
+fresh-DB seed (the seed path is itself a product surface); and schema
+mirrors in the test harness that don't affect what the running server
+delivers. See `docs/DEFINITION-OF-DONE.md` for the full rule + boundary
+cases.
+
 ### Closing-comment template
 
 Every closing comment follows this shape so the audit is mechanical:
