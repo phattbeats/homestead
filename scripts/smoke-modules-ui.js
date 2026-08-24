@@ -122,7 +122,12 @@ async function disableAll() {
 
   let browser;
   try {
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch({
+      headless: true,
+      ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+        ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH }
+        : {}),
+    });
     const context = await browser.newContext({
       viewport: { width: 390, height: 844 },
       deviceScaleFactor: 2,
@@ -161,9 +166,14 @@ async function disableAll() {
       return out;
     });
     assertEq(navState1.porch, 'on', 'feed-tabs: navPorch (wall) is visible');
+    assertEq(navState1['r-lists'], 'on', 'feed-tabs: nav r-lists (lists) is visible');
     assert(navState1.tasks === 'off', 'feed-tabs: nav tasks (chores) is hidden');
-    assert(navState1.cal === 'off', 'feed-tabs: nav cal (calendar) is hidden');
+    assert(navState1['r-calendar'] === 'off', 'feed-tabs: nav calendar (r-calendar) is hidden');
     assert(navState1.svc === 'off', 'feed-tabs: nav svc (apps) is hidden');
+    // PHA-2557: the rendered tab count MUST match the layout.tabs count.
+    const renderedTabs1 = Object.values(navState1).filter(v => v === 'on').length;
+    assertEq(renderedTabs1, layout.tabs.length,
+      `feed-tabs: rendered tab count (${renderedTabs1}) === layout.tabs.length (${layout.tabs.length})`);
     await page.screenshot({ path: path.join(OUT_DIR, 'modui-feed-tabs.png'), fullPage: false });
     ok('feed-tabs: screenshot captured');
 
@@ -177,6 +187,32 @@ async function disableAll() {
     // All enabled → addRoomVisible should be false (all rooms on).
     const meadowPillDisplay = await page.evaluate(() => document.getElementById('addRoomPill').style.display);
     assertEq(meadowPillDisplay, 'none', 'meadow: + Add rooms pill is hidden (nothing to add)');
+    // PHA-2557: rendered tab count parity for full-module user. All 6
+    // modules enabled → meadow layout → 5 nav tabs visible (wall, chores,
+    // lists, calendar, apps — `agent` is drawer-mode, surfaces as FAB
+    // not a nav button). The renderable count is layout.tabs.length - 1
+    // for the agent drawer, NOT layout.tabs.length. The parity check is
+    // "every frame-mode module is reachable as a tab" so we assert the
+    // set equality instead.
+    const meadowNavState = await page.evaluate(() => {
+      const out = {};
+      document.querySelectorAll('#appNav button[data-p]').forEach(b => {
+        out[b.dataset.p] = b.getAttribute('data-disabled') === '1' ? 'off' : 'on';
+      });
+      return out;
+    });
+    const meadowFrameKeys = (layout.tabs || []).filter(t => t.route).map(t => t.key).sort();
+    const meadowRoomFromKey = Object.fromEntries(
+      (await (await GET('/api/modules')).json()).map(m => [m.key, m.room])
+    );
+    const expectedRooms = meadowFrameKeys.map(k => meadowRoomFromKey[k]).filter(Boolean).sort();
+    const actualRooms = Object.entries(meadowNavState)
+      .filter(([_, v]) => v === 'on')
+      .map(([k, _]) => k)
+      .sort();
+    assertEq(JSON.stringify(actualRooms), JSON.stringify(expectedRooms),
+      `meadow: every frame-mode module is reachable as a nav tab ` +
+      `(expected rooms=${JSON.stringify(expectedRooms)}, got=${JSON.stringify(actualRooms)})`);
     await page.screenshot({ path: path.join(OUT_DIR, 'modui-meadow.png'), fullPage: false });
     ok('meadow: screenshot captured');
 
@@ -241,6 +277,75 @@ async function disableAll() {
       `agent off: drawerFab is gated off (class="${drawerClassNoAgent}")`);
     await page.screenshot({ path: path.join(OUT_DIR, 'modui-no-agent.png'), fullPage: false });
     ok('agent gating: drawerFab visibility tracks agentDrawer flag');
+
+    // ---- 6. wall-only screenshot (PHA-2557 acceptance) -----------
+    // Disable every non-wall module. The SPA single-surface rule
+    // redirects `/` to /porch.html when wall is the sole enabled
+    // module (so we can't take the screenshot on `/` itself) — we
+    // navigate directly to /porch.html and verify the redirect
+    // path + the layout parity.
+    await POST('/api/me/modules/lists/disable', { withDependents: true });
+    await POST('/api/me/modules/calendar/disable', { withDependents: true });
+    await POST('/api/me/modules/chores/disable', { withDependents: true });
+    await POST('/api/me/modules/apps/disable', { withDependents: true });
+    await POST('/api/me/modules/agent/disable', { withDependents: true });
+    layout = await (await GET('/api/me/layout')).json();
+    assertEq(layout.layout, 'feed-only', 'wall-only: layout === "feed-only"');
+    assertEq(layout.tabs.length, 1, 'wall-only: layout.tabs.length === 1');
+    assertEq(layout.tabs[0].key, 'wall', 'wall-only: only wall tab');
+    // The single-surface rule redirects / to /porch.html — verify that
+    // path is reachable and the layout API's defaultRoute is honored.
+    await page.goto('http://127.0.0.1:3194/porch.html', { waitUntil: 'load' });
+    // The /porch.html shell mounts the HomesteadFeed component into
+    // #porch-mount. The component creates a `.feed-root` child even
+    // when the user has no wall memberships (PHA-2206 component
+    // contract). We assert the mount happened — inner feed content
+    // rendering for an empty-walls user is the component's job, not
+    // the layout/nav concern this smoke covers (PHA-2557).
+    const porchMountState = await page.evaluate(() => {
+      const m = document.getElementById('porch-mount');
+      const root = m && m.querySelector('.feed-root');
+      return {
+        mountExists: !!m,
+        feedRootExists: !!root,
+      };
+    });
+    assert(porchMountState.mountExists,
+      'wall-only: /porch.html has #porch-mount');
+    assert(porchMountState.feedRootExists,
+      'wall-only: HomesteadFeed mounted a .feed-root child (component contract)');
+    await page.screenshot({ path: path.join(OUT_DIR, 'modui-wall-only.png'), fullPage: false });
+    ok('wall-only: screenshot captured');
+
+    // ---- 7. PHA-2557 catch-all tightening: unknown *.html → 404 ---
+    // The static handler must NOT serve the SPA shell for non-existent
+    // .html files. Previously /lists.html, /calendar.html, /chores.html,
+    // /apps.html all returned 200 with the index.html shell (the same
+    // masking class as the PHA-1704/1707/1708 /api bug). With the fix,
+    // missing *.html returns 404 from the static handler before the SPA
+    // catch-all swallows the request. We exercise /lists.html (which
+    // exists as a registry route but no file) and assert it's 404.
+    // /porch.html is the one frame route that DOES exist as a file
+    // and must remain 200.
+    const porchRes = await fetch('http://127.0.0.1:3194/porch.html');
+    assertEq(porchRes.status, 200, '/porch.html (existing file) → 200');
+    const listsRes = await fetch('http://127.0.0.1:3194/lists.html');
+    assertEq(listsRes.status, 404, '/lists.html (no file) → 404 (was 200 with SPA shell pre-fix)');
+    const calendarRes = await fetch('http://127.0.0.1:3194/calendar.html');
+    assertEq(calendarRes.status, 404, '/calendar.html (no file) → 404');
+    const appsRes = await fetch('http://127.0.0.1:3194/apps.html');
+    assertEq(appsRes.status, 404, '/apps.html (no file) → 404');
+    // /chores.html also doesn't exist as a file (the room exists in-SPA,
+    // but the static file was never created).
+    const choresRes = await fetch('http://127.0.0.1:3194/chores.html');
+    assertEq(choresRes.status, 404, '/chores.html (no file) → 404');
+    // /api still returns 404 for unknown routes (the original PHA-1704
+    // bug was /api returning 200 with the SPA shell for unknown paths).
+    const apiRes = await fetch('http://127.0.0.1:3194/api/this-does-not-exist');
+    assertEq(apiRes.status, 404, '/api/this-does-not-exist → 404');
+    const apiCt = apiRes.headers.get('content-type') || '';
+    assert(!apiCt.includes('text/html'),
+      `/api 404 has JSON content-type (got ${apiCt}) — not SPA shell`);
 
   } finally {
     if (browser) await browser.close();

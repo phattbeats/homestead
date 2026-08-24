@@ -109,6 +109,12 @@ function stripComments(src) {
   src = src.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' '));
   // Line comments.
   src = src.replace(/\/\/[^\n]*/g, m => m.replace(/[^\n]/g, ' '));
+  // HTML comments (PHA-2557): render code in HTML files lives next to
+  // <!-- ... --> blocks that document the surrounding markup. The
+  // audit's intent is to keep render code reading from the registry,
+  // not to police docstrings — strip HTML comments too so a key
+  // mentioned in a `<!-- PHA-2557: ... -->` block doesn't flag.
+  src = src.replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
   return src;
 }
 
