@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Add rooms — Homestead</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#FFFBF5">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#8A8177;
+  --line:rgba(43,38,34,.07);
+  --u-all:#9eb48a;
+  --accent:#C4703C; --accent-soft:#F8E9DE;
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100dvh}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+header{padding:calc(env(safe-area-inset-top) + 18px) 22px 8px;display:flex;align-items:center;gap:14px;position:sticky;top:0;background:var(--bg);z-index:10}
+.back{width:36px;height:36px;border-radius:12px;border:1px solid var(--line);font-size:18px;display:flex;align-items:center;justify-content:center}
+h1{font-weight:800;font-size:22px;letter-spacing:-.02em;flex:1}
+.sub{font-size:13px;color:var(--muted);margin:6px 22px 12px}
+
+main{padding:8px 18px 110px;max-width:680px;margin:0 auto}
+.card{background:var(--surface);border-radius:22px;padding:6px;margin-bottom:12px;
+  box-shadow:0 6px 30px rgba(0,0,0,.035)}
+.card-in{border:1px solid var(--line);border-radius:17px;padding:16px;display:flex;align-items:center;gap:14px}
+.tile{font-size:28px;width:48px;height:48px;border-radius:14px;background:var(--accent-soft);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.body{flex:1;min-width:0}
+.name{font-weight:700;font-size:15px}
+.desc{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.35}
+.req{font-size:11px;color:var(--accent);margin-top:4px;font-weight:600}
+.toggle{position:relative;width:50px;height:30px;border-radius:99px;background:var(--line);transition:background .25s var(--ease);flex-shrink:0}
+.toggle.on{background:var(--u-all)}
+.toggle::after{content:'';position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:transform .25s var(--ease);box-shadow:0 2px 6px rgba(0,0,0,.12)}
+.toggle.on::after{transform:translateX(20px)}
+.toggle:disabled{opacity:.5}
+
+.btn-row{position:fixed;left:0;right:0;bottom:0;padding:14px 22px calc(env(safe-area-inset-bottom) + 14px);
+  background:rgba(255,251,245,.85);backdrop-filter:blur(18px);border-top:1px solid var(--line);
+  display:flex;justify-content:center}
+.btn{padding:14px 28px;border-radius:14px;background:var(--accent);color:#fff;font-weight:700;min-width:200px;
+  transition:transform .25s var(--ease)}
+.btn:active{transform:scale(.96)}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);min-width:auto}
+.err{color:#b3453a;font-size:13px;min-height:18px;margin-top:10px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <button class="back" id="backBtn" aria-label="Back">‹</button>
+  <h1>Add rooms</h1>
+</header>
+<p class="sub" id="subLine">Loading…</p>
+<main id="roomsList"></main>
+<div class="btn-row">
+  <button class="btn" id="doneBtn">Done</button>
+</div>
+
+<script>
+// PHA-2205 (PHA-2200.4) add-a-room sheet. Renders the difference
+// between the user's enabled-modules set and the full registry;
+// each row is a toggle that fires POST /api/me/modules/:key/enable
+// (or /disable). On Done, navigate back to the SPA so applyLayout()
+// picks up the new shape.
+//
+// The sheet does NOT need to refresh /api/me/layout itself — that's
+// the SPA's job on its next navigation. We POST directly and trust
+// the SPA to re-fetch.
+
+'use strict';
+
+const HEAD = { 'Content-Type': 'application/json' };
+async function api(method, url, body) {
+  const r = await fetch(url, {
+    method, headers: HEAD,
+    body: body ? JSON.stringify(body) : undefined,
+    credentials: 'same-origin',
+  });
+  if (!r.ok) {
+    let e; try { e = await r.json(); } catch (_) { e = { error: 'HTTP ' + r.status }; }
+    throw e;
+  }
+  return r.json();
+}
+
+const ICONS = { wall:'📸', lists:'📝', calendar:'📅', chores:'✓', apps:'🛰️', agent:'🤖' };
+
+let REGISTRY = [];
+let ENABLED = new Set();
+let PENDING = new Map(); // key -> { busy: true }
+
+function render() {
+  const list = document.getElementById('roomsList');
+  list.innerHTML = '';
+  for (const m of REGISTRY) {
+    const on = ENABLED.has(m.key);
+    const row = document.createElement('div');
+    row.className = 'card';
+    row.innerHTML = `
+      <div class="card-in">
+        <div class="tile">${m.icon || ICONS[m.key] || '·'}</div>
+        <div class="body">
+          <div class="name">${m.name}</div>
+          <div class="desc">${m.description || ''}</div>
+          ${(m.requires && m.requires.length) ? `<div class="req">Requires: ${m.requires.join(', ')}</div>` : ''}
+        </div>
+        <button class="toggle ${on ? 'on' : ''}" data-key="${m.key}" aria-pressed="${on}" aria-label="${on ? 'Disable' : 'Enable'} ${m.name}"></button>
+      </div>`;
+    list.appendChild(row);
+  }
+  list.querySelectorAll('.toggle').forEach(btn => {
+    btn.onclick = async () => {
+      const k = btn.getAttribute('data-key');
+      if (PENDING.get(k)) return;
+      PENDING.set(k, { busy: true });
+      btn.disabled = true;
+      try {
+        if (ENABLED.has(k)) {
+          const r = await api('POST', `/api/me/modules/${encodeURIComponent(k)}/disable`, {});
+          // Reflect server-side enabled set if it cascaded.
+          if (Array.isArray(r.enabled_modules)) {
+            ENABLED = new Set(r.enabled_modules);
+          } else {
+            ENABLED.delete(k);
+          }
+        } else {
+          const body = {};
+          // If requires[] references a missing module, auto-cascade.
+          const req = (REGISTRY.find(x => x.key === k) || {}).requires || [];
+          if (req.some(r => !ENABLED.has(r))) body.withRequirements = true;
+          const r = await api('POST', `/api/me/modules/${encodeURIComponent(k)}/enable`, body);
+          if (Array.isArray(r.enabled_modules)) {
+            ENABLED = new Set(r.enabled_modules);
+          } else {
+            ENABLED.add(k);
+          }
+        }
+      } catch (e) {
+        alert(`Failed: ${(e && e.error) || 'unknown'}`);
+      } finally {
+        PENDING.delete(k);
+        btn.disabled = false;
+        render();
+      }
+    };
+  });
+}
+
+(async () => {
+  document.getElementById('backBtn').onclick = () => { window.location.href = '/'; };
+  document.getElementById('doneBtn').onclick = () => { window.location.href = '/'; };
+  try {
+    const [registry, enabledKeys, me] = await Promise.all([
+      api('GET', '/api/modules'),
+      api('GET', '/api/me/modules'),
+      api('GET', '/api/me'),
+    ]);
+    REGISTRY = Array.isArray(registry) ? registry : [];
+    ENABLED = new Set(Array.isArray(enabledKeys) ? enabledKeys : []);
+    document.getElementById('subLine').textContent =
+      `${ENABLED.size} of ${REGISTRY.length} rooms enabled`;
+    render();
+    if (me && me.first_run === true) {
+      // First-run users land here from the welcome sheet. We don't
+      // POST first-run-complete here — that's the welcome sheet's job
+      // in the SPA. This sheet is a passive consumer.
+    }
+  } catch (e) {
+    document.getElementById('subLine').textContent = `Failed to load: ${e.error || 'unknown'}`;
+  }
+})();
+</script>
+</body>
+</html>

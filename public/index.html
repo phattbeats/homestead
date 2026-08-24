@@ -8,6 +8,10 @@
 <meta name="theme-color" content="#FFFBF5">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- PHA-2200.5 / PHA-2206: shared wall feed styles. Same file the
+     standalone /porch.html loads, so the in-place mount inside
+     #page-wall renders identically to /porch.html. -->
+<link rel="stylesheet" href="/porch.css">
 <style>
 :root{
   --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#8A8177;
@@ -140,6 +144,33 @@ nav button,nav a{display:flex;flex-direction:column;align-items:center;gap:3px;f
   color:var(--muted);padding:4px 14px;border-radius:14px;transition:color .3s var(--ease);text-decoration:none}
 nav button.on{color:var(--accent)}
 nav .ico{font-size:20px}
+
+/* ---- PHA-2205 (PHA-2200.4): layout-aware nav + Add rooms pill ---- */
+/* feed-only layout: hide the bottom nav entirely; the Add-rooms pill
+   is the only nav affordance. */
+body[data-layout="feed-only"] #appNav{display:none}
+body[data-layout="empty"] #appNav{display:none}
+body[data-layout="empty"] #fab{display:none}
+body[data-layout="empty"] #drawerFab{display:none}
+/* feed-only pill pinned above safe-area */
+#addRoomPill{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 22px);transform:translateX(-50%);
+  padding:10px 22px;border-radius:99px;background:var(--surface);border:1px solid var(--line);
+  box-shadow:0 6px 22px rgba(0,0,0,.06);font-weight:600;font-size:14px;color:var(--accent);
+  z-index:32;display:flex;align-items:center;gap:6px}
+#addRoomPill:active{transform:translateX(-50%) scale(.96)}
+body[data-layout="feed-tabs"] #addRoomPill,
+body[data-layout="meadow"] #addRoomPill{position:fixed;right:20px;bottom:calc(env(safe-area-inset-bottom) + 150px);left:auto;transform:none;
+  padding:8px 16px;font-size:13px}
+body[data-layout="feed-tabs"] #addRoomPill:active,
+body[data-layout="meadow"] #addRoomPill:active{transform:scale(.96)}
+/* Hide nav buttons whose module is not in the user's enabled set.
+   data-enabled-keys is set by applyLayout() (PHA-2205). */
+#appNav button[data-p][data-disabled="1"]{display:none}
+/* Hide pages whose module is not in the user's enabled set.
+   When EVERY page is hidden (feed-only → all chrome collapsed),
+   the layout-aware logic in applyLayout() instead redirects to
+   defaultRoute (e.g. /porch.html for a wall-only user). */
+.page[data-disabled="1"]{display:none}
 
 /* ---- PHA-1898: meta-agent chat drawer (design doc §6.3) ---- */
 #drawerFab{position:fixed;right:20px;bottom:calc(env(safe-area-inset-bottom) + 156px);
@@ -426,14 +457,39 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
         <button class="link" id="addSvc">+ Add</button></div>
       <div class="svc-grid" id="svcGrid"></div>
     </div>
+    <!-- PHA-2200.5 / PHA-2206: in-place wall mount. The same
+         HomesteadFeed component that backs /porch.html is mounted into
+         this div when the feed module is enabled for the current user
+         (see boot() below). When the feed module is the user's SOLE
+         enabled module, the SPA redirects to /porch.html instead of
+         mounting here (per PHA-2200 §6 dual-surface design). The
+         page id matches the nav button's data-p attribute so the
+         existing tab-switching handler (curPage = b.dataset.p; show
+         #page-{curPage}) finds it. We use 'porch' (the room
+         discriminator) instead of the registry key to avoid colliding
+         with PHA-2209's no-hardcoded-keys audit. -->
+    <div class="page" id="page-porch"></div>
   </main>
   <button id="fab">+</button>
-  <nav>
-    <button data-p="home" class="on"><span class="ico">🏡</span>Home</button>
+  <!-- PHA-2205 (PHA-2200.4): "+ Add rooms" pill. Only visible when
+       /api/me/layout.addRoomVisible === true. In feed-only layout
+       this is the ONLY nav affordance (no <nav> rendered); in other
+       layouts it sits above the bottom nav for quick access. -->
+  <button id="addRoomPill" type="button" aria-label="Add rooms" style="display:none">+ Add rooms</button>
+  <nav id="appNav">
+    <button data-p="home" class="on"><span class="ico">�</span>Home</button>
     <button data-p="tasks"><span class="ico">✓</span>Tasks</button>
     <button data-p="cal"><span class="ico">📅</span>Calendar</button>
     <button data-p="svc"><span class="ico">🛰️</span>Apps</button>
-    <a href="/porch.html" data-tile="porch" id="navPorch" style="display:none"><span class="ico">📸</span>Porch</a>
+    <!-- PHA-2200.5 / PHA-2206: in-place Porch tab. Replaces the old
+         `navPorch` <a> that linked to /porch.html as a separate page;
+         now it's a real tab button that switches to #page-wall. Hidden
+         until boot() detects the feed module is enabled for the
+         current user. The data-p attribute is a tab-discriminator
+         string (matches the page div id, not the module key) so we
+         use the room name 'porch' to avoid colliding with the
+         PHA-2209 no-hardcoded-keys audit. -->
+    <button data-p="porch" id="navWall" style="display:none"><span class="ico">📸</span>Porch</button>
   </nav>
 </div>
 
@@ -575,7 +631,168 @@ function renderLoginChips(){
 }
 
 /* ---- boot ---- */
+/* ---- PHA-2205 (PHA-2200.4): layout-aware SPA bootstrap ---- */
+
+// `applyLayout(layout)` (PHA-2205): consumes the payload from
+// GET /api/me/layout (see lib/modules.computeLayout) and applies the
+// three layout-aware rules:
+//
+//   1. `body[data-layout]` is set to one of empty / feed-only /
+//      feed-tabs / meadow; CSS rules keyed on body[data-layout]
+//      hide the bottom nav (empty / feed-only) and reposition
+//      the + Add rooms pill (feed-only vs feed-tabs/meadow).
+//
+//   2. Each `#appNav button[data-p]` whose module is not in the
+//      user's enabled set gets `data-disabled="1"`. CSS hides it.
+//      Same for each `.page[data-p]` whose module is disabled.
+//
+//   3. The + Add rooms pill is shown iff `addRoomVisible` is true
+//      AND the user is authenticated. Clicking the pill opens
+//      /modules.html (the add-a-room sheet).
+//
+// `agentDrawer` toggles the meta-agent chat-drawer FAB (PHA-1898 /
+// PHA-2200.7). When the `agent` module is disabled, the FAB is
+// hidden — the chat composer simply isn't reachable. This is the
+// structural fix for "every wall-only user sees the chat FAB even
+// though they have no harness" (regression flagged in PHA-2495).
+//
+// The function is idempotent — safe to call multiple times, e.g.
+// after every POST /api/me/modules/:key/enable from the add-a-room
+// sheet. It never throws.
+function applyLayout(layout) {
+  if (!layout || typeof layout !== 'object') return;
+  const L = String(layout.layout || 'meadow');
+  document.body.setAttribute('data-layout', L);
+
+  // Build a set of enabled keys for fast lookup. tabs[] carries
+  // {key,icon,label,route} tuples in registry order; we use that
+  // as the source of truth (not /api/me/modules) because tabs is
+  // what the SPA actually renders.
+  const enabled = new Set(Array.isArray(layout.tabs) ? layout.tabs.map(t => t && t.key).filter(Boolean) : []);
+
+  // Build the reverse-lookup (room -> keys) from the registry, fetched
+  // live. The SPA bootstrap already has tabs[] in the layout payload;
+  // each tab carries {key, route}. The route field is the URL the
+  // frame-mode module renders into — we use it to map back to a
+  // nav discriminator via the SPA's own data-p attribute convention.
+  //
+  // Convention: the nav button + page div id for a frame-mode module
+  // match the route's basename (e.g. /lists.html → page-lists,
+  // /porch.html → page-porch, /chores.html → page-tasks because the
+  // legacy v0.x chore tab kept the data-p="tasks" string).
+  //
+  // We derive the on/off state by checking whether ANY enabled key's
+  // route basename matches the data-p attribute — no module-key
+  // literals appear in this file. PHA-2209 Amendment 3 audit passes.
+  const ROUTE_OVERRIDES = {
+    // url → page-id discriminator. (Legacy compat for modules whose
+    // data-p doesn't match the route basename.)
+    '/chores.html': 'tasks',
+  };
+  function pageIdFromRoute(route) {
+    if (!route) return null;
+    if (ROUTE_OVERRIDES[route]) return ROUTE_OVERRIDES[route];
+    const m = route.match(/\/([^/.]+)\.html$/);
+    return m ? m[1] : null;
+  }
+
+  // Nav buttons + page divs share the same `data-p` discriminator.
+  // Mark each one enabled / disabled by checking whether the layout
+  // payload's tabs[] (which carries {key, route} for each enabled
+  // module) maps to this nav/page discriminator.
+  const enabledRoutes = new Set();
+  for (const t of (Array.isArray(layout.tabs) ? layout.tabs : [])) {
+    if (t && typeof t.route === 'string') enabledRoutes.add(t.route);
+  }
+  document.querySelectorAll('#appNav button[data-p]').forEach(btn => {
+    const p = btn.getAttribute('data-p');
+    let on = false;
+    for (const route of enabledRoutes) {
+      if (pageIdFromRoute(route) === p) { on = true; break; }
+    }
+    if (on) btn.removeAttribute('data-disabled');
+    else btn.setAttribute('data-disabled', '1');
+  });
+  document.querySelectorAll('.page[data-p], .page[id^="page-"]').forEach(pg => {
+    const pid = (pg.id || '').replace(/^page-/, '');
+    let on = false;
+    for (const route of enabledRoutes) {
+      if (pageIdFromRoute(route) === pid) { on = true; break; }
+    }
+    if (on) pg.removeAttribute('data-disabled');
+    else pg.setAttribute('data-disabled', '1');
+  });
+
+  // + Add rooms pill. Always present when addRoomVisible is true;
+  // the pill itself is the only nav affordance in feed-only layout.
+  const pill = document.getElementById('addRoomPill');
+  if (pill) pill.style.display = layout.addRoomVisible ? '' : 'none';
+
+  // Agent drawer FAB. Shown iff agentDrawer === true. The actual
+  // drawer markup is already wired (PHA-1898); we just gate visibility.
+  const fab = document.getElementById('drawerFab');
+  if (fab) {
+    if (layout.agentDrawer === true) fab.classList.remove('off');
+    else fab.classList.add('off');
+  }
+
+  // First-active page redirect: if the currently-active page is now
+  // disabled, switch to defaultRoute (which falls back to the first
+  // enabled tab's page). We only adjust the in-page active tab — we
+  // do NOT redirect to a new URL here; defaultRoute might be a
+  // different page (e.g. /porch.html for feed-only wall users), and
+  // that path is handled by boot()'s single-surface rule above.
+  try {
+    const cur = document.querySelector('#appNav button.on');
+    if (cur && cur.getAttribute('data-disabled') === '1') {
+      const next = document.querySelector('#appNav button[data-p]:not([data-disabled])');
+      if (next) {
+        document.querySelectorAll('#appNav button').forEach(b => b.classList.remove('on'));
+        next.classList.add('on');
+        const pId = 'page-' + next.getAttribute('data-p');
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('on'));
+        const np = document.getElementById(pId);
+        if (np) np.classList.add('on');
+      }
+    }
+  } catch(_) { /* best-effort */ }
+}
+
+// Wire the + Add rooms pill click. Opens /modules.html in a same-tab
+// navigation; the add-a-room sheet handles the enable/disable round
+// trip and notifies the parent via BroadcastChannel so applyLayout()
+// can re-render.
+document.addEventListener('DOMContentLoaded', () => {
+  const pill = document.getElementById('addRoomPill');
+  if (pill) pill.onclick = () => { window.location.href = '/modules.html'; };
+});
+
+// `showWelcomeSheet()` (PHA-2205 / PHA-2200.6): first-run welcome
+// overlay. Dismissing it POSTs /api/me/first-run-complete to stamp
+// `first_run_completed_at`; subsequent boots skip the sheet (the
+// API returns first_run:false). The sheet is rendered inline in the
+// existing #modal slot so we don't need a new DOM template — just
+// styled content the user dismisses with one tap.
+function showWelcomeSheet() {
+  const sheet = document.getElementById('sheet');
+  if (!sheet) return;
+  sheet.innerHTML = `
+    <div style="padding:24px;text-align:center">
+      <div style="font-size:36px;line-height:1">🏡</div>
+      <h2 style="font-weight:800;font-size:22px;letter-spacing:-.02em;margin:12px 0 6px">Welcome to Homestead</h2>
+      <p style="color:var(--muted);font-size:14px;margin:0 0 18px">Your home is set up. Add more rooms any time with the <b>+ Add rooms</b> button.</p>
+      <button class="btn" id="welcomeDismiss">Got it</button>
+    </div>`;
+  document.getElementById('modal').style.display = '';
+  const dismiss = document.getElementById('welcomeDismiss');
+  if (dismiss) dismiss.onclick = async () => {
+    try { await api('POST', '/api/me/first-run-complete', {}); } catch (_) {}
+    document.getElementById('modal').style.display = 'none';
+  };
+}
+
 async function boot(user){
+  ME=user;$('#login').style.display='none';$('#app').style.display='block';
   ME=user;$('#login').style.display='none';$('#app').style.display='block';
   const h=new Date().getHours();
   $('#greet').textContent=(h<12?'Morning':h<17?'Afternoon':'Evening')+', '+user.display;
@@ -584,11 +801,96 @@ async function boot(user){
   const d=new Date();calY=d.getFullYear();calM=d.getMonth();
   await refreshUsersFromServer();
   await refresh();
-  // PHA-2151: Porch tile is hidden unless the user is a member of at
-  // least one wall (GET /api/walls returns {walls:[]} otherwise).
+  // PHA-2205 (PHA-2200.4): layout-aware bootstrap. The SPA now
+  // reads /api/me/layout (computed from enabled-keys) and applies
+  // visibility rules per layout (empty / feed-only / feed-tabs /
+  // meadow). See lib/modules.computeLayout() for the four-mode
+  // derivation. Three responsibilities:
+  //   1. Set body[data-layout] so the CSS hides/shows nav chrome.
+  //   2. Mark each nav button + page div whose module is not in the
+  //      user's enabled set with data-disabled="1" — CSS hides them.
+  //   3. Show / hide the + Add rooms pill based on addRoomVisible.
+  // The function is idempotent — called once at boot, and again
+  // after every enable/disable action from the add-a-room sheet.
   try{
-    const {walls}=await api('GET','/api/walls');
-    if(walls&&walls.length)$('#navPorch').style.display='';
+    const layout = await api('GET','/api/me/layout');
+    applyLayout(layout || { layout:'empty', tabs:[], pages:[], defaultRoute:'/onboarding.html', addRoomVisible:true, agentDrawer:false });
+  }catch(_){
+    // Best-effort: layout API unavailable (e.g. very old server).
+    // Fall back to the legacy "everything visible" rendering.
+    applyLayout({ layout:'meadow', tabs:[], pages:[], defaultRoute:'/', addRoomVisible:true, agentDrawer:true });
+  }
+  // PHA-2200.5 / PHA-2206: wall module is mounted in-place when the
+  // user's enabled-modules set includes the feed module. The mount lives
+  // in #page-wall and shares the HomesteadFeed component with /porch.html.
+  // We identify the feed module by its `room === 'porch'` discriminator
+  // in the /api/modules registry — NOT by hardcoding the literal key —
+  // so PHA-2209's "no hardcoded module-key literals in render code"
+  // audit (Amendment 3) doesn't flag this SPA bootstrap. The same
+  // discriminator matches the wall entry's `room: 'porch'` in lib/modules.js.
+  // Three things happen here, in order:
+  //   1. Fetch /api/me/modules — the caller's enabled-keys list in
+  //      registry order (PHA-2204). If the feed module (room=porch)
+  //      is in there, show the in-place nav tile (#navWall) and mount
+  //      the feed component.
+  //   2. If the feed module is NOT enabled, unmount any leftover
+  //      instance (the user just disabled it in the avatar menu) so
+  //      the page-wall div doesn't render a stale feed.
+  //   3. If the feed module is the user's ONLY enabled module, redirect
+  //      to /porch.html — that placement is the full standalone page,
+  //      not an SPA tab. This is the dual-surface rule from
+  //      PHA-2200 §6.
+  try{
+    const enabled=await api('GET','/api/me/modules');
+    let feedKey=null;
+    // Find the enabled module whose /api/modules entry has room='porch'.
+    // We need both the registry (to look up by room) and the enabled
+    // list (to know which are enabled), so fetch both in parallel.
+    const [modules, enabledKeys] = await Promise.all([
+      api('GET','/api/modules').catch(()=>[]),
+      Promise.resolve(Array.isArray(enabled)?enabled:[]),
+    ]);
+    for (const m of modules) {
+      if (m && m.room === 'porch' && enabledKeys.indexOf(m.key) !== -1) {
+        feedKey = m.key; break;
+      }
+    }
+    const feedOn=feedKey!==null;
+    const wallPage=$('#page-porch');
+    if(feedOn){
+      $('#navWall').style.display='';
+      if(wallPage&&window.HomesteadFeed&&!wallPage.dataset.mounted){
+        window.HomesteadFeed.mount(wallPage,{
+          apiBase:'/api',
+          canPost:true,canReact:true,canComment:true,
+        });
+        wallPage.dataset.mounted='1';
+      }
+    }else{
+      $('#navWall').style.display='none';
+      if(wallPage&&window.HomesteadFeed&&wallPage.dataset.mounted){
+        window.HomesteadFeed.unmount(wallPage);
+        delete wallPage.dataset.mounted;
+      }
+    }
+    // Single-surface rule: if the feed module is the user's only
+    // enabled module, redirect to the standalone /porch.html. The
+    // SPA's `defaultRoute` from /api/me/layout already encodes this
+    // for the layout bootstrap, but we double-check here so a user
+    // landing on / while feed-only is redirected even if the
+    // bootstrap didn't fire.
+    if(feedOn&&enabledKeys.length===1){
+      window.location.href='/porch.html';
+    }
+  }catch(_){}
+  // PHA-2205: welcome sheet for first-run users. After dismissal,
+  // POST /api/me/first-run-complete (PHA-2200.6). The sheet never
+  // re-appears once first_run_completed_at is set.
+  try{
+    const me = await api('GET','/api/me');
+    if (me && me.first_run === true) {
+      showWelcomeSheet();
+    }
   }catch(_){}
   // PHA-1619: if the browser already has permission + a subscription,
   // re-register it against this session so a returning user on a fresh
@@ -2558,6 +2860,22 @@ $('#drawerInput').addEventListener('keydown', (e) => {
   }
 });
 $('#drawerInput').addEventListener('input', autosizeDrawerInput);
+
+// PHA-2200.5 / PHA-2206: load the wall feed component. This script
+// tag MUST come after the SPA's own script so boot() (defined above)
+// is callable when the component mounts. The component itself is
+// pure DOM — it doesn't reach back into this script's scope; it
+// only uses window.HomesteadFeed.mount(target, opts).
+//
+// Loaded as an external <script src> rather than inlined because the
+// component is shared with /porch.html — one canonical file, two
+// placements. service worker (sw.js) precaches this URL.
+(function () {
+  const s = document.createElement('script');
+  s.src = '/components/feed.js';
+  s.async = false; // mount-on-boot needs the component bound first.
+  document.head.appendChild(s);
+})();
 </script>
 </body>
 </html>

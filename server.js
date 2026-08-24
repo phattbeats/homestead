@@ -31,6 +31,7 @@ const fs = require('fs');
 const webpush = require('web-push');
 
 const userModel = require('./lib/user-model');
+const modules = require('./lib/modules');
 const plexSync = require('./lib/sync/plex');
 const kavitaSync = require('./lib/sync/kavita');
 const agentTokens = require('./lib/agent-tokens');
@@ -52,6 +53,8 @@ const media = require('./lib/media');
 const walls = require('./lib/walls');
 const notifications = require('./lib/notifications');
 const analytics = require('./lib/analytics');
+const invites = require('./lib/invites');
+const wallMembers = require('./lib/wall-members');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -94,6 +97,9 @@ media.migrate(db);
 walls.migrate(db);
 walls.seed(db);
 analytics.migrate(db);
+// PHA-2207 (PHA-2200.6): invite codes. FKs to walls(slug), so it
+// runs after walls.migrate().
+invites.migrate(db);
 
 // v0.1.0: web push subscriptions (PHA-1619)
 db.exec(`
@@ -241,7 +247,16 @@ function authenticate(req, res, next) {
     } else {
       groups = groupsHeader.split(',').map(s => s.trim()).filter(Boolean);
     }
-    const u = userModel.provisionOrClaim(db, headerUser, 'header_trust', headerUser, groups);
+    // PHA-2207 (PHA-2200.6): union in group_names from wall_memberships
+    // rows for group-visibility walls so invite-granted group
+    // membership survives subsequent header-trust reconciliations.
+    const inviteGroups = db.prepare(`
+      SELECT DISTINCT w.group_name AS name FROM wall_memberships wm
+      JOIN walls w ON w.id = wm.wall_id
+      WHERE wm.user_id = (SELECT id FROM users WHERE username = ?) AND w.visibility = 'group'
+    `).all(headerUser).map(r => r.name).filter(Boolean);
+    const mergedGroups = Array.from(new Set([...groups, ...inviteGroups]));
+    const u = userModel.provisionOrClaim(db, headerUser, 'header_trust', headerUser, mergedGroups);
     if (!u) return res.status(401).json({ error: 'invalid trusted username' });
     req.session.user = {
       username: u.username,
@@ -506,6 +521,13 @@ app.get('/api/me', (req, res) => {
   // cookie yet still sees themselves. Unauthenticated requests return
   // { user: null } (200) instead of 401 so the SPA can use /api/me as a
   // "am I signed in?" check on every page load without a redirect.
+  //
+  // PHA-2204 (PHA-2200.3) extension: when authenticated, also include
+  //   enabled_modules: ['wall','apps',...]  (registry order)
+  //   default_route:    '/porch.html'       (first enabled module's room route)
+  //   first_run:        true | false        (first_run_completed_at IS NULL)
+  // so the SPA bootstrap (PHA-2200.4) can render without a second
+  // /api/me/layout fetch.
   const headerUser = req.get('x-authentik-username');
   if (headerUser) {
     const groupsHeader = req.get('x-authentik-groups') || '';
@@ -524,10 +546,29 @@ app.get('/api/me', (req, res) => {
       isAdmin: !!u.is_admin,
       authProvider: 'header_trust',
     };
-    return res.json({ user: req.session.user });
+    return res.json(buildMeEnvelope(db, req.session.user));
   }
-  res.json({ user: req.session.user || null });
+  if (!req.session.user) return res.json({ user: null });
+  res.json(buildMeEnvelope(db, req.session.user));
 });
+
+// `buildMeEnvelope` assembles the full /api/me response shape. Pulled
+// out so both the header-trust and session-cookie paths in the route
+// above use the same envelope construction. Kept module-local so it
+// doesn't leak into other routes.
+function buildMeEnvelope(db, sessionUser) {
+  const enabledRows = userModel.getEnabledModules(db,
+    db.prepare('SELECT id FROM users WHERE username = ?').get(sessionUser.username).id);
+  const enabledKeys = enabledRows.map(e => e.key);
+  const firstRoomRoute = modules.getRoomRoute(enabledKeys[0]);
+  const userId = db.prepare('SELECT id FROM users WHERE username = ?').get(sessionUser.username).id;
+  return {
+    user: sessionUser,
+    enabled_modules: enabledKeys, // registry order, deterministic
+    default_route: firstRoomRoute, // first enabled module's room route (or null)
+    first_run: userModel.isFirstRun(db, userId),
+  };
+}
 
 // PHA-1902 (PHA-1617.9): the `homestead_get_user_context` snapshot
 // endpoint. Single-call morning-brief context: today's tasks/events/
@@ -547,6 +588,261 @@ app.get('/api/me/snapshot', auth, (req, res) => {
     res.status(500).json({ error: 'snapshot_build_failed' });
   }
 });
+// ---- PHA-2204 (PHA-2200.3): module / layout API surface ----
+//
+// Four read endpoints + two write endpoints:
+//   * GET  /api/me/layout       — SPA bootstrap; computed from enabled set
+//   * GET  /api/me/modules      — current user's enabled keys (registry order)
+//   * GET  /api/modules         — full registry array (for the add-a-room sheet)
+//   * POST /api/me/modules/:key/enable   — idempotent; cascade via withRequirements
+//   * POST /api/me/modules/:key/disable  — idempotent; cascade via withDependents
+//
+// Auth: every endpoint uses the existing `auth` middleware. Users only
+// modify their own `user_modules` rows (the handlers below look up the
+// caller's user.id from the session). No new admin gates.
+
+// GET /api/me/layout — returns the SPA bootstrap shape built from the
+// caller's currently-enabled modules. See lib/modules.computeLayout for
+// the four layout modes (empty / feed-only / feed-tabs / meadow).
+app.get('/api/me/layout', auth, (req, res) => {
+  const username = req.session.user && req.session.user.username;
+  if (!username) return res.status(401).json({ error: 'unauthorized' });
+  const u = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (!u) return res.status(401).json({ error: 'unauthorized' });
+  const enabledKeys = userModel.getEnabledModules(db, u.id).map(e => e.key);
+  res.json(modules.computeLayout(enabledKeys));
+});
+
+// GET /api/me/modules — returns the caller's enabled keys in registry
+// order. Same data the SPA can derive from /api/me.enabled_modules,
+// but exposed as its own endpoint for callers (drawer scripts, MCP
+// tools) that want JUST the keys without the full /api/me envelope.
+app.get('/api/me/modules', auth, (req, res) => {
+  const username = req.session.user && req.session.user.username;
+  if (!username) return res.status(401).json({ error: 'unauthorized' });
+  const u = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (!u) return res.status(401).json({ error: 'unauthorized' });
+  const enabledKeys = userModel.getEnabledModules(db, u.id).map(e => e.key);
+  res.json(enabledKeys);
+});
+
+// GET /api/modules — returns the full registry as an array of entries
+// in registry order. Used by the add-a-room sheet (PHA-2200.4) to
+// render the list of available modules the user can enable.
+app.get('/api/modules', auth, (req, res) => {
+  res.json(modules.listModules());
+});
+
+// POST /api/me/modules/:key/enable — idempotent enable. Body is
+// optional; { withRequirements: true } cascades unmet requirements.
+// 400 on invalid key. 409 on unmet requirements when the cascade flag
+// is not set (response carries { error: 'requires_unmet', unmet: [...] }).
+// Returns { enabled: { module_key, enabled, enabled_at }, also_enabled: [...] }.
+app.post('/api/me/modules/:key/enable', auth, (req, res) => {
+  const username = req.session.user && req.session.user.username;
+  if (!username) return res.status(401).json({ error: 'unauthorized' });
+  const key = req.params.key;
+  if (!modules.isModuleKey(key)) return res.status(400).json({ error: 'invalid_module_key', key });
+  const u = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (!u) return res.status(401).json({ error: 'unauthorized' });
+  const withRequirements = !!(req.body && req.body.withRequirements === true);
+  try {
+    const result = userModel.enableModule(db, u.id, key, { withRequirements });
+    res.json({
+      enabled: result.enabled,
+      also_enabled: result.also_enabled,
+      enabled_modules: userModel.getEnabledModules(db, u.id).map(e => e.key),
+    });
+  } catch (err) {
+    if (err && err.code === 'requires_unmet') {
+      return res.status(409).json({ error: 'requires_unmet', unmet: err.unmet });
+    }
+    console.error('[api/me/modules/:key/enable]', err);
+    res.status(500).json({ error: 'enable_failed' });
+  }
+});
+
+// POST /api/me/modules/:key/disable — idempotent disable. Body is
+// optional; { withDependents: true } cascades to dependents.
+// 400 on invalid key. 409 on active dependents when the cascade flag
+// is not set (response carries { error: 'dependents_active', dependents: [...] }).
+// Returns { disabled: { module_key, enabled, enabled_at }, also_disabled: [...] }.
+app.post('/api/me/modules/:key/disable', auth, (req, res) => {
+  const username = req.session.user && req.session.user.username;
+  if (!username) return res.status(401).json({ error: 'unauthorized' });
+  const key = req.params.key;
+  if (!modules.isModuleKey(key)) return res.status(400).json({ error: 'invalid_module_key', key });
+  const u = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (!u) return res.status(401).json({ error: 'unauthorized' });
+  const withDependents = !!(req.body && req.body.withDependents === true);
+  try {
+    const result = userModel.disableModule(db, u.id, key, { withDependents });
+    res.json({
+      disabled: result.disabled,
+      also_disabled: result.also_disabled,
+      enabled_modules: userModel.getEnabledModules(db, u.id).map(e => e.key),
+    });
+  } catch (err) {
+    if (err && err.code === 'dependents_active') {
+      return res.status(409).json({ error: 'dependents_active', dependents: err.dependents });
+    }
+    console.error('[api/me/modules/:key/disable]', err);
+    res.status(500).json({ error: 'disable_failed' });
+  }
+});
+
+// ---- PHA-2207 (PHA-2200.6): invite-to-wall flow + first-run-complete ----
+//
+// Three write endpoints + one read endpoint, plus a static HTML page
+// mount for /invite/:code (the redemption handshake):
+//
+//   * POST /api/invites                    — admin issues a new invite.
+//                                             body: {wall_slug, expires_in_days?, note?}
+//                                             400 if wall_slug missing (legacy PHA-1575 path).
+//   * POST /api/invites/:code/redeem       — authed user redeems; auto-enrolls into the wall.
+//   * GET  /api/invites                    — admin list view (no redeemed by default).
+//   * POST /api/me/first-run-complete      — caller stamps first_run_completed_at = now.
+//                                             Called by welcome.html on dismiss.
+//
+// `requireAuthOrHeader` is a small wrapper around the header-trust
+// path: every redemption must resolve a user before we touch the
+// invite row, but the redemption page itself is served unauthenticated
+// (the SWAG / authentik layer bounces the browser through SSO on the
+// way in, and the redeemed call carries the X-authentik-username
+// header). Same pattern as the existing /api/me handler above.
+function _resolveCaller(req, res) {
+  const me = userModel.getMe(db, req.session.user && req.session.user.username);
+  if (me) return me;
+  // Header-trust fallback (SWAG forwards X-authentik-username when
+  // the session cookie hasn't been set yet — first-login-from-invite).
+  const headerUser = req.get('x-authentik-username');
+  if (!headerUser) return null;
+  const groupsHeader = req.get('x-authentik-groups') || '';
+  let groups = [];
+  if (groupsHeader.startsWith('[')) {
+    try { groups = JSON.parse(groupsHeader); } catch (_) { groups = []; }
+  } else {
+    groups = groupsHeader.split(',').map(s => s.trim()).filter(Boolean);
+  }
+  // PHA-2207 (PHA-2200.6): union in any group_names from
+  // wall_memberships for group-visibility walls. This makes
+  // invite-granted group membership survive subsequent header-trust
+  // reconciliations — provisionOrClaim otherwise replaces the full
+  // user_groups set with just the X-authentik-groups header, wiping
+  // the media-club row we wrote on invite redemption.
+  const inviteGroups = db.prepare(`
+    SELECT DISTINCT w.group_name AS name FROM wall_memberships wm
+    JOIN walls w ON w.id = wm.wall_id
+    WHERE wm.user_id = (SELECT id FROM users WHERE username = ?) AND w.visibility = 'group'
+  `).all(headerUser).map(r => r.name).filter(Boolean);
+  const mergedGroups = Array.from(new Set([...groups, ...inviteGroups]));
+  const u = userModel.provisionOrClaim(db, headerUser, 'header_trust', headerUser, mergedGroups);
+  if (!u) return null;
+  req.session.user = {
+    username: u.username,
+    display: u.display,
+    color: u.color,
+    isAdmin: !!u.is_admin,
+    authProvider: 'header_trust',
+  };
+  return userModel.getMe(db, u.username);
+}
+
+// POST /api/invites — admin issues a new invite. The reframe says:
+//   * wall_slug is REQUIRED (legacy PHA-1575 wall-less invites return 400)
+//   * expires_in_days defaults to 7, max 90
+//   * only admins can create
+app.post('/api/invites', auth, requireAdmin, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { wall_slug, expires_in_days, note } = req.body || {};
+  if (!wall_slug || typeof wall_slug !== 'string') {
+    return res.status(400).json({ error: 'wall_slug required', hint: 'PHA-1575 wall-less invites are gone (see PHA-2207).' });
+  }
+  try {
+    const inv = invites.create(db, { wall_slug, expires_in_days, note, created_by: me.id });
+    res.status(201).json(inv);
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.code || 'invalid' });
+    console.error('[api/invites POST]', err);
+    res.status(500).json({ error: 'create_failed' });
+  }
+});
+
+// GET /api/invites — admin list view.
+app.get('/api/invites', auth, requireAdmin, (req, res) => {
+  const include_redeemed = req.query.include_redeemed === '1' || req.query.include_redeemed === 'true';
+  const wall_slug = req.query.wall_slug || null;
+  try {
+    res.json({ invites: invites.list(db, { include_redeemed, wall_slug }) });
+  } catch (err) {
+    console.error('[api/invites GET]', err);
+    res.status(500).json({ error: 'list_failed' });
+  }
+});
+
+// POST /api/invites/:code/redeem — authed user redeems an invite.
+//   1. resolve caller (session OR header-trust)
+//   2. look up invite (peek semantics; 410 if expired/redeemed)
+//   3. atomic: INSERT wall_memberships row + stamp invite.redeemed_by
+//   4. return {wall_slug, wall_name, first_run: <bool>, redirect: /welcome.html?wall=...}
+//
+// first_run is preserved as-is for existing users (their
+// first_run_completed_at is non-null so the SPA won't show the sheet
+// again) and stays NULL for fresh accounts (the SPA gates the sheet
+// on first_run: true regardless of invite membership).
+app.post('/api/invites/:code/redeem', (req, res) => {
+  const me = _resolveCaller(req, res);
+  if (!me) return res.status(401).json({ error: 'unauthenticated' });
+  try {
+    const result = invites.redeem(db, req.params.code, me.id);
+    res.json({
+      ok: true,
+      invite_id: result.invite.id,
+      wall_slug: result.wall_slug,
+      wall_name: result.wall_name,
+      first_run: userModel.isFirstRun(db, me.id),
+      redirect: `/welcome.html?wall=${encodeURIComponent(result.wall_slug)}`,
+      // include the membership list so the welcome sheet can render
+      // member avatars without an extra round-trip.
+      members: wallMembers.getMembers(db, result.wall_slug).members,
+    });
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.code || 'invalid', detail: err.message });
+    console.error('[api/invites/:code/redeem]', err);
+    res.status(500).json({ error: 'redeem_failed' });
+  }
+});
+
+// POST /api/me/first-run-complete — caller stamps first_run_completed_at.
+// Idempotent (completeFirstRun preserves the original timestamp on
+// re-call). Used by public/welcome.html's "got it" CTA.
+app.post('/api/me/first-run-complete', (req, res) => {
+  const me = _resolveCaller(req, res);
+  if (!me) return res.status(401).json({ error: 'unauthenticated' });
+  try {
+    const stillFirstRun = userModel.completeFirstRun(db, me.id);
+    res.json({ ok: true, first_run: stillFirstRun });
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.code || 'invalid' });
+    console.error('[api/me/first-run-complete]', err);
+    res.status(500).json({ error: 'first_run_complete_failed' });
+  }
+});
+
+// GET /api/walls/:slug/members — public-readable on the caller's
+// own membership. Used by the welcome sheet.
+app.get('/api/walls/:slug/members', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const data = wallMembers.getMembers(db, req.params.slug);
+  if (!data) return res.status(404).json({ error: 'not_found' });
+  // Membership gate — same constitutional rule as the rest of /api/walls.
+  try { walls.assertMember(req.params.slug, me.id); }
+  catch (e) { return wallsErr(res, e); }
+  res.json(data);
+});
+
 app.post('/api/password', auth, (req, res) => {
   const { current, next } = req.body || {};
   const u = db.prepare('SELECT * FROM users WHERE username = ?').get(req.session.user.username);
@@ -2406,16 +2702,28 @@ app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 // browser — everything else in lib/ is server-only DB/HTTP logic.
 app.get('/lib/scope-display.js', (req, res) => {
   res.type('application/javascript');
-  res.sendFile(path.join(__dirname, 'lib', 'scope-display.js'));
+  res.sendFile('lib/scope-display.js', { root: __dirname });
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
+// PHA-2207 (PHA-2200.6): invite redemption handshake. Visiting
+// https://life.phatt.vip/invite/{code} serves the redemption page
+// (public/invite.html). The page itself does the POST to /api/invites/:code/redeem
+// once the SWAG/authentik layer has authenticated the user. Codes
+// contain only hex chars (32 chars from crypto.randomUUID without
+// dashes), so the regex anchor is safe — no path-confusion risk.
+app.get(/^\/invite\/([A-Fa-f0-9]{16,64})$/, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'invite.html'));
+});
 app.get('/favicon.ico', (req, res) => {
   res.set('Content-Type', 'image/svg+xml');
   res.set('Cache-Control', 'public, max-age=86400');
-  res.sendFile(path.join(__dirname, 'public', 'icon.svg'));
+  res.sendFile('public/icon.svg', { root: __dirname });
 });
-app.get(/^(?!\/api).*/, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+// SPA fallback — every non-/api route renders index.html. sendFile requires
+// a { root } option on Node 22 + send 1.2.x, otherwise the static path
+// resolution fails with ENOENT and the SPA catch-all returns 404.
+app.get(/^(?!\/api).*/, (req, res) => res.sendFile('public/index.html', { root: __dirname }));
 
 const PORT = process.env.PORT || 3080;
 // ---- v0.0.6 health checker boot (PHA-1623) ----

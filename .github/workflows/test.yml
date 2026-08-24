@@ -1,0 +1,50 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium for browser smoke tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Run unit test suite
+        run: npm test
+
+      # PHA-2501 standing policy — Definition of Done guard. Two browser
+      # smokes run on every PR: (1) the SPA page-error regression guard
+      # (catches duplicate top-level declarations like PHA-2494), and
+      # (2) the post-login mobile-viewport screenshot smoke (catches
+      # broken renders of the login surface). Both must pass for the
+      # PR to merge. The wider `npm run test:smoke` chain is left for
+      # local + release-gate use; it includes deployment-secret-bound
+      # smokes that don't run in PR-only CI.
+      - name: Run SPA page-error regression smoke
+        run: node scripts/smoke-spa-pageerrors.js
+
+      - name: Run post-login mobile screenshot smoke
+        run: node scripts/smoke-postlogin-screenshot.js
+
+      - name: Upload verify-out screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-out
+          path: verify-out/

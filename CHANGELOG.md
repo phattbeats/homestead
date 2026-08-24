@@ -171,7 +171,8 @@ PHA-2218 issue before implementation started.
   confirming the new default doesn't silently demote an already-`all`
   member and does correctly gate a fresh joiner without a mention.
 
-## v0.3.0 (2026-08-21) — Modular Homestead: user_modules + module registry (PHA-2202, PHA-2203)
+
+## v0.3.0 (2026-08-21) — Modular Homestead: user_modules + module registry + invite-to-wall (PHA-2202, PHA-2203, PHA-2204, PHA-2207, PHA-2209)
 
 ### Module registry (PHA-2203 / PHA-2200.2)
 
@@ -283,6 +284,134 @@ PHA-2218 issue before implementation started.
   view renders, revoke removes the tile, and the same token gets 401
   on its very next call, all within one run.
 
+
+### Invite-to-wall flow (PHA-2207 / PHA-2200.6)
+
+- **`lib/invites.js`** — new module. `invites` table
+  (`id`, `wall_slug`, `created_by`, `created_at`, `expires_at`,
+  `redeemed_by`, `redeemed_at`, `note`); the `id` IS the redemption
+  code (32 hex chars from `crypto.randomUUID()` sans dashes).
+  Helpers: `create`, `peek`, `redeem`, `list`. `peek` enforces
+  expiry/redeemed checks (410 on either); `redeem` is the canonical
+  CREATE-or-CLAIM-and-enroll path that writes wall_memberships +
+  stamps the invite atomically inside a transaction.
+- **`lib/wall-members.js`** — new module. `addMember(db, slug, userId, role)` is
+  INSERT-OR-IGNORE on the existing `wall_memberships` table (the
+  schema name is `wall_memberships`, not `wall_members` as the issue
+  body says; spec drift documented inline). `ensureMember` reconciles
+  the user's `user_groups` set to include the wall's `group_name`
+  for group-visibility walls so `walls.assertMember` +
+  `walls.listForUser` see the new user after invite redemption.
+  `getMembers` returns the full profile rows for the welcome-sheet
+  avatar stack.
+- **`POST /api/invites`** (admin only) — body
+  `{wall_slug, expires_in_days?, note?}`. `wall_slug` is REQUIRED:
+  a missing `wall_slug` returns 400 with a hint referencing PHA-1575
+  (the wall-less legacy path). `expires_in_days` defaults to 7,
+  max 90. Response carries `url: https://life.phatt.vip/invite/{code}`.
+- **`GET /api/invites`** (admin only) — outstanding invites by
+  default; `?include_redeemed=1` to include redeemed.
+- **`POST /api/invites/:code/redeem`** — authed user redeems. Atomic
+  transaction: `ensureMember` (wall_memberships + group reconciliation)
+  + invite stamp. Returns `{wall_slug, wall_name, first_run, redirect,
+  members}` so the SPA can render the welcome sheet without a
+  second round-trip. 410 on expired or already-redeemed; 404 on
+  unknown code.
+- **`POST /api/me/first-run-complete`** — stamps
+  `first_run_completed_at = datetime('now')`. Idempotent. Called by
+  `public/welcome.html` on dismiss.
+- **`GET /api/walls/:slug/members`** — used by the welcome sheet to
+  render the member avatar stack. Same membership gate as the rest
+  of `/api/walls/*` (`assertMember`).
+- **`public/welcome.html`** — the welcome sheet. Single screen: wall
+  name + member avatars + "Open the feed →" CTA that POSTs
+  `/api/me/first-run-complete` then navigates to
+  `/porch.html?wall=<slug>`. Existing users (first_run: false) skip
+  straight to the feed.
+- **`public/invite.html`** — the redemption page served at
+  `/invite/:code`. Bounces unauthenticated users to `/api/login`,
+  POSTs `/api/invites/:code/redeem`, and renders the wall card +
+  "Join this wall" CTA on success.
+- **Header-trust group union** — `provisionOrClaim` is now invoked
+  with `X-authentik-groups ∪ {group_names from group-visibility
+  wall_memberships}`. Without this, the very next authenticated
+  request would call `reconcileGroups` and wipe the media-club
+  group that the invite just granted. Documented inline.
+- **Tests.** `scripts/test-invite-to-wall.js` covers 50 assertions:
+  admin-only create, wall_slug required (legacy PHA-1575 → 400),
+  valid create returns 201 + URL, redemption grants membership +
+  first_run state, already-redeemed → 410, unknown code → 404,
+  `first-run-complete` is idempotent, existing-user redemption
+  preserves first_run: false, members endpoint gated by
+  assertMember, invalid wall_slug / bad expires_in_days, no-auth
+  redeem → 401.
+
+### Acceptance suite + release (PHA-2209 / PHA-2200.8)
+
+Six new acceptance scripts gate the v0.3.0 release. They cover the
+three amendments from comments `1afbe170` + `04093be5` and the
+acceptance criteria rolled up from PHA-2200 design-note §7.
+
+- **`scripts/test-modular-layout.js`** — synthetic-user HTTP suite.
+  Boots server.js on `:3192` and exercises the three layout shapes
+  (`empty` / `feed-only` / `feed-tabs` / `meadow`) plus the welcome
+  sheet (`first_run` lifecycle, PHA-2200.6), the agent-drawer flag
+  (PHA-2200.7), the `+ Add rooms` pill (`addRoomVisible`), and the
+  tab/page shape contract that the SPA bootstrap relies on. 63
+  assertions.
+- **`scripts/test-disable-reenable.js`** — empty-state acceptance
+  (AC8): enable a non-default module (Calendar), see the tab,
+  disable, tab disappears with the `user_modules` row preserved
+  (data intact), re-enable, tab returns. Also covers the four
+  layout modes by enabled-set size and the `addRoomVisible` /
+  `agentDrawer` flag transitions. 41 assertions.
+- **`scripts/test-requires-cascade.js`** — enable/disable cascade
+  (AC5). `enableModule(chores, { withRequirements: true })` also
+  writes `lists`; `disableModule(lists, { withDependents: true })`
+  also clears `chores`. Without the cascade flag, the call throws
+  `requires_unmet` / `dependents_active` with the unmet/dependent
+  list. Idempotency + unknown-key rejection covered. 25 assertions.
+- **`scripts/test-default-off-future.js`** — Amendment 2 (default
+  OFF for future first-party modules). Simulates adding a 7th
+  module (`recipes`) to the registry without backfilling existing
+  users. Asserts new users still see `{wall}` only, existing users'
+  enabled sets are unaffected, the DB row is preserved with data
+  intact (invisible until the registry knows about the key), and
+  no per-module INSERT-backfill appears in `lib/user-model.js`
+  migration text (the v3 cross-join is the only place that
+  writes user_modules en masse). 16 assertions.
+- **`scripts/test-shared-registry-third-party.js`** — Amendment 1
+  (registry is the shared intake path). Built-in entries and a
+  representative third-party-shaped entry (`popcorn_vote` per
+  PHA-2201 manifest contract) both pass `validateEntryShape`.
+  Deliberately malformed third-party entries fail. Verifies the
+  16-field manifest contract and that the validator treats both
+  shapes symmetrically. 37 assertions.
+- **`scripts/test-registry-no-hardcoded-keys.js`** — Amendment 3
+  (no hardcoded module-key literals in render code). Greps the
+  repo for `'wall'` / `'lists'` / `'calendar'` / `'chores'` /
+  `'apps'` / `'agent'` literals outside the registry + migrations
+  + test files. Strips comments before scanning and excludes
+  object-property-key positions. Allow-list covers the four
+  known-benign namespace collisions (`welcome.html` URL param,
+  `caldav-source.js` CalDAV XML element, `index.html` drawer
+  stream-author, snapshot envelope categories). 11 assertions.
+
+### Version bump
+
+- `package.json` — bumped to `0.3.0` (from `0.3.0-invite-2207`).
+  The pre-release `-invite-2207` suffix was a work-in-progress
+  tag; v0.3.0 is the stable release.
+
+### Test chain wiring
+
+- `package.json` `scripts.test` — the six new tests are inserted
+  after the v0.3.0 component tests (`test-user-modules`,
+  `test-modules`, `test-modules-api`, `test-invite-to-wall`) and
+  before the pre-v0.3.0 component tests. Running
+  `npm test` now exercises the full v0.3.0 acceptance surface.
+
+
 ### Third-party app install flow (PHA-2201.1 / PHA-2229)
 
 - **Six endpoints**, the server-side state machine from the PHA-2201
@@ -359,6 +488,73 @@ PHA-2218 issue before implementation started.
   (29 assertions) proves both the positive case (can read media-club)
   and the negative case (cannot read a wall the underlying human
   belongs to but the token was never granted) working as designed.
+
+### Wall feed component extraction (PHA-2206 / PHA-2200.5)
+
+The full wall feed surface (composer, post list, reactions,
+comments, "Older" pagination) was a single-page IIFE in
+`public/porch.js` shipped by PHA-2151. With the v0.3.0 dual-surface
+design (PHA-2200 §6 — Porch is a standalone page when the wall
+module is the user's only enabled room, AND an in-place tab inside
+the meadow/feed-tabs SPA when other modules are also enabled) the
+same JS needs to render in two placements without a rewrite.
+
+- **`public/components/feed.js`** (new) — the extracted component,
+  a 27.8 KB IIFE exposing `window.HomesteadFeed.mount(target, opts)`
+  + `window.HomesteadFeed.unmount(target)`. Per-instance state
+  (ME, WALLS, WALL, POSTS, CURSOR, …) lives in the closure so two
+  simultaneous mounts don't collide. Permission gates
+  (`canPost` / `canReact` / `canComment`) are honored by hiding the
+  affected UI rather than blocking the mount. Idempotent re-mount:
+  mounting into an already-mounted target disposes the prior
+  instance first. `dispose()` aborts in-flight fetches via
+  AbortController and removes every registered event listener.
+  Test-only helpers are exported under `module.exports` so the
+  vm-sandbox tests can exercise them without a DOM.
+- **`public/porch.html`** (refactored) — now a thin shell. Drops
+  the inline `porch.js` script tag and the inline composer/feed
+  markup; instead loads `/components/feed.js` and calls
+  `HomesteadFeed.mount(document.getElementById('porch-mount'), …)`
+  on `DOMContentLoaded`. Chrome (header, back link, wall picker)
+  moved into the component so both placements render identically.
+- **`public/index.html`** (extended) — adds a `<div class="page"
+  id="page-porch"></div>` page container and a new
+  `<button data-p="porch" id="navWall" style="display:none">Porch</button>`
+  nav tile. On `boot()`, the SPA fetches `/api/me/modules` and
+  `/api/modules`, finds the enabled module whose `room === 'porch'`
+  discriminator matches the wall entry, and mounts
+  `HomesteadFeed.mount(page-porch)` in-place. Single-surface rule:
+  if the feed module is the user's ONLY enabled module, the SPA
+  redirects to `/porch.html` instead of mounting (per PHA-2200 §6).
+  The literal 'wall' / 'porch' module key is NOT hardcoded — the
+  mount discriminator is the registry's `room` field, keeping
+  PHA-2209's no-hardcoded-keys audit (Amendment 3) green.
+- **`public/porch.js`** (removed) — logic moved into
+  `public/components/feed.js`. The script tag in `porch.html` now
+  points at the component.
+- **`public/sw.js`** (extended) — adds a minimal precache list
+  (`/components/feed.js`, `/porch.css`) with cache-first fetch +
+  best-effort `cache.addAll` install. The push handler and
+  notificationclick logic are unchanged. Returning PWA users on
+  intermittent connectivity now see the Porch without an empty
+  white flash.
+- **`scripts/test-feed-component.js`** (new) — 71-assertion
+  acceptance suite. Three sections: static-asset shape (component
+  exists, exports the contract, both placements reference it, no
+  duplicate API calls), pure-helper unit tests via `vm.runInContext`
+  on the inlined helpers (esc, cssEsc, fmtTime, postMediaHtml,
+  reactionsHtml, postHtml — XSS escape matrix + author/count/pending
+  branches), and live end-to-end (boot server.js, fetch the
+  component file, exercise the wall/comment/reaction API both
+  placements consume). Inserted into `npm test` chain after the
+  registry-no-hardcoded-keys audit and before the pre-v0.3.0
+  component tests (per PHA-2209 lesson #4).
+- **`scripts/smoke-porch-ui.js`** (updated) — replaces the
+  `porch.js` references with `components/feed.js`; asserts both
+  placements load the same component URL and reference the same
+  endpoints. Now also verifies `GET /components/feed.js` returns
+  200 (shared static asset) and that the served `/index.html`
+  carries the `#page-porch` mount target.
 
 ## v0.2.0 (2026-08-19) — Porch Wall (PHA-2147)
 
