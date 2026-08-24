@@ -141,6 +141,25 @@ nav button,nav a{display:flex;flex-direction:column;align-items:center;gap:3px;f
 nav button.on{color:var(--accent)}
 nav .ico{font-size:20px}
 
+/* PHA-2205 (PHA-2200.4): layout-aware shell.
+   * feed-only      → no <nav>; thin pill above safe-area
+   * feed-tabs      → <nav> visible; up to 3 buttons
+   * meadow         → <nav> visible; up to 4 buttons
+   * empty          → nothing visible; SPA redirects to onboarding
+*/
+#mainNav{visibility:hidden}              /* hidden until applyLayout runs */
+#mainNav[data-layout]{visibility:visible}
+#mainNav[data-layout="feed-only"]{display:none}
+#mainNav[data-layout="empty"]{display:none}
+.add-rooms-pill{position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(env(safe-area-inset-bottom) + 16px);z-index:32;
+  padding:9px 18px;border-radius:999px;background:var(--surface);
+  border:1px solid var(--line);color:var(--ink);
+  font-size:13px;font-weight:700;letter-spacing:.01em;
+  box-shadow:0 6px 18px rgba(43,38,34,.08);display:none}
+.add-rooms-pill.on{display:block}
+.add-rooms-pill:active{transform:translateX(-50%) scale(.97)}
+
 /* ---- PHA-1898: meta-agent chat drawer (design doc §6.3) ---- */
 #drawerFab{position:fixed;right:20px;bottom:calc(env(safe-area-inset-bottom) + 156px);
   width:52px;height:52px;border-radius:50%;background:var(--ink);color:#fff;font-size:22px;
@@ -383,8 +402,18 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
       <div class="svc-grid" id="svcGrid"></div>
     </div>
   </main>
+  <!-- PHA-2205 (PHA-2200.4): the `+ Add rooms` pill. Hidden by default;
+       the layout bootstrap shows it for layout: feed-only when the
+       registry still has rooms the user hasn't enabled. -->
+  <button id="addRoomsPill" class="add-rooms-pill" type="button" hidden>+ Add rooms</button>
+
   <button id="fab">+</button>
-  <nav>
+  <nav id="mainNav" data-layout="">
+    <!-- PHA-2205 (PHA-2200.4): nav buttons are rendered by the
+         layout bootstrap from /api/me/layout.tabs. The fallback
+         DOM below is only ever seen for a single render frame
+         before JS rewrites it; intentional, so the page is never
+         blank if /api/me/layout is slow. -->
     <button data-p="home" class="on"><span class="ico">🏡</span>Home</button>
     <button data-p="tasks"><span class="ico">✓</span>Tasks</button>
     <button data-p="cal"><span class="ico">📅</span>Calendar</button>
@@ -501,6 +530,10 @@ async function refreshUsersFromServer(){
 loadUsersFromCache();
 renderLoginChips();
 $('#loginBtn').onclick=doLogin;
+// PHA-2205 (PHA-2200.4): the + Add rooms pill is hidden until
+// applyLayout runs for feed-only + addRoomVisible. Bind it once.
+const __addRoomsPill = $('#addRoomsPill');
+if (__addRoomsPill) __addRoomsPill.onclick = () => openAddRoomSheet();
 $('#pw').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
 $('#username').addEventListener('keydown',e=>{if(e.key==='Enter'){$('#pw').focus();}});
 async function doLogin(){
@@ -525,7 +558,170 @@ function renderLoginChips(){
   });
 }
 
-/* ---- boot ---- */
+/* ---- layout bootstrap (PHA-2205 / PHA-2200.4) ----
+ *
+ * applyLayout(me, layout) wires the SPA shell to /api/me/layout:
+ *   - rebuilds <nav> from layout.tabs (excludes 'wall'; porch is at /porch.html)
+ *   - sets data-layout on <nav> so CSS hides it for feed-only / empty
+ *   - toggles #drawerFab visibility from layout.agentDrawer
+ *   - swaps #fab onclick based on layout (composer in feed-tabs/meadow,
+ *     add-a-room trigger in feed-only)
+ *   - shows/hides the #addRoomsPill (feed-only when addRoomVisible=true)
+ *   - hides the 4 hardcoded .page divs when layout is empty
+ *
+ * The function is idempotent — calling it again with a fresh layout
+ * payload (e.g. after modules.js fires 'homestead:layout-changed')
+ * re-applies everything in one pass.
+ */
+function applyLayout(me, layout) {
+  if (!layout || typeof layout !== 'object') return;
+  window.__lastLayout = layout;
+
+  const nav = $('#mainNav');
+  const tabs = Array.isArray(layout.tabs) ? layout.tabs : [];
+
+  // Reset nav: keep the porch anchor (hidden by default), drop the hardcoded buttons.
+  if (nav) {
+    nav.setAttribute('data-layout', layout.layout || '');
+    const keepPorch = nav.querySelector('#navPorch');
+    nav.innerHTML = '';
+    if (keepPorch) nav.appendChild(keepPorch);
+
+    // Wall lives at /porch.html (not in the SPA shell). Everything else
+    // gets a nav button. Route mapping per PHA-2200 design §3:
+    //   wall  → /porch.html (not in nav, anchor above is hidden anyway)
+    //   home/tasks/cal/svc map by registry key (we use the existing page-* ids).
+    for (const t of tabs) {
+      if (t.key === 'wall') continue; // wall = porch, separate surface
+      const btn = document.createElement('button');
+      btn.dataset.p = routeForKey(t.key);
+      btn.innerHTML = `<span class="ico">${esc(t.icon || '·')}</span>${esc(t.label || t.key)}`;
+      btn.onclick = () => {
+        nav.querySelectorAll('button').forEach(x => x.classList.remove('on'));
+        btn.classList.add('on');
+        curPage = btn.dataset.p;
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('on'));
+        const target = document.getElementById('page-' + curPage);
+        if (target) target.classList.add('on');
+        else curPage = tabs[0] && routeForKey(tabs[0].key) || 'home';
+        // Re-arm FAB for the new page.
+        wireFabForLayout(layout);
+      };
+      nav.appendChild(btn);
+    }
+    // Mark the active page; defaultRoute wins if it's in the rendered set.
+    const wanted = (layout.defaultRoute || '').replace(/^\//, '').split('?')[0] || '';
+    const active = nav.querySelector(`button[data-p="${wanted}"]`);
+    if (active) {
+      nav.querySelectorAll('button').forEach(x => x.classList.remove('on'));
+      active.classList.add('on');
+      curPage = active.dataset.p;
+    } else if (nav.querySelector(`button[data-p="${curPage}"]`)) {
+      // current page still valid; just leave it
+    } else if (tabs.length) {
+      curPage = routeForKey(tabs[0].key);
+    }
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('on'));
+    const def = document.getElementById('page-' + curPage);
+    if (def) def.classList.add('on');
+  }
+
+  // Empty layout → hide the 4 hardcoded pages; user is on /onboarding.html
+  const main = document.querySelector('main');
+  if (main) {
+    if (layout.layout === 'empty') {
+      main.style.display = 'none';
+    } else if (main.style.display === 'none') {
+      main.style.display = '';
+    }
+  }
+
+  // Drawer FAB: agentDrawer flag
+  const dfab = $('#drawerFab');
+  if (dfab) dfab.classList.toggle('off', !layout.agentDrawer);
+
+  // Add-rooms pill: feed-only + addRoomVisible
+  const pill = $('#addRoomsPill');
+  if (pill) {
+    const show = layout.layout === 'feed-only' && !!layout.addRoomVisible;
+    pill.classList.toggle('on', show);
+    pill.hidden = !show;
+  }
+
+  // FAB action depends on layout
+  wireFabForLayout(layout);
+}
+
+function wireFabForLayout(layout) {
+  const fab = $('#fab');
+  if (!fab) return;
+  if (layout && layout.layout === 'feed-only') {
+    fab.onclick = () => openAddRoomSheet();
+    fab.title = 'Add rooms';
+  } else {
+    // Preserve the original FAB semantics for meadow / feed-tabs:
+    // svc → addSvc, cal → event sheet, home → picker, else → task sheet.
+    fab.onclick = () => {
+      if (curPage === 'svc') return openSvcSheet();
+      if (curPage === 'cal') return openEventSheet(null, selDate);
+      if (curPage === 'home') return openPicker();
+      openTaskSheet();
+    };
+    fab.title = '';
+  }
+}
+
+// Route mapping: registry key → SPA page-* id. Anything we don't know
+// falls back to the first available tab or 'home' so the SPA never
+// gets stuck on a missing page.
+function routeForKey(key) {
+  switch (key) {
+    case 'wall': return 'home'; // wall renders as porch, not in SPA shell
+    case 'chores':
+    case 'tasks': return 'tasks';
+    case 'calendar':
+    case 'cal': return 'cal';
+    case 'apps':
+    case 'svc':
+    case 'services': return 'svc';
+    case 'agent': return 'home'; // drawer module, not a tab
+    default: return 'home';
+  }
+}
+
+// Open the modules sheet inline (PHA-2200.4 acceptance: refresh the
+// tab bar / pill without a full page reload). We embed the sheet
+// inside the existing #modal + #sheet infrastructure.
+async function openAddRoomSheet() {
+  // Lazy-load the modules.js loader if it hasn't been requested yet.
+  if (!window.Modules) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = '/modules.js';
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('Failed to load modules.js'));
+      document.head.appendChild(s);
+    });
+  }
+  // Build a container inside the existing sheet so we reuse the
+  // modal backdrop and the .sheet styling.
+  const sheet = $('#sheet');
+  sheet.innerHTML = '<div id="modsInline"></div>';
+  $('#modal').classList.add('on');
+  await window.Modules.open({
+    container: document.getElementById('modsInline'),
+    onChange: (fresh) => applyLayout(ME, fresh),
+  });
+  // Done button at the bottom of the inline sheet — close on tap.
+  const done = document.createElement('button');
+  done.className = 'btn';
+  done.style.marginTop = '18px';
+  done.textContent = 'Done';
+  done.onclick = () => closeSheet();
+  document.getElementById('modsInline').appendChild(done);
+}
+
+// ---- boot ---- */
 async function boot(user){
   ME=user;$('#login').style.display='none';$('#app').style.display='block';
   const h=new Date().getHours();
@@ -533,6 +729,37 @@ async function boot(user){
   $('#dateLine').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
   const a=$('#avatarBtn');a.textContent=userInitials(user.username);a.style.background=userColorRaw(user.username);
   const d=new Date();calY=d.getFullYear();calM=d.getMonth();
+
+  // PHA-2205: first-run handshake. /api/me returns first_run: true
+  // for accounts that have never stamped first_run_completed_at.
+  // The standalone /welcome.html already exists (PHA-2207) and calls
+  // /api/me/first-run-complete on dismiss; redirect there.
+  try {
+    const me = await api('GET', '/api/me');
+    if (me && me.first_run) {
+      location.replace('/welcome.html');
+      return;
+    }
+  } catch (_) { /* fall through; layout bootstrap also tolerates no /api/me */ }
+
+  // PHA-2205: read the layout and apply it BEFORE the rest of the
+  // shell renders, so the user never sees the 4 hardcoded tabs.
+  let layout = null;
+  try {
+    layout = await api('GET', '/api/me/layout');
+    applyLayout(user, layout);
+  } catch (_) {
+    // Layout bootstrap is best-effort; if /api/me/layout 404s (e.g. on
+    // a server that pre-dates PHA-2204) the SPA keeps the hardcoded
+    // shell so it stays usable.
+  }
+
+  // PHA-2205: when modules.js toggles a room it dispatches this event;
+  // re-apply the shell so the tab bar / pill update without a reload.
+  window.addEventListener('homestead:layout-changed', (ev) => {
+    if (ev && ev.detail) applyLayout(ME, ev.detail);
+  });
+
   await refreshUsersFromServer();
   await refresh();
   // PHA-2151: Porch tile is hidden unless the user is a member of at

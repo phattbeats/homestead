@@ -1,0 +1,148 @@
+/* PHA-2205 (PHA-2200.4): Add-a-room sheet styling.
+   Token reuse from /index.html :root via the same color vars, scoped
+   to .mods-* so this file is self-contained when loaded outside of
+   index.html (the sheet is reachable at /modules.html for direct nav
+   AND embedded by the SPA as a modal). */
+
+:root {
+  --bg: #FFFBF5;
+  --surface: #FFFFFF;
+  --ink: #2B2622;
+  --muted: #8A8177;
+  --line: rgba(43, 38, 34, .07);
+  --accent: #C4703C;
+  --accent-soft: #F8E9DE;
+  --ease: cubic-bezier(.22, 1, .36, 1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100dvh;
+}
+button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+
+#app {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: calc(env(safe-area-inset-top) + 24px) 22px calc(env(safe-area-inset-bottom) + 24px);
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* head */
+.mods-head { margin-bottom: 18px; position: relative; }
+.mods-back {
+  position: absolute;
+  left: -10px;
+  top: -8px;
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px;
+  color: var(--ink);
+}
+.mods-back:active { transform: scale(.92); }
+.mods-title { font-size: 28px; font-weight: 800; letter-spacing: -.025em; line-height: 1.1; }
+.mods-sub { color: var(--muted); font-size: 14px; line-height: 1.45; margin-top: 6px; }
+
+/* list */
+.mods-list { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+
+.mods-empty {
+  color: var(--muted);
+  font-size: 14px;
+  padding: 18px 0;
+  text-align: center;
+}
+
+.mods-row {
+  background: var(--surface);
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: opacity .3s var(--ease);
+}
+.mods-row[data-enabled="true"] {
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+.mods-icon {
+  width: 44px; height: 44px;
+  border-radius: 14px;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.mods-row[data-enabled="true"] .mods-icon {
+  background: #fff;
+}
+.mods-body { flex: 1; min-width: 0; }
+.mods-name { font-size: 15px; font-weight: 700; }
+.mods-desc { color: var(--muted); font-size: 13px; margin-top: 2px; line-height: 1.35; }
+.mods-tier {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.mods-row[data-enabled="true"] .mods-tier { color: var(--accent); }
+
+/* toggle */
+.mods-toggle {
+  width: 48px; height: 28px;
+  border-radius: 999px;
+  background: rgba(43,38,34,.12);
+  position: relative;
+  transition: background .25s var(--ease);
+  flex-shrink: 0;
+}
+.mods-toggle::after {
+  content: "";
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.18);
+  transition: transform .25s var(--ease);
+}
+.mods-row[data-enabled="true"] .mods-toggle {
+  background: var(--accent);
+}
+.mods-row[data-enabled="true"] .mods-toggle::after {
+  transform: translateX(20px);
+}
+
+/* footer */
+.mods-foot { margin-top: 22px; padding-top: 14px; }
+.mods-done {
+  width: 100%;
+  padding: 15px;
+  border-radius: 16px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  transition: transform .25s var(--ease), opacity .2s;
+}
+.mods-done:active { transform: scale(.97); }
+.mods-done:disabled { opacity: .5; cursor: default; }
+
+/* error / loading states */
+.mods-row.mods-err {
+  background: var(--surface);
+  border-color: rgba(179, 69, 58, .35);
+  color: var(--ink);
+}
