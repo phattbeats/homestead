@@ -42,6 +42,23 @@ jobs:
       - name: Run post-login mobile screenshot smoke
         run: node scripts/smoke-postlogin-screenshot.js
 
+      # PHA-2498 (P2 UX batch): the three mobile smokes below are the
+      # DoD evidence the walking report cited to close the parent issue.
+      # They're additive to the PHA-2501 standing smokes — same harness,
+      # same fixtures, same screenshot outputs as the post-login smoke,
+      # each asserting one of the four fix points:
+      #   1. install coach does NOT auto-fire on login transition
+      #   2. drawerFab docks into header (no bottom-right FAB pileup)
+      #   3. drawerFab does NOT leak onto the login screen
+      - name: PHA-2498 — install-coach deferral smoke
+        run: node scripts/smoke-2498-install-coach-deferral.js
+
+      - name: PHA-2498 — FAB pileup smoke
+        run: node scripts/smoke-2498-fab-pileup.js
+
+      - name: PHA-2498 — pre-auth drawer-gate smoke
+        run: node scripts/smoke-2498-preauth-drawer.js
+
       - name: Upload verify-out screenshots
         if: always()
         uses: actions/upload-artifact@v4
