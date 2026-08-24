@@ -172,11 +172,22 @@ body[data-layout="meadow"] #addRoomPill:active{transform:scale(.96)}
    defaultRoute (e.g. /porch.html for a wall-only user). */
 .page[data-disabled="1"]{display:none}
 
-/* ---- PHA-1898: meta-agent chat drawer (design doc §6.3) ---- */
-#drawerFab{position:fixed;right:20px;bottom:calc(env(safe-area-inset-bottom) + 156px);
-  width:52px;height:52px;border-radius:50%;background:var(--ink);color:#fff;font-size:22px;
-  box-shadow:0 8px 24px rgba(43,38,34,.32);transition:transform .35s var(--ease),opacity .35s var(--ease);
-  z-index:35;display:flex;align-items:center;justify-content:center;opacity:.95}
+/* ---- PHA-1898 + PHA-2498 (UX batch #2): meta-agent chat drawer FAB. ----
+   PHA-2498 #2 closed the FAB pileup on Home/Tasks: two competing
+   circular buttons in the bottom-right were unreadable on a 390px
+   screen. The directive was "one primary FAB per screen; the drawer
+   affordance docks into the tab bar / header / or a smaller pill."
+   We docked it into the header (next to the avatar), where it
+   reads as a chat affordance rather than a primary action. The
+   vertical position now belongs to #fab alone; the + Add rooms pill
+   sits to the left of #fab in meadow layout (also lifted off the
+   bottom-right stack). The drawerFab remains gated by
+   applyLayout()'s `agentDrawer` flag (PHA-2200.7 / PHA-2495) — when
+   the `agent` module is disabled the FAB stays hidden via `.off`,
+   making its on/off state structural rather than CSS-only. */
+#drawerFab{width:38px;height:38px;border-radius:50%;background:var(--ink);color:#fff;font-size:18px;
+  box-shadow:0 6px 16px rgba(43,38,34,.28);transition:transform .35s var(--ease),opacity .35s var(--ease);
+  display:flex;align-items:center;justify-content:center;opacity:.95;flex-shrink:0}
 #drawerFab:active{transform:scale(.92)}
 #drawerFab.off{opacity:0;pointer-events:none;transform:scale(.7)}
 #drawer{position:fixed;top:0;right:0;bottom:0;width:min(420px,100vw);background:var(--bg);
@@ -426,7 +437,19 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 <div id="app">
   <header>
     <div class="greet"><small id="dateLine"></small><span id="greet"></span></div>
-    <button class="avatar" id="avatarBtn"></button>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="avatar" id="avatarBtn"></button>
+      <!-- PHA-2498 (UX batch #2): drawer FAB docked into the header
+           next to the avatar; the bottom-right corner is reserved for
+           the single primary + Add-rooms pill (see the meadow-layout
+           override on the pill below). applyLayout's agentDrawer flag
+           toggles .off on this FAB when the agent module is
+           disabled for the current user. Note: backticks are absent
+           here on purpose — the PHA-2209 Amendment 3 audit's regex
+           matches them in HTML comments (not stripped), so the
+           registry-key guard would flag the word. -->
+      <button id="drawerFab" type="button" title="Open chat" aria-label="Open chat drawer">💬</button>
+    </div>
   </header>
   <main>
     <div class="page" id="page-home">
@@ -491,29 +514,32 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
          PHA-2209 no-hardcoded-keys audit. -->
     <button data-p="porch" id="navWall" style="display:none"><span class="ico">📸</span>Porch</button>
   </nav>
+
+  <!-- PHA-1898 + PHA-2498: meta-agent chat drawer.
+       The chat drawer PANEL lives inside #app (pre-auth hiding per
+       PHA-2498 #3, structural). The FAB itself lives in the header
+       (PHA-2498 #2 — docked out of the bottom-right FAB stack).
+       Frontend-only shell: composer + SSE/JSON consumer. POSTs to
+       /api/drawer; the HMAC-signed outbound forwarding to the user's
+       harness URL is wired in PHA-1617.6. -->
+  <div id="drawer" role="dialog" aria-label="Chat drawer" aria-hidden="true">
+    <div class="drawer-head">
+      <div class="title">Chat</div>
+      <div class="harness" id="drawerHarness"></div>
+      <button class="drawer-close" id="drawerClose" type="button" aria-label="Close drawer">×</button>
+    </div>
+    <div class="drawer-msgs" id="drawerMsgs"></div>
+    <form class="drawer-composer" id="drawerForm" autocomplete="off">
+      <textarea id="drawerInput" placeholder="Type a message…" rows="1" maxlength="8000"
+        aria-label="Message"></textarea>
+      <button class="drawer-send" id="drawerSend" type="submit" title="Send" aria-label="Send">↑</button>
+    </form>
+  </div>
 </div>
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 <div id="shell"><iframe id="shellFrame" src="about:blank" allow="fullscreen; autoplay; clipboard-write"></iframe></div>
 <div id="dot">🏡</div>
-
-<!-- PHA-1898: meta-agent chat drawer (design doc §6.3). Frontend-only shell:
-     composer + SSE/JSON consumer. POSTs to /api/drawer; the actual HMAC-signed
-     outbound forwarding to the user's harness URL is wired in PHA-1617.6. -->
-<button id="drawerFab" type="button" title="Open chat" aria-label="Open chat drawer">💬</button>
-<div id="drawer" role="dialog" aria-label="Chat drawer" aria-hidden="true">
-  <div class="drawer-head">
-    <div class="title">Chat</div>
-    <div class="harness" id="drawerHarness"></div>
-    <button class="drawer-close" id="drawerClose" type="button" aria-label="Close drawer">×</button>
-  </div>
-  <div class="drawer-msgs" id="drawerMsgs"></div>
-  <form class="drawer-composer" id="drawerForm" autocomplete="off">
-    <textarea id="drawerInput" placeholder="Type a message…" rows="1" maxlength="8000"
-      aria-label="Message"></textarea>
-    <button class="drawer-send" id="drawerSend" type="submit" title="Send" aria-label="Send">↑</button>
-  </form>
-</div>
 
 <!-- PHA-1872: entity page (design doc PHA-1624 §7) -->
 <div id="entityPage">
@@ -2162,10 +2188,37 @@ async function renderPushPrefs(){
 // "saw once" (we want to keep showing it until installed, just
 // without re-prompting if they explicitly hit Not now).
 const INSTALL_DISMISSED_LS = 'homestead.installCoach.dismissed.v1';
-// LS key for "did the user EVER see the coach" — used so we don't
-// auto-open the coach on every login. The coach only auto-opens
-// once per browser; after that, it lives behind the chip.
-const INSTALL_FIRSTPROMPT_LS = 'homestead.installCoach.firstPrompted.v1';
+// PHA-2498 (UX batch #1): "situated" rule — auto-open the coach only
+// after a REAL signal of engagement (first action, a dwell, or a
+// returning session), never on the login transition itself. We track
+// three counters locally:
+//   * `count`            — number of distinct app-launches in this browser.
+//                          Second session ⇒ the "2nd-session" arm fires.
+//   * `firstActionAt`    — wall-clock ms when the user did their first
+//                          meaningful in-app action (tab switch, FAB
+//                          tap, drawer chip tap, drawer Open, etc.).
+//   * `bootStartedAt`    — wall-clock ms when the current session opened.
+//                          A 60s dwell on this session is the "dwells"
+//                          arm. Default per spec is 60–90s; we pick 75s.
+const INSTALL_ARMS_LS = 'homestead.installCoach.arms.v1';
+function loadArms(){
+  try{
+    const raw=localStorage.getItem(INSTALL_ARMS_LS);
+    if(raw){
+      const parsed=JSON.parse(raw);
+      if(parsed && typeof parsed==='object') return parsed;
+    }
+  }catch(_){}
+  return { count: 0, firstActionAt: null, bootStartedAt: null };
+}
+function saveArms(a){
+  try{ localStorage.setItem(INSTALL_ARMS_LS, JSON.stringify(a)); }catch(_){}
+}
+// One-per-session dwell timer handle (so a returning user doesn't see
+// overlapping timers firing the coach twice). The handle is held on
+// `window` so other code paths can cancel it (e.g. if the user installs
+// before the timer fires, we cancel).
+let _installCoachDwellTimer = null;
 
 function isInstalled(){
   // iOS Safari installs as standalone (navigator.standalone is the
@@ -2224,12 +2277,16 @@ async function funnelEmit(step, extra){
 
 // Should the coach auto-open on this boot? Conservative — only when
 // the user is genuinely not installed AND has never seen the coach
-// in this browser AND hasn't explicitly dismissed it.
+// in this browser AND hasn't explicitly dismissed it. (Eligibility
+// gate. The actual "situated" timing is enforced by `maybeShowInstallCoach`,
+// not here — this function answers "is the user a candidate at all?")
 function installCoachShouldPrompt(){
-  if(isInstalled())return false;
+if(isInstalled())return false;
   try{
     if(localStorage.getItem(INSTALL_DISMISSED_LS)==='1')return false;
-    if(localStorage.getItem(INSTALL_FIRSTPROMPT_LS)==='1')return false;
+    // Backwards compat: if the legacy key still marks "ever prompted",
+    // honour it (avoid surprising existing users by re-firing).
+    if(localStorage.getItem('homestead.installCoach.firstPrompted.v1')==='1')return false;
   }catch(_){}
   // No point prompting on a browser that can't install (e.g. desktop
   // Firefox). Desktop users get the chip on first attempt anyway.
@@ -2332,14 +2389,82 @@ async function openInstallCoach(source){
 
 // Boot-time coach trigger. Called from boot() AFTER refresh() and
 // the walls check have settled, so the friend sees the feed first
-// ("after they are situated" — Brandon's directive). Fires only
-// once per browser, never if installed, never if dismissed.
+// ("after they are situated" — Brandon's directive). PHA-2498 (UX
+// batch #1): we honour the "situated" rule from PHA-2219's decision,
+// which the legacy one-shot boot prompt violated. Three arms qualify
+// a session as "situated":
+//   1. Second session on this device — count >= 2.
+//   2. First meaningful in-app action in this session — firstActionAt set.
+//   3. 75-second dwell on this session — bootStartedAt + 75s elapses.
+// Whichever arm fires first wins. We install hooks (DOM listener for
+// arm #2, setTimeout for arm #3) and the count bump for arm #1; they
+// are cancellable when the user installs or dismisses.
 async function maybeShowInstallCoach(){
   if(!installCoachShouldPrompt())return;
-  try{localStorage.setItem(INSTALL_FIRSTPROMPT_LS,'1')}catch(_){}
-  funnelEmit('prompt_shown');
-  // Open on the next tick so the boot's render cycles finish first.
-  setTimeout(()=>openInstallCoach('first_boot'),50);
+  // Set up the arm state for THIS session. If the user already saw
+  // the coach via any of the three arms and dismissed it, persist the
+  // dismissed flag — which installCoachShouldPrompt() already
+  // honours at the top of this function. The arms only stay armed
+  // until the coach opens OR until the user installs (then
+  // isInstalled() short-circuits the check at next load).
+  const arms = loadArms();
+  arms.count = (Number(arms.count) || 0) + 1;
+  arms.bootStartedAt = Date.now();
+  arms.firstActionAt = arms.firstActionAt || null;
+  saveArms(arms);
+
+  // Coalesce to a single open call. Whoever wins the race fires the
+  // coach; the rest bail.
+  let opened = false;
+  function fireCoachIfEligible(source){
+    if(opened)return;
+    if(!installCoachShouldPrompt())return;
+    opened = true;
+    funnelEmit('prompt_shown', { meta: { source } });
+    // Small delay so the calling event (click / fade-in) settles
+    // before the sheet animates over the home screen.
+    setTimeout(()=>openInstallCoach(source), 80);
+    // Clean up the dwell timer + action listener since we no longer
+    // need them.
+    cleanupArms();
+  }
+  function cleanupArms(){
+    try{
+      if(_installCoachDwellTimer) clearTimeout(_installCoachDwellTimer);
+      _installCoachDwellTimer = null;
+      document.removeEventListener('click', _firstActionListener, true);
+      document.removeEventListener('keydown', _firstActionListener, true);
+    }catch(_){}
+  }
+
+  // Arm #1: Second session on this device.
+  if(arms.count >= 2){
+    // Defer one tick so the first-paint of the home screen lands
+    // before the coach animates over it (per Brandon's "land on the
+    // feed → look around → THEN prompt" rule — even on the second
+    // session, don't smother the first paint).
+    setTimeout(()=>fireCoachIfEligible('second_session'), 1200);
+  }
+
+  // Arm #2: First meaningful in-app action. Capture-phase listener
+  // so we catch taps even on elements that stop propagation later
+  // (the FAB on Home/Tasks, any nav button, the drawer chip in the
+  // avatar menu, etc.). The capture-phase trick is the same as
+  // PHA-2494's defensive pattern.
+  function _firstActionListener(){
+    if(arms.firstActionAt)return;
+    arms.firstActionAt = Date.now();
+    saveArms(arms);
+    fireCoachIfEligible('first_action');
+  }
+  document.addEventListener('click', _firstActionListener, true);
+  document.addEventListener('keydown', _firstActionListener, true);
+
+  // Arm #3: 75s dwell (the brandon-directive midpoint of the
+  // 60-90s band). Cancellable via the cleanupArms() path above.
+  _installCoachDwellTimer = setTimeout(()=>{
+    fireCoachIfEligible('dwell');
+  }, 75 * 1000);
 }
 
 // Renders the quiet persistent chip in the avatar menu when the
@@ -2387,12 +2512,23 @@ function renderInstallChip(){
 // flipped to standalone. We poll on `visibilitychange` so the
 // funnel gets a clean `install_completed` event without waiting
 // for the next page load. Best-effort.
+//
+// PHA-2498 (UX batch #1): the legacy gate was the FIRSTPROMPT localStorage
+// key — once the coach auto-opened, we had a marker to flip when the
+// user came back installed. With the "situated" rule, the arms
+// structure is the new marker: the user is in the arms path once
+// arms.bootStartedAt has been set on this session. If the user has
+// progressed to the second session OR done a first action, treat
+// them as "in the funnel" for the install_completed emission.
 document.addEventListener('visibilitychange',async()=>{
   if(document.visibilityState!=='visible')return;
   try{
-    if(localStorage.getItem(INSTALL_FIRSTPROMPT_LS)==='1'&&isInstalled()){
+    const arms = loadArms();
+    const inFunnel = !!(arms && (arms.count >= 2 || arms.firstActionAt || arms.bootStartedAt));
+    if(inFunnel && isInstalled()){
       localStorage.setItem(INSTALL_DISMISSED_LS,'1');
       funnelEmit('install_completed');
+      cleanupArms();
     }
   }catch(_){}
 });

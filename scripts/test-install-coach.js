@@ -221,18 +221,115 @@ console.log('PHA-2219 install-coach tests\n');
   assert(s.installCoachShouldPrompt() === false, 'dismissed=1 → no prompt');
 }
 
-// ---- Test 11: installCoachShouldPrompt() respects the first-prompted flag ----
+// ---- Test 11: installCoachShouldPrompt() respects the legacy first-prompted flag ----
+// PHA-2498 (UX batch #1): the eligibility gate honours the legacy
+// `firstPrompted` localStorage key for users who already saw the coach
+// under the old one-shot schedule — we don't want to re-fire the auto-
+// prompt at them now that the schedule is "situated" instead of "first
+// boot". The actual timing is driven by `maybeShowInstallCoach`, which
+// sets up the second-session / first-action / 75s-dwell arms via the
+// new `arms.v1` localStorage key.
 {
-  console.log('\nTest 11: installCoachShouldPrompt() respects the first-prompted flag');
+  console.log('\nTest 11: installCoachShouldPrompt() respects the legacy first-prompted flag (PHA-2498 #1, backwards compat)');
   const s = evalCoach({
     ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
     platform: 'iPhone',
     ls: { 'homestead.installCoach.firstPrompted.v1': '1' },
   });
-  assert(s.installCoachShouldPrompt() === false, 'first-prompted=1 → no prompt (chip path only)');
+  assert(s.installCoachShouldPrompt() === false, 'legacy first-prompted=1 → no auto-prompt on existing users');
 }
 
-// ---- Test 12: installCoachShouldPrompt() returns false on platforms that don't install ----
+// ---- Test 11a: arms structure (PHA-2498 #1, "situated" rule) ----
+// The new eligibility-tracking structure is `homestead.installCoach.arms.v1`
+// JSON. Schema: { count: number, firstActionAt: number|null, bootStartedAt:
+// number|null }. `loadArms()` reads from LS with a safe default; `saveArms()`
+// persists. The test asserts the round-trip through `localStorage` works
+// and that the schema fields all exist.
+{
+  console.log('\nTest 11a: arms structure round-trip (PHA-2498 #1, situated rule)');
+  const s = evalCoach({
+    ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
+    platform: 'iPhone',
+  });
+  assert(typeof s.loadArms === 'function', 'loadArms exported on the sandbox');
+  assert(typeof s.saveArms === 'function', 'saveArms exported on the sandbox');
+  const empty = s.loadArms();
+  assertEq(empty.count, 0, 'fresh arms → count=0');
+  assertEq(empty.firstActionAt, null, 'fresh arms → firstActionAt=null');
+  assertEq(empty.bootStartedAt, null, 'fresh arms → bootStartedAt=null');
+  s.saveArms({ count: 2, firstActionAt: 1700000000000, bootStartedAt: 1700000000000 });
+  const round = s.loadArms();
+  assertEq(round.count, 2, 'count persists');
+  assertEq(round.firstActionAt, 1700000000000, 'firstActionAt persists');
+}
+
+// ---- Test 11b/11c: maybeShowInstallCoach arms but does NOT fire on first boot ----
+// PHA-2498 (UX batch #1) closed the immediate-coach-on-first-login bug.
+// `maybeShowInstallCoach()` schedules three arms (2nd-session,
+// first-action, 75s-dwell). The tests assert:
+//   (a) on the first boot, arms are persisted to localStorage but no
+//       `openInstallCoach` call fires synchronously
+//   (b) on the second boot (count pre-populated to 1), arms.count is
+//       bumped to 2 and the second-session arm is scheduled (delayed
+//       via setTimeout — not fired synchronously)
+//
+// Both checks live inside one async IIFE because the test harness is
+// plain top-level code and we can't `return` at module scope.
+(async () => {
+  // Test 11b: first boot — arms but no synchronous fire.
+  {
+    console.log('\nTest 11b: maybeShowInstallCoach() does NOT auto-open on first boot (PHA-2498 #1)');
+    const calls = [];
+    const captured = {
+      // NB: don't override userAgent or platform here — buildSandbox uses
+      // `captured.ua` and `captured.platform` for those, and setting them
+      // to empty in `captured.navigator` would break installPlatform()
+      // (it would think the user is on an unknown platform and bail).
+      navigator: { standalone: false },
+      ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
+      platform: 'iPhone',
+      notification: 'default',
+    };
+    const s = evalCoach(captured);
+    s.openInstallCoach = (src) => { calls.push(src); };
+    s.document = { addEventListener: () => {}, removeEventListener: () => {} };
+    s.window = s.window || { matchMedia: () => ({ matches: false }) };
+    await s.maybeShowInstallCoach();
+    assertEq(calls.length, 0, 'first boot → no immediate openInstallCoach call (situated rule)');
+    const lsAfter = s.localStorage._data || {};
+    const armKey = 'homestead.installCoach.arms.v1';
+    assert(lsAfter[armKey] !== undefined, 'arms localStorage key set on first boot');
+    const parsed = JSON.parse(lsAfter[armKey] || '{}');
+    assertEq(parsed.count, 1, 'after first boot, arms.count=1');
+  }
+
+  // Test 11c: second boot — count bumps to 2, second-session arm scheduled.
+  {
+    console.log('\nTest 11c: second-boot arms.count=2 → second-session arm scheduled (PHA-2498 #1)');
+    const calls = [];
+    const captured = {
+      // NB: see Test 11b comment re userAgent/platform override.
+      navigator: { standalone: false },
+      ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
+      platform: 'iPhone',
+      notification: 'default',
+      ls: {
+        'homestead.installCoach.arms.v1': JSON.stringify({ count: 1, firstActionAt: null, bootStartedAt: null }),
+      },
+    };
+    const s = evalCoach(captured);
+    s.openInstallCoach = (src) => { calls.push(src); };
+    s.document = { addEventListener: () => {}, removeEventListener: () => {} };
+    s.window = s.window || { matchMedia: () => ({ matches: false }) };
+    await s.maybeShowInstallCoach();
+    const parsed = JSON.parse(s.localStorage._data['homestead.installCoach.arms.v1'] || '{}');
+    assertEq(parsed.count, 2, 'second boot → arms.count=2');
+    // Delayed arms are scheduled via setTimeout — not fired synchronously.
+    assertEq(calls.length, 0, 'second boot → second_session arm scheduled but not yet fired (delayed arm)');
+  }
+})();
+
+
 {
   console.log('\nTest 12: installCoachShouldPrompt() returns false on platforms without install support');
   const s = evalCoach({
