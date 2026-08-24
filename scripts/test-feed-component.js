@@ -262,25 +262,20 @@ process.env.NODE_ENV = 'production';
     assert(componentServed.includes('window.HomesteadFeed'),
       'served /components/feed.js exposes window.HomesteadFeed');
 
-    // Login + ensure brandon is in media-club (smoke-porch pattern).
+    // Login + ensure brandon is in household (the seeded wall).
+    // PHA-2556: brandon is already in household via lib/user-model.js's
+    // seed — no DB write needed.
     const brandonCookie = await login('brandon', 'feed-test-brandon-pw');
-
-    const Database = require('better-sqlite3');
-    const db = new Database(path.join(tmpDir, 'life.db'));
-    const brandon = db.prepare("SELECT id FROM users WHERE username = 'brandon'").get();
-    const mediaClub = db.prepare("SELECT id FROM groups WHERE name = 'media-club'").get();
-    db.prepare('INSERT OR IGNORE INTO user_groups (user_id, group_id) VALUES (?, ?)').run(brandon.id, mediaClub.id);
-    db.close();
 
     // API surface used by both placements (feed.js calls these; the test
     // confirms both placements will succeed against the same backend).
     const r3 = await fetch('http://127.0.0.1:3193/api/walls', { headers: { Cookie: brandonCookie } });
     assertEq(r3.status, 200, 'GET /api/walls returns 200 (placement-agnostic)');
     const wallsBody = await r3.json();
-    assert(wallsBody.walls.some((w) => w.slug === 'media-club'),
-      'walls include media-club (so wallSlug="media-club" default works in both placements)');
+    assert(wallsBody.walls.some((w) => w.slug === 'household'),
+      'walls include household (so wallSlug="household" default works in both placements)');
 
-    const r4 = await fetch('http://127.0.0.1:3193/api/walls/media-club/posts', {
+    const r4 = await fetch('http://127.0.0.1:3193/api/walls/household/posts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: brandonCookie },
       body: JSON.stringify({ kind: 'text', text_body: 'feed component test' }),
@@ -289,7 +284,7 @@ process.env.NODE_ENV = 'production';
     const post = await r4.json();
     assert(typeof post.id === 'string', 'created post has an id');
 
-    const r5 = await fetch(`http://127.0.0.1:3193/api/walls/media-club/posts/${post.id}/reactions`, {
+    const r5 = await fetch(`http://127.0.0.1:3193/api/walls/household/posts/${post.id}/reactions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: brandonCookie },
       body: JSON.stringify({ emoji: 'fire' }),

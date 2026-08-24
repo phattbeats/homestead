@@ -200,18 +200,17 @@ function startFixtureServer() {
 
     // ---- 7. End-to-end: components/feed.js's whole flow against the real walls/
     //         media API (upload -> post -> react -> comment -> feed). ----
-    const Database = require('better-sqlite3');
-    const db = new Database(path.join(tmpDir, 'life.db'));
-    const brandon = db.prepare("SELECT id FROM users WHERE username = 'brandon'").get();
-    const mediaClub = db.prepare("SELECT id FROM groups WHERE name = 'media-club'").get();
-    db.prepare('INSERT OR IGNORE INTO user_groups (user_id, group_id) VALUES (?, ?)').run(brandon.id, mediaClub.id);
-    db.close();
-
+    // PHA-2556: the previous version open-coded an INSERT INTO user_groups
+    // to put brandon in `media-club`, then tested against a wall the
+    // product never made visible to anyone on a fresh boot. Same
+    // anti-pattern as scripts/smoke-walls.js. Now brandon is already in
+    // `household` (the seeded wall), so the wall is reachable via the
+    // API alone — no DB writes here.
     r = await fetch('http://127.0.0.1:3096/api/walls', { headers: { Cookie: brandonCookie } });
     const wallsBody = await r.json();
-    assert(wallsBody.walls.some((w) => w.slug === 'media-club'), 'GET /api/walls (what feed.js calls on boot) lists media-club');
+    assert(wallsBody.walls.some((w) => w.slug === 'household'), 'GET /api/walls (what feed.js calls on boot) lists household');
 
-    r = await fetch('http://127.0.0.1:3096/api/walls/media-club/posts', {
+    r = await fetch('http://127.0.0.1:3096/api/walls/household/posts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: brandonCookie },
       body: JSON.stringify({ kind: 'text', text_body: 'porch smoke post' }),
@@ -219,7 +218,7 @@ function startFixtureServer() {
     assertEq(r.status, 200, 'POST text post (composer flow) returns 200');
     const post = await r.json();
 
-    r = await fetch(`http://127.0.0.1:3096/api/walls/media-club/posts/${post.id}/reactions`, {
+    r = await fetch(`http://127.0.0.1:3096/api/walls/household/posts/${post.id}/reactions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: brandonCookie },
       body: JSON.stringify({ emoji: 'fire' }),
@@ -227,7 +226,7 @@ function startFixtureServer() {
     assertEq(r.status, 200, 'reaction toggle (reaction row flow) returns 200');
 
     // Idempotent toggle-off, matching feed.js's optimistic-toggle logic.
-    r = await fetch(`http://127.0.0.1:3096/api/walls/media-club/posts/${post.id}/reactions`, {
+    r = await fetch(`http://127.0.0.1:3096/api/walls/household/posts/${post.id}/reactions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: brandonCookie },
       body: JSON.stringify({ emoji: 'fire' }),

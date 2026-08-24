@@ -1619,6 +1619,66 @@ same JS needs to render in two placements without a rewrite.
   runs as root so bind-mounts of `/data` on Unraid do not need per-host
   UID alignment.
 
+## v0.4.3 (2026-08-24) — Porch default-visible + wall admin surface (PHA-2556)
+
+Closes the PHA-2493 / PHA-2556 reopen-class defect: the seeded wall was
+visibility=group, group_name=media-club, but the user-model seed put
+every user in `household` only, so a fresh install yielded
+`GET /api/walls → {"walls":[]}` and the Porch tab rendered the
+"No walls yet" empty state. The previous smoke test masked this by
+open-coding an `INSERT INTO user_groups` to grant brandon media-club
+membership — exactly the bug the test was supposed to catch.
+
+- **`lib/walls.js#seed()`** — the seeded wall is now `household`
+  (visibility=group, group_name=household), so every seeded user
+  (admin / brandon / emily, all already in `household` via
+  `lib/user-model.js#seed`) can see it on first boot, with no manual
+  group grants.
+- **`lib/walls.js`** — new exports `createWall`, `adminAddMember`,
+  `adminRemoveMember`, `validateWallInput`, plus the regex constant
+  `SLUG_RE`. All four are admin-only and exercise the same
+  `assertMember` gate as the rest of `/api/walls`.
+- **`server.js`** — four new routes: `POST /api/walls` (admin),
+  `POST /api/walls/:slug/members` (admin), `DELETE
+  /api/walls/:slug/members/:username` (admin), and `GET /api/groups`
+  (admin). Admin-only listing `GET /api/walls/all` exposes every wall
+  to the management sheet regardless of membership, backstopping the
+  constitutional 404-private wall existence rule for the regular
+  `GET /api/walls`.
+- **`lib/wall-members.js#getMembers()`** — group walls now UNION in
+  members derived from `user_groups` (not just `wall_memberships`),
+  so the member listing shows the full roster of group-derived
+  members with no separate `wall_memberships` row required.
+- **`public/index.html`** — new admin sheet "Walls · manage walls"
+  (avatar menu → ⚙️ Settings → 🧱 Walls) lists every wall, exposes
+  per-wall member management (add by username, remove via ×), and a
+  "Create wall" form with visibility=group|direct picker and group
+  selector (populated from `GET /api/groups`).
+- **`lib/scope-display.js`** — fixed vocabulary entry
+  `read:walls:household` so app manifests can request access to the
+  household wall by its canonical name.
+- **Smoke updates:**
+  - `scripts/smoke-walls.js` rewritten with two cases: (1) fresh
+    install, no DB writes — asserts the household wall is visible and
+    postable by brandon out-of-the-box; (2) admin route grants access
+    to a fresh media-club wall via the new POST /api/walls and
+    POST /api/walls/:slug/members — still no DB writes.
+  - `scripts/smoke-notifications.js` — switched all media-club
+    references to household; kept the (legitimate test-infrastructure)
+    quiet-hours override.
+  - `scripts/smoke-porch-ui.js` — switched media-club → household,
+    dropped the open-coded DB grant.
+  - `scripts/test-walls.js` — assertions updated for the seeded
+    wall; new Test 2 covers `createWall` / `adminAddMember` /
+    `adminRemoveMember` including the group-grant path.
+  - `scripts/test-invite-to-wall.js` + `scripts/test-feed-component.js`
+    — media-club references switched to household.
+- **`docs/DEFINITION-OF-DONE.md` + `CONTRIBUTING.md`** — fresh-install
+  acceptance amendment: verification scripts may not perform setup
+  the product itself cannot perform. Allowed test-infrastructure DB
+  writes are enumerated (quiet-hours override, fresh-DB seed, schema
+  mirrors in the test harness).
+
 ## v0.0.1 (2026-07-29)
 
 - Initial public release.

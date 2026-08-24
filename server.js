@@ -1439,6 +1439,17 @@ app.get('/api/walls', auth, (req, res) => {
   if (!me) return res.status(401).json({ error: 'unknown_user' });
   res.json({ walls: walls.listForUser(me.id) });
 });
+// PHA-2556: admin-only "every wall regardless of membership" listing.
+// Backstops the wall-management sheet (PHA-2556 admin UI) so admins
+// can see walls they haven't been added to yet — the regular GET
+// /api/walls intentionally scopes to assertMember-passing walls for
+// the constitutional 404-private wall existence rule.
+app.get('/api/walls/all', auth, requireAdmin, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const rows = db.prepare('SELECT slug, name, visibility, group_name, retention_days, created_by, created_at FROM walls ORDER BY created_at ASC').all();
+  res.json(rows);
+});
 app.get('/api/walls/:slug/posts', auth, requireWallReadScope, (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
   if (!me) return res.status(401).json({ error: 'unknown_user' });
@@ -1545,6 +1556,53 @@ app.delete('/api/walls/:slug/posts/:postId/mute', auth, (req, res) => {
     const { post } = walls.getPostInWall(req.params.slug, req.params.postId, me.id);
     res.json(notifications.unmuteThread(me.id, post.id));
   } catch (e) { wallsErr(res, e); }
+});
+
+// ---- PHA-2556: wall CRUD + member management (admin only) ----
+// PHA-2493 closed green without these, leaving a wall that no seeded
+// user could reach from the API alone. Adding POST /api/walls +
+// member management closes that loop: an admin can create a new wall
+// from the UI without sqlite surgery, and the seeded wall is visible
+// without any out-of-band group grant (see lib/walls.js#seed which
+// switches the shipped wall to visibility=group, group_name=household).
+app.post('/api/walls', auth, requireAdmin, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    const wall = walls.createWall(db, me.id, req.body || {});
+    res.status(201).json({ wall });
+  } catch (e) {
+    if (e && e.status) return res.status(e.status).json({ error: e.code || 'error', message: e.message });
+    return res.status(500).json({ error: 'internal_error', detail: e && e.message });
+  }
+});
+app.post('/api/walls/:slug/members', auth, requireAdmin, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json(walls.adminAddMember(db, req.params.slug, me.id, req.body || {}));
+  } catch (e) {
+    if (e && e.status) return res.status(e.status).json({ error: e.code || 'error', message: e.message });
+    return res.status(500).json({ error: 'internal_error', detail: e && e.message });
+  }
+});
+app.delete('/api/walls/:slug/members/:username', auth, requireAdmin, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json(walls.adminRemoveMember(db, req.params.slug, { username: req.params.username }));
+  } catch (e) {
+    if (e && e.status) return res.status(e.status).json({ error: e.code || 'error', message: e.message });
+    return res.status(500).json({ error: 'internal_error', detail: e && e.message });
+  }
+});
+// GET /api/groups — admin-only list of group names so the wall-create UI
+// can populate its visibility='group' picker without a hardcoded list.
+// Returns the same set lib/user-model.js seeds (household / family /
+// media-club / admins) plus any future authentik-synced groups.
+app.get('/api/groups', auth, requireAdmin, (req, res) => {
+  const rows = db.prepare('SELECT name, display_name FROM groups ORDER BY name ASC').all();
+  res.json({ groups: rows });
 });
 
 // GET /api/me/notifications: the badge/activity-feed list backing PHA-1617's

@@ -100,22 +100,22 @@ const GET = (urlPath, headers = HEAD_ADMIN) => fetch('http://127.0.0.1:3192' + u
 
   console.log('\nTest 2: POST /api/invites requires admin');
   {
-    const r = await POST('/api/invites', { wall_slug: 'media-club' }, HEAD_USER);
+    const r = await POST('/api/invites', { wall_slug: 'household' }, HEAD_USER);
     assertEq(r.status, 403, 'non-admin POST /api/invites → 403');
   }
 
   console.log('\nTest 3: POST /api/invites with valid wall_slug returns 201 + URL');
   {
     const r = await POST('/api/invites', {
-      wall_slug: 'media-club',
+      wall_slug: 'household',
       expires_in_days: 14,
       note: 'for the new neighbor',
     });
     assertEq(r.status, 201, 'admin POST /api/invites → 201');
     const body = await r.json();
     assert(body.id && /^[a-f0-9]{32}$/.test(body.id), 'id is a 32-char hex code');
-    assertEq(body.wall_slug, 'media-club', 'wall_slug echoed back');
-    assertEq(body.wall_name, 'Media Club', 'wall_name looked up');
+    assertEq(body.wall_slug, 'household', 'wall_slug echoed back');
+    assertEq(body.wall_name, 'Household Porch', 'wall_name looked up');
     assert(body.url && body.url.includes(body.id), 'URL contains the code');
     assert(body.expires_at && body.created_at, 'created_at + expires_at set');
   }
@@ -130,11 +130,11 @@ const GET = (urlPath, headers = HEAD_ADMIN) => fetch('http://127.0.0.1:3192' + u
     assert(body.invites.every(i => i.redeemed_by === null), 'none redeemed (default filter)');
   }
 
-  console.log('\nTest 5: redemption flow — new user joins media-club');
+  console.log('\nTest 5: redemption flow — new user joins household');
   let inviteCode = null;
   {
     // Fresh invite for this test.
-    const r = await POST('/api/invites', { wall_slug: 'media-club' });
+    const r = await POST('/api/invites', { wall_slug: 'household' });
     const body = await r.json();
     inviteCode = body.id;
 
@@ -145,8 +145,8 @@ const GET = (urlPath, headers = HEAD_ADMIN) => fetch('http://127.0.0.1:3192' + u
     assertEq(redeem.status, 200, 'alice redeems → 200');
     const rbody = await redeem.json();
     assertEq(rbody.ok, true, 'ok: true');
-    assertEq(rbody.wall_slug, 'media-club', 'wall_slug returned');
-    assertEq(rbody.wall_name, 'Media Club', 'wall_name returned');
+    assertEq(rbody.wall_slug, 'household', 'wall_slug returned');
+    assertEq(rbody.wall_name, 'Household Porch', 'wall_name returned');
     assertEq(rbody.first_run, true, 'first_run: true (new user)');
     assert(rbody.redirect && rbody.redirect.includes('welcome.html'), 'redirect points to welcome.html');
     assert(Array.isArray(rbody.members), 'members array returned');
@@ -161,8 +161,8 @@ const GET = (urlPath, headers = HEAD_ADMIN) => fetch('http://127.0.0.1:3192' + u
     const walls = await GET('/api/walls', HEAD_USER);
     const wbody = await walls.json();
     assert(Array.isArray(wbody.walls), 'GET /api/walls returns walls array');
-    const mediaClub = wbody.walls.find(w => w.slug === 'media-club');
-    assert(!!mediaClub, 'media-club is now visible to alice');
+    const householdWall = wbody.walls.find(w => w.slug === 'household');
+    assert(!!householdWall, 'household is now visible to alice');
   }
 
   console.log('\nTest 7: redemption is one-shot (already-redeemed → 410)');
@@ -212,7 +212,7 @@ const GET = (urlPath, headers = HEAD_ADMIN) => fetch('http://127.0.0.1:3192' + u
     await POST('/api/me/first-run-complete', {}, HEAD_ADMIN);
 
     // Issue a fresh invite.
-    const ir = await POST('/api/invites', { wall_slug: 'media-club' });
+    const ir = await POST('/api/invites', { wall_slug: 'household' });
     const inv = await ir.json();
 
     // Brandon redeems.
@@ -228,10 +228,10 @@ const GET = (urlPath, headers = HEAD_ADMIN) => fetch('http://127.0.0.1:3192' + u
 
   console.log('\nTest 11: GET /api/walls/:slug/members for a member');
   {
-    const r = await GET('/api/walls/media-club/members', HEAD_USER);
-    assertEq(r.status, 200, 'GET /api/walls/media-club/members (alice) → 200');
+    const r = await GET('/api/walls/household/members', HEAD_USER);
+    assertEq(r.status, 200, 'GET /api/walls/household/members (alice) → 200');
     const body = await r.json();
-    assertEq(body.wall.slug, 'media-club', 'wall.slug === "media-club"');
+    assertEq(body.wall.slug, 'household', 'wall.slug === "household"');
     assert(body.members.length >= 2, 'members includes alice + brandon');
     assert(body.members.some(m => m.username === 'alice'), 'alice in members');
     assert(body.members.some(m => m.username === 'brandon'), 'brandon in members');
@@ -248,10 +248,10 @@ const GET = (urlPath, headers = HEAD_ADMIN) => fetch('http://127.0.0.1:3192' + u
 
   console.log('\nTest 13: invite with bad expires_in_days → 400');
   {
-    const tooBig = await POST('/api/invites', { wall_slug: 'media-club', expires_in_days: 999 });
+    const tooBig = await POST('/api/invites', { wall_slug: 'household', expires_in_days: 999 });
     assertEq(tooBig.status, 400, 'expires_in_days=999 → 400');
 
-    const notInt = await POST('/api/invites', { wall_slug: 'media-club', expires_in_days: 'soon' });
+    const notInt = await POST('/api/invites', { wall_slug: 'household', expires_in_days: 'soon' });
     assertEq(notInt.status, 400, 'expires_in_days="soon" → 400');
   }
 
