@@ -100,8 +100,18 @@ NODE_ENV=production \
   node scripts/smoke-2556-porch-default.js
 echo
 
-# 4. Curl transcript of /api/health (proof of life on the same scratch instance).
-echo "==> Step 4/4 — /api/health curl transcript"
+# 4. PHA-2583: unauthenticated invite-link bounce smoke. Validates that
+#    /invite/{code} serves HTML (not the /api 404 JSON), GET /api/login
+#    returns a 302 to /?next= instead of JSON 404, and a fresh
+#    browser walks the bounce-back to the original URL after login.
+#    Drop two screenshots into verify-out/ at 390x844 mobile viewport.
+echo "==> Step 4/5 — PHA-2583 unauthenticated invite-link bounce smoke"
+VERIFY_OUT="$VERIFY_OUT" \
+  node scripts/smoke-2583-invite-bounce.js
+echo
+
+# 5. Curl transcript of /api/health (proof of life on the same scratch instance).
+echo "==> Step 5/5 — /api/health curl transcript"
 DATA_DIR="$TMP_DATA" PORT="$PORT" ADMIN_PASSWORD="verify-admin-pw" \
 SESSION_SECRET="verify-secret" NODE_ENV=production \
   node -e "const app = require('./server.js'); app.listen($PORT, '127.0.0.1');" &

@@ -11,9 +11,10 @@
 /* PHA-2207 (PHA-2200.6): invite redemption page. The page itself is
    unauthenticated — it just shows the wall the invite is for and
    asks the user to confirm. The actual API call requires auth, so
-   we bounce through /api/login (or header-trust via SWAG) and POST
-   /api/invites/:code/redeem on the way back. Tokens mirror
-   public/porch.css + welcome.html. */
+   we bounce through GET /api/login (server-defined 302 to /?next=
+   with this URL preserved — PHA-2583) and POST /api/invites/:code/
+   redeem on the way back. Tokens mirror public/porch.css +
+   welcome.html. */
 :root{
   --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#8A8177;
   --line:rgba(43,38,34,.07);

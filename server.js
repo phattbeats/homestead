@@ -486,6 +486,35 @@ app.get('/api/version', (req, res) => {
 // ---- auth ----
 // LAN fallback login (PHA-1574 keeps built-in login working behind
 // SWAG for the local network). Header-trust users never hit this path.
+//
+// PHA-2583: GET /api/login is the bounce target used by /invite/:code
+// (and /welcome.html) when a signed-out visitor lands on a wall-link
+// URL. Without this GET handler the /api/* 404 catch-all below served
+// JSON `{"error":"not_found"}` to a browser expecting an HTML login
+// page. We 302-redirect to / (the SPA root, which carries the login
+// form in public/index.html) with the original ?next= preserved so
+// the SPA can bounce the user back to /invite/:code after a successful
+// login. The next= whitelist rejects anything that isn't a same-origin
+// path beginning with `/invite/`, `/welcome`, or `/` — open-redirect
+// hardening.
+app.get('/api/login', (req, res) => {
+  const raw = typeof req.query.next === 'string' ? req.query.next : '';
+  // Allow only relative same-origin paths. Accept `/invite/{code}`,
+  // `/welcome`, and bare `/`. Reject absolute URLs, protocol-relative
+  // URLs (`//evil`), and anything with embedded CR/LF or backslashes.
+  let safeNext = '/';
+  if (
+    raw &&
+    raw.startsWith('/') &&
+    !raw.startsWith('//') &&
+    !/[\\\r\n]/.test(raw) &&
+    (raw === '/' || raw.startsWith('/invite/') || raw.startsWith('/welcome'))
+  ) {
+    safeNext = raw;
+  }
+  res.redirect(302, '/?next=' + encodeURIComponent(safeNext));
+});
+
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body || {};
   const cleanUser = userModel.validateUsername(username);
@@ -2760,7 +2789,8 @@ app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 // browser — everything else in lib/ is server-only DB/HTTP logic.
 app.get('/lib/scope-display.js', (req, res) => {
   res.type('application/javascript');
-  res.sendFile('lib/scope-display.js', { root: __dirname });
+  // PHA-2583: dotfiles:'allow' (see /invite/:code above for rationale).
+  res.sendFile('lib/scope-display.js', { root: __dirname, dotfiles: 'allow' });
 });
 
 // PHA-2207 (PHA-2200.6): invite redemption handshake. Visiting
@@ -2774,7 +2804,15 @@ app.get('/lib/scope-display.js', (req, res) => {
 // now uses fallthrough:false) so the route still resolves for paths
 // the static middleware would otherwise 404.
 app.get(/^\/invite\/([A-Fa-f0-9]{16,64})$/, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'invite.html'));
+  // PHA-2583: dotfiles option forces send() to traverse any path that
+  // contains a `.`-prefixed segment (e.g. /root/.openclaw/...) instead
+  // of returning 404. Production deployments use /app (no dotfile
+  // segments) so this is a no-op there; sandbox/dev runs with the
+  // repo checked out into a dotfile-bearing path now serve the invite
+  // page correctly. send()'s default dotfiles: 'ignore' is a sandbox
+  // foot-gun — see the explainer block above for the smoke that
+  // exercises this path.
+  res.sendFile(path.join(__dirname, 'public', 'invite.html'), { dotfiles: 'allow' });
 });
 app.get('/favicon.ico', (req, res) => {
   res.set('Content-Type', 'image/svg+xml');
@@ -2797,7 +2835,13 @@ app.get('/favicon.ico', (req, res) => {
 // 404/handler paths and are untouched here.
 //
 // Removed: app.get(/^(?!\/api).*/, ...) — see git history.
-app.use(express.static(path.join(__dirname, 'public'), { fallthrough: false }));
+// PHA-2583: dotfiles:'allow' on the static handler mirrors the same
+// fix on the /invite/:code sendFile below — sandbox/dev paths under
+// /root/.openclaw/... would otherwise 404 on every request because
+// `send`'s default dotfiles policy rejects any segment starting with
+// `.`. Production uses /app (no dotfile segments) so this is a no-op
+// there.
+app.use(express.static(path.join(__dirname, 'public'), { fallthrough: false, dotfiles: 'allow' }));
 
 const PORT = process.env.PORT || 3080;
 // ---- v0.0.6 health checker boot (PHA-1623) ----
