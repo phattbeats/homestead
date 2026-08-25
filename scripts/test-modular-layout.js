@@ -157,7 +157,7 @@ const GET = (urlPath) => fetch('http://127.0.0.1:3192' + urlPath, { headers: HEA
   layout = (await (await GET('/api/me/layout')).json());
   assertEq(layout.layout, 'empty', '0 enabled → empty');
   assertEq(layout.tabs.length, 0, '0 tabs');
-  assertEq(layout.defaultRoute, '/onboarding.html', 'empty → /onboarding.html');
+  assertEq(layout.defaultRoute, null, 'empty → defaultRoute is null');
   assertEq(layout.addRoomVisible, true, 'empty → addRoomVisible (everything available)');
 
   // -----------------------------------------------------------------------------

@@ -66,7 +66,7 @@ function provision(db, username) {
   let layout = modules.computeLayout([]);
   assertEq(layout.layout, 'empty', '0 enabled → layout === "empty"');
   assertEq(layout.tabs, [], '0 enabled → tabs is []');
-  assertEq(layout.defaultRoute, '/onboarding.html', 'empty → defaultRoute is /onboarding.html');
+  assertEq(layout.defaultRoute, null, 'empty → defaultRoute is null');
   assert(!layout.agentDrawer, 'empty → no agent drawer');
   assert(layout.addRoomVisible, 'empty → addRoomVisible (every module available)');
 }
@@ -86,8 +86,8 @@ function provision(db, username) {
   assertEq(layout.layout, 'feed-only', '1 enabled → layout === "feed-only"');
   assertEq(layout.tabs.length, 1, '1 tab in feed-only');
   assertEq(layout.tabs[0].key, 'calendar', 'tab key === "calendar"');
-  assertEq(layout.tabs[0].route, '/calendar.html', 'calendar tab route');
-  assertEq(layout.defaultRoute, '/calendar.html', 'defaultRoute === calendar room route');
+  assertEq(layout.tabs[0].route, null, 'calendar tab route is null (in-SPA)');
+  assertEq(layout.defaultRoute, null, 'calendar-only defaultRoute is null (in-SPA)');
   assert(!layout.agentDrawer, 'no agent drawer (calendar alone)');
   assert(layout.addRoomVisible, 'addRoomVisible (other modules available)');
 }
