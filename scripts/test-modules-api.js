@@ -104,6 +104,26 @@ const NOAUTH = (urlPath) => fetch('http://127.0.0.1:3191' + urlPath);
     assertEq(layout.tabs[0].route, '/porch.html', 'tabs[0].route === "/porch.html"');
     assertEq(layout.tabs[5].key, 'agent', 'tabs[5].key === "agent"');
     assertEq(layout.tabs[5].route, null, 'agent (drawer mode) has route null');
+
+    // PHA-2587: a route in the layout contract must be a real page.
+    // SPA-only modules remain addressable through `room`, so they must
+    // advertise null rather than their historical, nonexistent *.html URLs.
+    const expectedRoutes = {
+      wall: '/porch.html',
+      lists: null,
+      calendar: null,
+      chores: null,
+      apps: null,
+      agent: null,
+    };
+    for (const tab of layout.tabs) {
+      assertEq(tab.route, expectedRoutes[tab.key], `${tab.key} exposes the correct reachable route contract`);
+      if (typeof tab.route === 'string') {
+        const page = await GET(tab.route, false);
+        assertEq(page.status, 200, `${tab.key} advertised route ${tab.route} → 200`);
+      }
+    }
+    assertEq(layout.defaultRoute, '/porch.html', 'defaultRoute is reachable in all-module layout');
   }
 
   console.log('\nTest 3: GET /api/me/layout switches shape by enabled count');

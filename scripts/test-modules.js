@@ -107,12 +107,12 @@ console.log('PHA-2203 module-registry tests\n');
   assertEq(modules.getModule(123), null, 'getModule(non-string) === null');
   assertEq(modules.getModule(null), null, 'getModule(null) === null');
 
-  // getRoomRoute: frame mode returns the internal url.
+  // getRoomRoute only returns standalone documents; SPA modules use room.
   assertEq(modules.getRoomRoute('wall'), '/porch.html', 'getRoomRoute("wall") === "/porch.html"');
-  assertEq(modules.getRoomRoute('lists'), '/lists.html', 'getRoomRoute("lists") === "/lists.html"');
-  assertEq(modules.getRoomRoute('calendar'), '/calendar.html', 'getRoomRoute("calendar") === "/calendar.html"');
-  assertEq(modules.getRoomRoute('chores'), '/chores.html', 'getRoomRoute("chores") === "/chores.html"');
-  assertEq(modules.getRoomRoute('apps'), '/apps.html', 'getRoomRoute("apps") === "/apps.html"');
+  assertEq(modules.getRoomRoute('lists'), null, 'getRoomRoute("lists") === null (in-SPA)');
+  assertEq(modules.getRoomRoute('calendar'), null, 'getRoomRoute("calendar") === null (in-SPA)');
+  assertEq(modules.getRoomRoute('chores'), null, 'getRoomRoute("chores") === null (in-SPA)');
+  assertEq(modules.getRoomRoute('apps'), null, 'getRoomRoute("apps") === null (in-SPA)');
   // agent is drawer mode — no room route.
   assertEq(modules.getRoomRoute('agent'), null, 'getRoomRoute("agent") === null (drawer mode)');
   assertEq(modules.getRoomRoute('unknown'), null, 'getRoomRoute(unknown) === null');
