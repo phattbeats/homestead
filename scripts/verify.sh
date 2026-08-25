@@ -110,8 +110,25 @@ VERIFY_OUT="$VERIFY_OUT" \
   node scripts/smoke-2583-invite-bounce.js
 echo
 
+# PHA-2585: Home / Today landing is always-visible after applyLayout.
+# Boots a fresh instance, logs in as brandon, asserts that the Home
+# tab is visible in the bottom nav regardless of which modules are
+# enabled. Drops two screenshots into verify-out/ at 390x844:
+#   home-always-visible-390.png          (all six modules enabled)
+#   home-always-visible-disabled-390.png (most modules disabled)
+echo "==> Step 5/6 — PHA-2585 Home always-visible smoke"
+VERIFY_OUT="$VERIFY_OUT" \
+DATA_DIR="$TMP_DATA" \
+PORT="$PORT" \
+ADMIN_PASSWORD="verify-admin-pw" \
+BRANDON_PASSWORD="verify-brandon-pw" \
+SESSION_SECRET="verify-secret" \
+NODE_ENV=production \
+  node scripts/smoke-2585-home-always-visible.js
+echo
+
 # 5. Curl transcript of /api/health (proof of life on the same scratch instance).
-echo "==> Step 5/5 — /api/health curl transcript"
+echo "==> Step 6/6 — /api/health curl transcript"
 DATA_DIR="$TMP_DATA" PORT="$PORT" ADMIN_PASSWORD="verify-admin-pw" \
 SESSION_SECRET="verify-secret" NODE_ENV=production \
   node -e "const app = require('./server.js'); app.listen($PORT, '127.0.0.1');" &
