@@ -1,5 +1,46 @@
 # Changelog
 
+## v0.4.3 (2026-08-25) — Layout-route contract repair (PHA-2587 + PHA-2588)
+
+`GET /api/me/layout` used to emit `/lists.html`, `/calendar.html`,
+`/chores.html`, `/apps.html`, `/onboarding.html` as `route` values —
+pages that have never existed since the SPA swallow took over. After
+PHA-2557's static-handler tightening (`fallthrough:false`), each of
+those URLs now 404s on a fresh install. Clients that honor
+`layout.route` (deep links, third-party agents, the help index) hit a
+dead end. The SPA itself navigates via `room`/`data-p` so in-app tabs
+were never broken, but the contract leak was real.
+
+This release fixes both halves:
+
+- **`lib/modules.js`** — every built-in entry now carries an explicit
+  `route` field. Only `wall` (`route:'/porch.html'`) is advertised;
+  the other five SPA-only modules emit `route:null`. `getRoomRoute`
+  reads `route` instead of `url` so advertised deep links name a
+  real standalone document, never a synthetic `url`.
+- **`server.js`** — `/api/health` no longer reports `ok:false` on a
+  fresh install when `CALENDAR_CRED_KEY` isn't generated. The health
+  checker treats `calendarCredKeyReady === false` as a non-fatal
+  "unconfigured" state; the underlying credential is generated on
+  first calendar authorize, so missing it on a brand-new box is
+  expected and not a service-down signal.
+- **`scripts/test-2587-layout-route-contract.js` (new).** 17
+  assertions: boots a fresh server, ensures all 6 modules enabled,
+  GETs `/api/me/layout`, asserts `defaultRoute` and every
+  `tabs[].route` / `pages[].route` is either `/porch.html` or
+  `null`, probes each advertised route for 200, then disables
+  every module and asserts the empty layout's `defaultRoute` is
+  `null` (not `/onboarding.html`). Wired into the `npm test` chain
+  adjacent to `test-modular-layout` and `test-2588-health-default`.
+
+### Acceptance coverage (PHA-2587 / PHA-2588 issue bodies)
+
+- **No layout.route 404s on a fresh install.** SPA tabs still work.
+- **`/api/health` returns `ok:true`** without a calendar key on
+  day-zero installs; the `service.calendarCredKeyReady` boolean
+  remains visible for ops dashboards.
+
+EOF
 ## v0.4.2 (2026-08-23) — Connector Forge surface adapters (PHA-2447)
 
 Wires the four fixed output adapters the engine (PHA-2445) calls into

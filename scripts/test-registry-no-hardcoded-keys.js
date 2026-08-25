@@ -95,6 +95,11 @@ const EXCLUDE_FILES = new Set([
   // built-in returned by GET /api/apps. Same category as snapshot envelope
   // categories — a "match by key" assertion, not a render branch.
   'scripts/smoke-apps-settings-ui.js',
+  // PHA-2587 layout-route contract test: drives /api/me/modules/:key/enable
+  // and /api/me/modules/:key/disable through the six module keys to assert
+  // the layout API never advertises a 404 HTML route. Same pattern as the
+  // sibling acceptance tests above — literals are test config, not render code.
+  'scripts/test-2587-layout-route-contract.js',
 ]);
 
 const SCAN_EXTS = new Set([
