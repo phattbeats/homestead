@@ -770,13 +770,23 @@ function applyLayout(layout) {
   for (const t of (Array.isArray(layout.tabs) ? layout.tabs : [])) {
     if (t && typeof t.room === 'string') enabledRooms.add(t.room);
   }
+  // PHA-2585: the Home tab/page (`data-p="home"`) is the always-on
+  // landing (today's events + today's tasks) and is NOT a module
+  // room — it must remain enabled regardless of which modules the
+  // user has turned on. PHA-2205 / PHA-2557 treat every nav button
+  // uniformly, but the SPA bootstrap comments (line ~531) explicitly
+  // promise "The home button is always on." Honor that promise here:
+  // never mark the Home button or #page-home as data-disabled.
+  // Module-backed rooms still disable when their module is off.
   document.querySelectorAll('#appNav button[data-p]').forEach(btn => {
     const p = btn.getAttribute('data-p');
+    if (p === 'home') { btn.removeAttribute('data-disabled'); return; }
     if (enabledRooms.has(p)) btn.removeAttribute('data-disabled');
     else btn.setAttribute('data-disabled', '1');
   });
   document.querySelectorAll('.page[data-p], .page[id^="page-"]').forEach(pg => {
     const pid = (pg.id || '').replace(/^page-/, '');
+    if (pid === 'home') { pg.removeAttribute('data-disabled'); return; }
     if (enabledRooms.has(pid)) pg.removeAttribute('data-disabled');
     else pg.setAttribute('data-disabled', '1');
   });

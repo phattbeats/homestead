@@ -59,6 +59,14 @@ jobs:
       - name: PHA-2498 — pre-auth drawer-gate smoke
         run: node scripts/smoke-2498-preauth-drawer.js
 
+      # PHA-2585: Home / Today landing is always-visible after
+      # applyLayout. Boots a fresh instance, logs in as brandon,
+      # asserts Home is visible in the bottom nav regardless of
+      # which modules the user has enabled, and captures two 390x844
+      # mobile-viewport screenshots (all-modules + reduced-layout).
+      - name: PHA-2585 — Home always-visible smoke
+        run: node scripts/smoke-2585-home-always-visible.js
+
       - name: Upload verify-out screenshots
         if: always()
         uses: actions/upload-artifact@v4
