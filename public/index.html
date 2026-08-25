@@ -916,7 +916,7 @@ async function boot(user){
   // after every enable/disable action from the add-a-room sheet.
   try{
     const layout = await api('GET','/api/me/layout');
-    applyLayout(layout || { layout:'empty', tabs:[], pages:[], defaultRoute:'/onboarding.html', addRoomVisible:true, agentDrawer:false });
+    applyLayout(layout || { layout:'empty', tabs:[], pages:[], defaultRoute:null, addRoomVisible:true, agentDrawer:false });
   }catch(_){
     // Best-effort: layout API unavailable (e.g. very old server).
     // Fall back to the legacy "everything visible" rendering.

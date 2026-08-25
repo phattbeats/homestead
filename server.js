@@ -472,12 +472,12 @@ app.get('/api/health', (req, res) => {
     dbStatus = 'error';
   }
   // CALENDAR_CRED_KEY is required for any source with a non-empty
-  // cred_blob. If it's missing, /api/calendar-sources will refuse to
-  // add new sources and decrypt calls will throw; surface that on the
-  // health probe so operators see it in monitoring.
+  // cred_blob. Its absence only disables that optional integration:
+  // it must not make the core service health probe fail on a README-default
+  // install. Keep the readiness signal separately for calendar operators.
   const credKeyReady = secretBox.keyReady();
   res.json({
-    ok: dbStatus === 'ok' && credKeyReady,
+    ok: dbStatus === 'ok',
     service: 'homestead',
     version: PKG_VERSION,
     commit: COMMIT_SHA,

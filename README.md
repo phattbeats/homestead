@@ -225,9 +225,11 @@ UI lists google in the add-source picker but marks it as
 
        openssl rand -hex 32
 
-   Store it as `CALENDAR_CRED_KEY` in the runtime environment. Until
-   this is set, `/api/health.ok` flips to `false` and
-   `POST /api/calendar-sources` returns 503.
+   Store it as `CALENDAR_CRED_KEY` in the runtime environment before
+   configuring a calendar source. Until this is set,
+   `calendarCredKeyReady` is `false` and `POST /api/calendar-sources`
+   returns 503; the core `/api/health.ok` probe remains `true` when the
+   database is healthy.
 
 2. Generate the per-provider credential:
 
