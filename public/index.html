@@ -841,11 +841,16 @@ function showWelcomeSheet() {
       <p style="color:var(--muted);font-size:14px;margin:0 0 18px">Your home is set up. Add more rooms any time with the <b>+ Add rooms</b> button.</p>
       <button class="btn" id="welcomeDismiss">Got it</button>
     </div>`;
-  document.getElementById('modal').style.display = '';
+  // PHA-2584: every other sheet goes through openSheet() →
+  // classList.add('on'). Setting style.display = '' cleared the
+  // inline override but the CSS rule `#modal{display:none}` still
+  // won (display:flex only fires from `#modal.on`). Use the same
+  // pattern as openSheet() so the welcome sheet actually appears.
+  document.getElementById('modal').classList.add('on');
   const dismiss = document.getElementById('welcomeDismiss');
   if (dismiss) dismiss.onclick = async () => {
     try { await api('POST', '/api/me/first-run-complete', {}); } catch (_) {}
-    document.getElementById('modal').style.display = 'none';
+    closeSheet();
   };
 }
 
