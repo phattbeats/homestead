@@ -79,6 +79,32 @@ async function main() {
     await loginResp;
 
     await page.waitForSelector('#app', { state: 'visible', timeout: 10000 });
+
+    // PHA-2584: a first-run user sees the welcome sheet on login.
+    // The sheet is a `#modal.on` overlay that intercepts pointer
+    // events across the entire viewport — meaning the nav click
+    // (`button[data-p="tasks"]` below) would never reach the button
+    // and the smoke would time out at `page.click`. Dismiss via the
+    // API (NOT via page.click on the dismiss button — that would
+    // trigger installCoach's first-action listener and make the
+    // assertion noisy). Same defensive pattern as
+    // smoke-2498-install-coach-deferral.js.
+    try {
+      await page.waitForSelector('#welcomeDismiss', { state: 'visible', timeout: 5000 });
+      await page.evaluate(async () => {
+        await fetch('/api/me/first-run-complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        document.getElementById('modal').classList.remove('on');
+      });
+      await page.waitForFunction(
+        () => !document.getElementById('modal').classList.contains('on'),
+        null,
+        { timeout: 5000 },
+      );
+      console.log('✓ dismissed first-run welcome sheet (PHA-2584) so nav clicks land');
+    } catch (_) {
+      console.log('✓ no first-run welcome sheet present (admin already completed first-run)');
+    }
+
     await page.waitForTimeout(400);
 
     // Assertion 1: #drawerFab y < 200 (header zone).

@@ -82,10 +82,51 @@ async function main() {
     await loginResp;
 
     await page.waitForSelector('#app', { state: 'visible', timeout: 10000 });
+
+    // PHA-2584: a first-run user sees the welcome sheet on login.
+    // That's a separate overlay from the install coach; dismiss it
+    // before asserting the coach didn't fire. The welcome sheet
+    // stamps `first_run_completed_at` server-side and the coach
+    // boot path runs INDEPENDENTLY after dismissal.
+    //
+    // CRITICAL: do NOT use page.click('#welcomeDismiss') here —
+    // clicking ANYWHERE triggers installCoach's capture-phase
+    // `first_action` listener (arm #2 in PHA-2498), which would
+    // open the install coach sheet and make the assertion below
+    // fail for the wrong reason. Dismiss via the API the SPA itself
+    // calls (same path as smoke-2556's defensive fallback). Then
+    // close the modal in-page WITHOUT triggering a click event.
+    try {
+      await page.waitForSelector('#welcomeDismiss', { state: 'visible', timeout: 5000 });
+      const dismissResp = page.waitForResponse(
+        (r) => r.url().includes('/api/me/first-run-complete') && r.request().method() === 'POST',
+        { timeout: 5000 },
+      ).catch(() => null);
+      await page.evaluate(async () => {
+        await fetch('/api/me/first-run-complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        document.getElementById('modal').classList.remove('on');
+      });
+      await dismissResp;
+      await page.waitForFunction(
+        () => !document.getElementById('modal').classList.contains('on'),
+        null,
+        { timeout: 5000 },
+      );
+      console.log('✓ dismissed first-run welcome sheet (PHA-2584) before coach-deferral assertion');
+    } catch (_) {
+      console.log('✓ no first-run welcome sheet present (admin already completed first-run)');
+    }
+
     // Give the install-coach boot path 4 seconds to mistakenly fire.
     await page.waitForTimeout(4000);
 
-    // Assertion 1: #modal has NOT been shown.
+    // Assertion 1: #modal has NOT been shown (by the install coach).
+    // The install coach text is identifiable by "Add Homestead" /
+    // "Install Homestead" / "home screen". If the welcome sheet
+    // somehow resurfaced the assertion below would catch it via the
+    // title check, but the 4s wait + the dismissal above means we're
+    // now in a clean state where the only thing that could re-open
+    // #modal is the install coach.
     const modalOn = await page.evaluate(() => document.getElementById('modal')?.classList.contains('on'));
     if (modalOn) {
       // Find what the modal is showing — the install coach is identifiable by
