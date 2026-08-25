@@ -667,7 +667,28 @@ async function doLogin(){
   const u=$('#username').value.trim();
   const p=$('#pw').value;
   if(!u){$('#loginErr').textContent='Username required';return}
-  try{const r=await api('POST','/api/login',{username:u,password:p});boot(r.user)}
+  try{
+    const r=await api('POST','/api/login',{username:u,password:p});
+    // PHA-2583: ?next= bounce-back after login. Server's GET /api/login
+    // handler preserves a same-origin path (whitelisted to /invite/,
+    // /welcome, or /) and lands the user here with ?next=<that path>.
+    // After a successful login we navigate to it instead of dropping the
+    // user on the SPA's home view. The check mirrors the server's
+    // whitelist — both sides reject absolute URLs, //evil, and
+    // CR/LF/backslash tricks.
+    const next=new URLSearchParams(location.search).get('next');
+    const safeNext=next&&next.startsWith('/')&&!next.startsWith('//')&&!/[\\\r\n]/.test(next)&&(next==='/'||next.startsWith('/invite/')||next.startsWith('/welcome'))
+      ? next
+      : null;
+    if (safeNext) {
+      // Strip the ?next= from the URL so reload/back doesn't re-bounce.
+      const u2=new URL(location.href); u2.searchParams.delete('next');
+      history.replaceState(null,'',u2.pathname+(u2.search||'')+(u2.hash||''));
+      location.replace(safeNext);
+      return;
+    }
+    boot(r.user);
+  }
   catch(e){$('#loginErr').textContent=(e&&e.error)||'Login failed'}
 }
 function renderLoginChips(){

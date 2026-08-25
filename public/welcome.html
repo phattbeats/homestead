@@ -73,8 +73,8 @@ button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
 // PHA-2207 (PHA-2200.6): welcome sheet bootstrap.
 //   1. GET /api/me — confirm the user is authenticated (header-trust
 //      or session). If not, the SPA is in the wrong place; bounce
-//      them to /api/login (LAN fallback) and let SWAG/authentik
-//      re-route from there.
+//      them to GET /api/login (server-side 302 to /?next=, see
+//      PHA-2583) and let SWAG/authentik re-route from there.
 //   2. Parse ?wall=<slug> from the URL — set by /api/invites/:code/redeem
 //      when the user came in via the redemption page.
 //   3. If first_run: false, skip straight to the feed (existing user).
