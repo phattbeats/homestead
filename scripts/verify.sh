@@ -127,8 +127,15 @@ NODE_ENV=production \
   node scripts/smoke-2585-home-always-visible.js
 echo
 
-# 5. Curl transcript of /api/health (proof of life on the same scratch instance).
-echo "==> Step 6/6 — /api/health curl transcript"
+# 6. PHA-2586: a fresh DB must expose Groceries, then a household user
+#    opens Lists and adds an item through the actual mobile UI.
+echo "==> Step 6/7 — PHA-2586 Lists fresh-install journey smoke"
+VERIFY_OUT="$VERIFY_OUT" \
+  node scripts/smoke-2586-lists-ui.js
+echo
+
+# 7. Curl transcript of /api/health (proof of life on the same scratch instance).
+echo "==> Step 7/7 — /api/health curl transcript"
 DATA_DIR="$TMP_DATA" PORT="$PORT" ADMIN_PASSWORD="verify-admin-pw" \
 SESSION_SECRET="verify-secret" NODE_ENV=production \
   node -e "const app = require('./server.js'); app.listen($PORT, '127.0.0.1');" &

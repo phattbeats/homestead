@@ -28,6 +28,9 @@ Homestead accepts commits authored only by `phattbeats <obiwouldjablowme@protonm
   daily/weekly/monthly. The "take turns" toggle swaps the assignee between
   the assigned users every time a recurring chore is checked off — checking
   off a recurring task rolls it forward instead of marking it done.
+- **Shared lists** — a fresh household starts with Groceries. Open Lists to
+  add, check off, and remove shared items; create additional groceries,
+  packing, or general lists without touching SQLite.
 - **Calendar** — month grid with per-person colour pips. Tap a day to see
   or add events. **Universal read-through (v0.1.9):** events created
   in any configured external calendar (Nextcloud / Apple iCloud /

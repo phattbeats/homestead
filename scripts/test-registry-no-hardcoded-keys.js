@@ -154,6 +154,9 @@ const ALLOWED_LEGITIMATE = [
   // 'lists' as snapshot envelope category in tests.
   { file: 'scripts/test-snapshot.js', literal: "'lists'" },
   { file: 'scripts/smoke-snapshot.js', literal: "'lists'" },
+  // PHA-2586: SQLite schema assertion; this is the table namespace,
+  // not a render-time module-key branch.
+  { file: 'scripts/test-lists.js', literal: "'lists'" },
   // 'calendar' as a package.json keyword (repo metadata).
   { file: 'package.json', literal: '"calendar"' },
   // 'calendar' as a CalDAV XML element-name selector in
@@ -166,6 +169,12 @@ const ALLOWED_LEGITIMATE = [
   // author is 'agent', a separate namespace from the registry
   // module-key 'agent'). Flagged for PHA-2200.4 to disambiguate.
   { file: 'public/index.html', literal: "'agent'" },
+  // PHA-2586: 'lists' as a sqlite_master table-name lookup in
+  // lib/snapshot.js (defensive `SELECT name FROM sqlite_master
+  // WHERE name='lists'` gate — same pattern as the CalDAV XML
+  // element allow-list above; the table name is a SQL identifier,
+  // not a render-time module-key branch).
+  { file: 'lib/snapshot.js', literal: "'lists'" },
 ];
 
 function isAllowedLegitimate(file, match) {
