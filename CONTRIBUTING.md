@@ -132,6 +132,7 @@ full policy and pre-push audit command.
 
 ## Related
 
+- `docs/GLOSSARY.md` — canonical names for every Homestead surface (PHA-2635)
 - `docs/AUTHORSHIP.md` — author identity policy (PHA-2352)
 - `docs/DEFINITION-OF-DONE.md` — extended rationale and policy history
 - `.github/workflows/test.yml` — CI smoke gate

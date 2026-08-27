@@ -12,6 +12,15 @@ dependencies.
 
 Homestead accepts commits authored only by `phattbeats <obiwouldjablowme@protonmail.com>` and rejects every `Co-authored-by` trailer. See [the authorship policy](docs/AUTHORSHIP.md) before contributing.
 
+## Glossary
+
+Every Homestead surface has a canonical name — Porch, wall, room,
+module, drawer, install coach, the socket, the Meadow, the Connector
+Forge, BYOK. The founder once called the Porch "the garden?"; the
+[glossary](docs/GLOSSARY.md) exists so nobody has to ask twice. Any
+PR that introduces a new user-facing surface adds it to the
+glossary in the same PR.
+
 ## Features
 
 - **Modular onboarding (v0.3.0)** — Homestead greets every new user
