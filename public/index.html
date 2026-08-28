@@ -1624,6 +1624,7 @@ $('#avatarBtn').onclick=()=>{
     <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-apps">📦 Apps</button>
     ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-settings">⚙️ Settings · manage household</button>`:''}
     ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-walls">🧱 Walls · manage walls</button>`:''}
+    ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-invites">✉️ Invites · manage porch codes</button>`:''}
     <h3>Push notifications</h3>
     <p style="font-size:13px;color:var(--muted);margin:-4px 0 10px">Get reminders for chores due today and your turn to take a rotating chore.</p>
     <div id="install-chip-host"></div>
@@ -1638,6 +1639,7 @@ $('#avatarBtn').onclick=()=>{
   if(isAdmin){
     $('#f-settings').onclick=()=>openSettingsSheet();
     $('#f-walls').onclick=()=>openWallsAdminSheet();
+    $('#f-invites').onclick=()=>{window.location.href='/invites.html'};
   }
   $('#f-calendar-sources').onclick=()=>openCalendarSourcesSheet();
   $('#f-connected-agents').onclick=()=>openConnectedAgentsSheet();

@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Invites — Homestead</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#FFFBF5">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#8A8177;
+  --line:rgba(43,38,34,.07);
+  --accent:#C4703C; --accent-soft:#F8E9DE;
+  --ok:#5c8a5c; --ok-soft:#e7f1e7;
+  --warn:#b3893a; --warn-soft:#f6ecd9;
+  --bad:#b3453a; --bad-soft:#f6dfdc;
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100dvh}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select{font:inherit;color:inherit}
+header{padding:calc(env(safe-area-inset-top) + 18px) 22px 8px;display:flex;align-items:center;gap:14px;position:sticky;top:0;background:var(--bg);z-index:10}
+.back{width:36px;height:36px;border-radius:12px;border:1px solid var(--line);font-size:18px;display:flex;align-items:center;justify-content:center}
+h1{font-weight:800;font-size:22px;letter-spacing:-.02em;flex:1}
+.sub{font-size:13px;color:var(--muted);margin:6px 22px 12px}
+
+main{padding:8px 18px 60px;max-width:760px;margin:0 auto}
+.card{background:var(--surface);border-radius:22px;padding:18px;margin-bottom:16px;
+  box-shadow:0 6px 30px rgba(0,0,0,.035);border:1px solid var(--line)}
+.card h2{font-size:15px;font-weight:800;margin-bottom:12px}
+
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px}
+.field input,.field select{width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--bg)}
+.row2{display:flex;gap:10px}
+.row2 .field{flex:1}
+.btn{padding:12px 22px;border-radius:14px;background:var(--accent);color:#fff;font-weight:700;
+  transition:transform .2s var(--ease);display:inline-flex;align-items:center;gap:6px}
+.btn:active{transform:scale(.96)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.danger{background:var(--bad-soft);color:var(--bad)}
+.btn.small{padding:7px 12px;font-size:12px;border-radius:10px}
+
+.mint-result{margin-top:12px;padding:12px;border-radius:14px;background:var(--accent-soft);font-size:13px;display:none}
+.mint-result.show{display:block}
+.mint-result .url-row{display:flex;gap:8px;align-items:center;margin-top:6px}
+.mint-result code{flex:1;word-break:break-all;font-size:12px;background:rgba(255,255,255,.6);padding:6px 8px;border-radius:8px}
+.err{color:var(--bad);font-size:13px;min-height:18px;margin-top:6px}
+
+.invite-row{border-bottom:1px solid var(--line);padding:14px 0}
+.invite-row:last-child{border-bottom:none}
+.invite-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.code{font-family:ui-monospace,monospace;font-size:12px;color:var(--muted)}
+.badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;text-transform:capitalize}
+.badge.active{background:var(--ok-soft);color:var(--ok)}
+.badge.expired{background:var(--warn-soft);color:var(--warn)}
+.badge.exhausted{background:var(--warn-soft);color:var(--warn)}
+.badge.revoked{background:var(--bad-soft);color:var(--bad)}
+.meta{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.6}
+.meta b{color:var(--ink);font-weight:600}
+.actions{margin-top:8px;display:flex;gap:8px}
+.redemptions{margin-top:8px;font-size:12px;color:var(--muted);display:none}
+.redemptions.show{display:block}
+.redemptions div{padding:2px 0}
+.empty{color:var(--muted);font-size:13px;padding:20px 0;text-align:center}
+
+.toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px}
+.toolbar label{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+</style>
+</head>
+<body>
+<header>
+  <button class="back" id="backBtn" aria-label="Back">‹</button>
+  <h1>Invites</h1>
+</header>
+<p class="sub">Admin-only: mint, list, and revoke porch codes.</p>
+
+<main>
+  <div class="card" id="deniedCard" style="display:none">
+    <h2>Not available</h2>
+    <p class="meta">You need admin access to manage invites.</p>
+  </div>
+
+  <div id="adminArea" style="display:none">
+    <div class="card">
+      <h2>Mint an invite</h2>
+      <div class="field">
+        <label for="wallSelect">Wall</label>
+        <select id="wallSelect"></select>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="expiresInput">Expires in (days)</label>
+          <input id="expiresInput" type="number" min="1" max="90" value="7">
+        </div>
+        <div class="field">
+          <label for="usesInput">Max uses</label>
+          <input id="usesInput" type="number" min="1" max="25" value="1">
+        </div>
+      </div>
+      <div class="field">
+        <label for="noteInput">Note (optional)</label>
+        <input id="noteInput" type="text" placeholder="for the Tailor kid">
+      </div>
+      <button class="btn" id="mintBtn">Create invite</button>
+      <div class="err" id="mintErr"></div>
+      <div class="mint-result" id="mintResult">
+        <div><b>Invite created.</b></div>
+        <div class="url-row">
+          <code id="mintUrl"></code>
+          <button class="btn small ghost" id="copyBtn">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="toolbar">
+        <h2 style="margin:0">All invites</h2>
+        <label><input type="checkbox" id="includeExhausted"> include exhausted/revoked</label>
+      </div>
+      <div id="inviteList"><div class="empty">Loading…</div></div>
+    </div>
+  </div>
+</main>
+
+<script>
+'use strict';
+
+const HEAD = { 'Content-Type': 'application/json' };
+async function api(method, url, body) {
+  const r = await fetch(url, {
+    method, headers: HEAD,
+    body: body ? JSON.stringify(body) : undefined,
+    credentials: 'same-origin',
+  });
+  if (!r.ok) {
+    let e; try { e = await r.json(); } catch (_) { e = { error: 'HTTP ' + r.status }; }
+    e.__status = r.status;
+    throw e;
+  }
+  return r.json();
+}
+
+let WALLS = [];
+let EXPANDED = new Set();
+
+function fmtDate(s) {
+  if (!s) return '—';
+  return s.replace(' ', 'T') + 'Z';
+}
+function fmtShort(s) {
+  if (!s) return '—';
+  try { return new Date(fmtDate(s)).toLocaleString(); } catch (_) { return s; }
+}
+
+async function loadInvites() {
+  const includeExhausted = document.getElementById('includeExhausted').checked;
+  const list = document.getElementById('inviteList');
+  list.innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    const { invites } = await api('GET', `/api/invites?include_redeemed=${includeExhausted ? '1' : '0'}`);
+    renderInvites(invites || []);
+  } catch (e) {
+    list.innerHTML = `<div class="empty">Failed to load: ${e.error || 'unknown'}</div>`;
+  }
+}
+
+function renderInvites(rows) {
+  const list = document.getElementById('inviteList');
+  if (!rows.length) {
+    list.innerHTML = '<div class="empty">No invites yet.</div>';
+    return;
+  }
+  list.innerHTML = '';
+  for (const inv of rows) {
+    const row = document.createElement('div');
+    row.className = 'invite-row';
+    const canRevoke = inv.status === 'active';
+    row.innerHTML = `
+      <div class="invite-top">
+        <span class="code">${inv.id.slice(0, 8)}…</span>
+        <span class="badge ${inv.status}">${inv.status}</span>
+      </div>
+      <div class="meta">
+        <div><b>Wall:</b> ${inv.wall_name || inv.wall_slug}</div>
+        <div><b>Created:</b> ${fmtShort(inv.created_at)} by ${inv.created_by_display || inv.created_by_username || 'unknown'}</div>
+        <div><b>Expires:</b> ${fmtShort(inv.expires_at)}</div>
+        <div><b>Uses:</b> ${inv.uses_count} / ${inv.max_uses}</div>
+        <div><b>Last redeemed by:</b> ${inv.redeemed_by_display || inv.redeemed_by_username || '—'} ${inv.redeemed_at ? 'at ' + fmtShort(inv.redeemed_at) : ''}</div>
+        ${inv.note ? `<div><b>Note:</b> ${inv.note}</div>` : ''}
+      </div>
+      <div class="actions">
+        <button class="btn small ghost" data-log="${inv.id}">Redemption log</button>
+        ${canRevoke ? `<button class="btn small danger" data-revoke="${inv.id}">Revoke</button>` : ''}
+      </div>
+      <div class="redemptions ${EXPANDED.has(inv.id) ? 'show' : ''}" data-redemptions-for="${inv.id}"></div>
+    `;
+    list.appendChild(row);
+  }
+  list.querySelectorAll('[data-revoke]').forEach(btn => {
+    btn.onclick = async () => {
+      const code = btn.getAttribute('data-revoke');
+      btn.disabled = true;
+      try {
+        await api('POST', `/api/invites/${encodeURIComponent(code)}/revoke`, {});
+        await loadInvites();
+      } catch (e) {
+        alert(`Revoke failed: ${e.error || 'unknown'}`);
+        btn.disabled = false;
+      }
+    };
+  });
+  list.querySelectorAll('[data-log]').forEach(btn => {
+    btn.onclick = async () => {
+      const code = btn.getAttribute('data-log');
+      const target = list.querySelector(`[data-redemptions-for="${code}"]`);
+      if (EXPANDED.has(code)) {
+        EXPANDED.delete(code);
+        target.classList.remove('show');
+        return;
+      }
+      EXPANDED.add(code);
+      target.classList.add('show');
+      target.textContent = 'Loading…';
+      try {
+        const { redemptions } = await api('GET', `/api/invites/${encodeURIComponent(code)}/redemptions`);
+        if (!redemptions.length) {
+          target.textContent = 'No redemptions yet.';
+          return;
+        }
+        target.innerHTML = redemptions.map(r =>
+          `<div>${r.display || r.username || 'unknown'} — ${fmtShort(r.redeemed_at)}</div>`
+        ).join('');
+      } catch (e) {
+        target.textContent = `Failed to load: ${e.error || 'unknown'}`;
+      }
+    };
+  });
+}
+
+async function mintInvite() {
+  const wall_slug = document.getElementById('wallSelect').value;
+  const expires_in_days = Number(document.getElementById('expiresInput').value) || 7;
+  const max_uses = Number(document.getElementById('usesInput').value) || 1;
+  const note = document.getElementById('noteInput').value.trim();
+  const errEl = document.getElementById('mintErr');
+  const resultEl = document.getElementById('mintResult');
+  errEl.textContent = '';
+  resultEl.classList.remove('show');
+  if (!wall_slug) { errEl.textContent = 'Pick a wall.'; return; }
+  const btn = document.getElementById('mintBtn');
+  btn.disabled = true;
+  try {
+    const inv = await api('POST', '/api/invites', { wall_slug, expires_in_days, max_uses, note: note || undefined });
+    document.getElementById('mintUrl').textContent = inv.url;
+    resultEl.classList.add('show');
+    document.getElementById('noteInput').value = '';
+    await loadInvites();
+  } catch (e) {
+    errEl.textContent = e.error || 'Failed to create invite';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+(async () => {
+  document.getElementById('backBtn').onclick = () => { window.location.href = '/'; };
+  document.getElementById('mintBtn').onclick = mintInvite;
+  document.getElementById('includeExhausted').onchange = loadInvites;
+  document.getElementById('copyBtn').onclick = () => {
+    const url = document.getElementById('mintUrl').textContent;
+    navigator.clipboard && navigator.clipboard.writeText(url).catch(() => {});
+  };
+
+  // The real security boundary is server-side requireAdmin on every
+  // /api/invites* route below — this client-side check just avoids
+  // flashing a broken admin UI at non-admins (matches the pattern used
+  // elsewhere in public/: pages are statically served, gating happens
+  // on the API calls they make).
+  try {
+    const me = await api('GET', '/api/me');
+    if (!me || !me.user || !me.user.isAdmin) throw { error: 'admin only' };
+    document.getElementById('adminArea').style.display = '';
+    WALLS = await api('GET', '/api/walls/all');
+    const sel = document.getElementById('wallSelect');
+    sel.innerHTML = WALLS.map(w => `<option value="${w.slug}">${w.name}</option>`).join('');
+    await loadInvites();
+  } catch (e) {
+    document.getElementById('deniedCard').style.display = '';
+  }
+})();
+</script>
+</body>
+</html>
