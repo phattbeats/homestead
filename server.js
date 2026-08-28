@@ -792,12 +792,12 @@ function _resolveCaller(req, res) {
 app.post('/api/invites', auth, requireAdmin, (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
   if (!me) return res.status(401).json({ error: 'unknown_user' });
-  const { wall_slug, expires_in_days, note } = req.body || {};
+  const { wall_slug, expires_in_days, note, max_uses } = req.body || {};
   if (!wall_slug || typeof wall_slug !== 'string') {
     return res.status(400).json({ error: 'wall_slug required', hint: 'PHA-1575 wall-less invites are gone (see PHA-2207).' });
   }
   try {
-    const inv = invites.create(db, { wall_slug, expires_in_days, note, created_by: me.id });
+    const inv = invites.create(db, { wall_slug, expires_in_days, note, created_by: me.id, max_uses });
     res.status(201).json(inv);
   } catch (err) {
     if (err && err.status) return res.status(err.status).json({ error: err.code || 'invalid' });
