@@ -792,12 +792,12 @@ function _resolveCaller(req, res) {
 app.post('/api/invites', auth, requireAdmin, (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
   if (!me) return res.status(401).json({ error: 'unknown_user' });
-  const { wall_slug, expires_in_days, note } = req.body || {};
+  const { wall_slug, expires_in_days, note, max_uses } = req.body || {};
   if (!wall_slug || typeof wall_slug !== 'string') {
     return res.status(400).json({ error: 'wall_slug required', hint: 'PHA-1575 wall-less invites are gone (see PHA-2207).' });
   }
   try {
-    const inv = invites.create(db, { wall_slug, expires_in_days, note, created_by: me.id });
+    const inv = invites.create(db, { wall_slug, expires_in_days, note, created_by: me.id, max_uses });
     res.status(201).json(inv);
   } catch (err) {
     if (err && err.status) return res.status(err.status).json({ error: err.code || 'invalid' });
@@ -816,6 +816,35 @@ app.get('/api/invites', auth, requireAdmin, (req, res) => {
     console.error('[api/invites GET]', err);
     res.status(500).json({ error: 'list_failed' });
   }
+});
+
+// POST /api/invites/:code/revoke — admin kills an invite early (PHA-2674).
+// Idempotent on an already-revoked/exhausted code; 404 on an unknown
+// code. Once revoked, peek()/redeem() 410 with code invite_revoked.
+app.post('/api/invites/:code/revoke', auth, requireAdmin, (req, res) => {
+  try {
+    const inv = invites.revoke(db, req.params.code);
+    res.json({ ok: true, id: inv.id, revoked_at: inv.revoked_at });
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.code || 'invalid' });
+    console.error('[api/invites/:code/revoke]', err);
+    res.status(500).json({ error: 'revoke_failed' });
+  }
+});
+
+// GET /api/invites/:code/redemptions — admin "redemption canary" log:
+// every successful redemption of this porch code, newest first.
+app.get('/api/invites/:code/redemptions', auth, requireAdmin, (req, res) => {
+  const invite = db.prepare('SELECT id FROM invites WHERE id = ?').get(req.params.code);
+  if (!invite) return res.status(404).json({ error: 'invite_not_found' });
+  const rows = db.prepare(`
+    SELECT r.id, r.user_id, r.redeemed_at, u.username, u.display
+    FROM invite_redemptions r
+    LEFT JOIN users u ON u.id = r.user_id
+    WHERE r.invite_id = ?
+    ORDER BY r.redeemed_at DESC
+  `).all(req.params.code);
+  res.json({ redemptions: rows });
 });
 
 // POST /api/invites/:code/redeem — authed user redeems an invite.
