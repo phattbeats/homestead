@@ -44,6 +44,9 @@ jobs:
       - name: Run post-login mobile screenshot smoke
         run: node scripts/smoke-postlogin-screenshot.js
 
+      - name: PHA-2658 — entity deep-link refresh smoke
+        run: node scripts/smoke-entity-deeplink.js
+
       # PHA-2498 (P2 UX batch): the three mobile smokes below are the
       # DoD evidence the walking report cited to close the parent issue.
       # They're additive to the PHA-2501 standing smokes — same harness,

@@ -318,6 +318,16 @@ async function disableAll() {
     ok('wall-only: screenshot captured');
 
     // ---- 7. PHA-2557 catch-all tightening: unknown *.html → 404 ---
+    // PHA-2658: /entity/:id is the one explicit non-file SPA route. It must
+    // receive the index shell, while the missing-file protections below stay
+    // intact. This is intentionally checked without auth: the server route
+    // owns shell delivery; the SPA owns the existing post-login restore.
+    const entityShellRes = await fetch('http://127.0.0.1:3194/entity/anything');
+    const entityShell = await entityShellRes.text();
+    assertEq(entityShellRes.status, 200, '/entity/anything → 200 SPA shell');
+    assert(entityShell.includes('<div id="entityPage"'),
+      '/entity/anything serves the entity-capable SPA shell');
+
     // The static handler must NOT serve the SPA shell for non-existent
     // .html files. Previously /lists.html, /calendar.html, /chores.html,
     // /apps.html all returned 200 with the index.html shell (the same

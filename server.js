@@ -2943,6 +2943,14 @@ app.get('/favicon.ico', (req, res) => {
   res.sendFile('public/icon.svg', { root: __dirname });
 });
 
+// PHA-2658: entity pages are an explicit SPA route, not a static asset.
+// Keep this allowlist entry ahead of the strict static middleware below so a
+// refresh, shared URL, or PWA cold start receives the shell while unrelated
+// missing files (for example /lists.html) continue to be real 404s.
+app.get('/entity/:id', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'), { dotfiles: 'allow' });
+});
+
 // PHA-2557: catch-all tightening. The previous express.static default
 // (fallthrough: true) let unknown paths like /lists.html /calendar.html
 // /chores.html /apps.html fall through to the SPA fallback regex,
