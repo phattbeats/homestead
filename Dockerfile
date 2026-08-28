@@ -3,10 +3,17 @@
 # resulting node_modules into a slim runtime image in stage 2. The
 # node-gyp install hook auto-fired by npm needs python3/make/g++ to
 # evaluate binding.gyp even when the prebuilt N-API binary is used.
+#
+# PHA-2640: install git in the deps stage so npm's `prepare` script
+# (which runs `npm run hooks:install` → `git config core.hooksPath
+# .githooks`, added in PHA-2354) can complete. Without git the
+# prepare hook exits 127 and `npm ci` fails — every release from
+# v0.3.0.1 through v0.4.3 was silently broken. Adding git here keeps
+# the prepare hook as the single source of truth for hook setup.
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app
 RUN apt-get update \
- && apt-get install -y --no-install-recommends python3 build-essential ca-certificates \
+ && apt-get install -y --no-install-recommends python3 build-essential ca-certificates git \
  && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund \
