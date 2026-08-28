@@ -78,7 +78,14 @@ function freshDb() {
   assert(Array.isArray(out.overdue_tasks), 'overdue_tasks is an array');
   assert(Array.isArray(out.upcoming.events_next_7_days), 'upcoming.events_next_7_days is an array');
   assert(Array.isArray(out.upcoming.chores_due_next_7_days), 'upcoming.chores_due_next_7_days is an array');
-  assertEq(out.lists, {}, 'lists is `{}` (no lists table yet)');
+  // PHA-2586: lists primitive now ships; lib/snapshot.js returns
+  // { list_count, open_item_count, active_lists: [...] } via safeListsStats.
+  // Even a freshly migrated-but-empty DB still gets an object, never {}.
+  assert(out.lists && typeof out.lists === 'object' && !Array.isArray(out.lists), 'lists is an object envelope');
+  assertEq(out.lists.list_count, 0, 'fresh DB has list_count=0');
+  assertEq(out.lists.open_item_count, 0, 'fresh DB has open_item_count=0');
+  assert(Array.isArray(out.lists.active_lists), 'fresh DB active_lists is an array');
+  assertEq(out.lists.active_lists.length, 0, 'fresh DB active_lists is empty');
   assert(Array.isArray(out.activity_recent), 'activity_recent is an array');
   fs.rmSync(tmpDir, { recursive: true, force: true });
 })();
@@ -311,7 +318,10 @@ function bootServerAndLogin() {
         assert(Array.isArray(body.today_tasks), 'today_tasks is array');
         assert(Array.isArray(body.today_events), 'today_events is array');
         assert(Array.isArray(body.overdue_tasks), 'overdue_tasks is array');
-        assertEq(body.lists, {}, 'lists is empty object');
+        assert(body.lists && typeof body.lists === 'object' && !Array.isArray(body.lists), 'lists is an object envelope');
+        assertEq(typeof body.lists.list_count, 'number', 'lists.list_count is a number');
+        assertEq(typeof body.lists.open_item_count, 'number', 'lists.open_item_count is a number');
+        assert(Array.isArray(body.lists.active_lists), 'lists.active_lists is an array');
         assert(/^\d{4}-\d{2}-\d{2}$/.test(body.today), 'today is YYYY-MM-DD');
         resolve();
       });

@@ -51,6 +51,7 @@ const drawerDispatch = require('./lib/drawer-dispatch');
 const eventsDispatch = require('./lib/events-dispatch');
 const media = require('./lib/media');
 const walls = require('./lib/walls');
+const lists = require('./lib/lists');
 const notifications = require('./lib/notifications');
 const analytics = require('./lib/analytics');
 const invites = require('./lib/invites');
@@ -100,6 +101,13 @@ analytics.migrate(db);
 // PHA-2207 (PHA-2200.6): invite codes. FKs to walls(slug), so it
 // runs after walls.migrate().
 invites.migrate(db);
+// PHA-2586: lists + list_items tables. FKs to users(id), so it runs
+// after userModel.migrate (same boot-migration pattern as the other
+// primitives). seed() provisions one "Groceries" list for the
+// single-site household so a fresh install can demonstrate the
+// primitive end-to-end.
+lists.migrate(db);
+lists.seed(db);
 
 // v0.1.0: web push subscriptions (PHA-1619)
 db.exec(`
@@ -1790,6 +1798,121 @@ app.post('/api/tasks/:id/toggle', auth, (req, res) => {
 app.delete('/api/tasks/:id', auth, (req, res) => {
   db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
+});
+
+// ---- lists (PHA-2586) ----
+//
+// Lists are the household-shared, multiple-contributor primitive
+// distinct from chores/tasks. The `lists` module in lib/modules.js
+// scopes reads to `read:lists` and writes to `write:lists`; both
+// are auto-granted to the household via the session user (the auth
+// middleware resolves the caller below). Routes follow the same
+// shape as /api/walls so the SPA can use a familiar fetch pattern.
+//
+// Design notes:
+//   * No membership gate — lists are household-shared by default.
+//     Future work can add per-list visibility if a household asks for it.
+//   * App-scoped bearer tokens must hold the matching list scope.
+//     Cookie/header-trust sessions retain normal first-party access, as
+//     requireScope() intentionally permits them.
+//   * Lists are not deleted by accidental item-delete — items cascade
+//     only when the parent list is removed.
+
+app.get('/api/lists', auth, requireScope('read:lists'), (req, res) => {
+  try {
+    const includeArchived = req.query.include_archived === '1' || req.query.include_archived === 'true';
+    res.json({ lists: lists.listLists({ includeArchived }) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.code || 'list_failed' });
+  }
+});
+
+app.get('/api/lists/stats', auth, requireScope('read:lists'), (req, res) => {
+  try {
+    res.json(lists.publicStats());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.code || 'stats_failed' });
+  }
+});
+
+app.get('/api/lists/:id', auth, requireScope('read:lists'), (req, res) => {
+  try {
+    res.json(lists.getList(req.params.id));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.code || 'list_failed' });
+  }
+});
+
+app.post('/api/lists', auth, requireScope('write:lists'), (req, res) => {
+  try {
+    const me = userModel.getMe(db, req.session.user.username);
+    const userId = me ? me.id : null;
+    res.status(201).json(lists.createList(req.body || {}, userId));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.code || 'list_failed' });
+  }
+});
+
+app.patch('/api/lists/:id', auth, requireScope('write:lists'), (req, res) => {
+  try {
+    res.json(lists.updateList(req.params.id, req.body || {}));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.code || 'list_failed' });
+  }
+});
+
+app.delete('/api/lists/:id', auth, requireScope('write:lists'), (req, res) => {
+  try {
+    res.json(lists.deleteList(req.params.id));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.code || 'list_failed' });
+  }
+});
+
+app.post('/api/lists/reorder', auth, requireScope('write:lists'), (req, res) => {
+  try {
+    res.json({ lists: lists.reorderLists((req.body && req.body.ordered_ids) || []) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.code || 'list_failed' });
+  }
+});
+
+app.get('/api/lists/:id/items', auth, requireScope('read:lists'), (req, res) => {
+  try {
+    const includeChecked = req.query.include_checked === '1' || req.query.include_checked === 'true';
+    const limit = req.query.limit ? Math.max(1, Math.min(500, parseInt(req.query.limit, 10) || 100)) : undefined;
+    res.json({ items: lists.listItems(req.params.id, { includeChecked, limit }) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.code || 'item_failed' });
+  }
+});
+
+app.post('/api/lists/:id/items', auth, requireScope('write:lists'), (req, res) => {
+  try {
+    const me = userModel.getMe(db, req.session.user.username);
+    const userId = me ? me.id : null;
+    res.status(201).json(lists.addItem(req.params.id, req.body || {}, userId));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.code || 'item_failed' });
+  }
+});
+
+app.patch('/api/list-items/:itemId', auth, requireScope('write:lists'), (req, res) => {
+  try {
+    const me = userModel.getMe(db, req.session.user.username);
+    const userId = me ? me.id : null;
+    res.json(lists.updateItem(req.params.itemId, req.body || {}, userId));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.code || 'item_failed' });
+  }
+});
+
+app.delete('/api/list-items/:itemId', auth, requireScope('write:lists'), (req, res) => {
+  try {
+    res.json(lists.deleteItem(req.params.itemId));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.code || 'item_failed' });
+  }
 });
 
 // ---- events ----

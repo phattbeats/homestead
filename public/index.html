@@ -83,6 +83,40 @@ main{padding:14px 18px;max-width:680px;margin:0 auto}
 .overdue{color:#b3453a;font-weight:600}
 .x{color:var(--muted);font-size:18px;padding:6px;opacity:.5}
 
+/* PHA-2586: lists primitive */
+.lists-sec{display:flex;justify-content:space-between;align-items:center}
+.lists-grid{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.list-chip{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 14px;border-radius:14px;
+  background:var(--surface);border:1px solid var(--line);
+  font-size:14px;font-weight:600;color:var(--ink);
+  cursor:pointer;transition:transform .2s var(--ease),border-color .2s;
+}
+.list-chip:hover{transform:translateY(-1px);border-color:var(--accent-soft)}
+.list-chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.list-chip .ico{font-size:18px}
+.list-chip .count{font-size:12px;color:var(--muted);font-weight:500}
+.list-chip.on .count{color:var(--accent);opacity:.8}
+.list-empty{padding:18px 4px;color:var(--muted);font-size:14px;text-align:center}
+.list-item{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid var(--line)}
+.list-item:last-child{border-bottom:none}
+.list-item .chk{width:24px;height:24px;border-radius:8px;border:2px solid var(--line);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;background:transparent;cursor:pointer;transition:all .25s var(--ease)}
+.list-item .chk.done{background:var(--u-all);border-color:var(--u-all)}
+.list-item.done .lbl{text-decoration:line-through;color:var(--muted)}
+.list-item .lbl{flex:1;font-size:15px;font-weight:500;word-break:break-word}
+.list-item .qty{font-size:12px;color:var(--muted);background:var(--bg);padding:2px 8px;border-radius:8px;margin-left:6px;flex-shrink:0}
+.list-item .x{font-size:16px}
+.list-add{display:flex;gap:8px;margin-top:10px;align-items:center}
+.list-add input{flex:1;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font:inherit;font-size:14px}
+.list-add button.add-btn{padding:10px 14px;border-radius:12px;background:var(--accent);color:#fff;font-weight:600;font-size:14px;border:none;cursor:pointer;white-space:nowrap}
+.list-add button.add-btn:disabled{opacity:.5;cursor:default}
+.list-meta{display:flex;justify-content:space-between;align-items:baseline;padding:8px 4px}
+.list-meta .name{font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px}
+.list-meta .name .ico{font-size:18px}
+.list-meta .sub{font-size:12px;color:var(--muted)}
+.list-section-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding:10px 4px 4px}
+
 /* calendar */
 .cal-head{display:flex;justify-content:space-between;align-items:center;padding:4px 6px 12px}
 .cal-head b{font-size:17px;letter-spacing:-.01em}
@@ -464,26 +498,21 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
       <div class="sec">Done</div>
       <div class="card"><div class="card-in" id="doneTasks"></div></div>
     </div>
-    <!-- PHA-2557: Lists page. The `lists` module's registry `room` field
-         is "r-lists", so applyLayout() matches this div by `data-p="r-lists"`.
-         The content renders inside the existing list endpoints
-         (GET /api/lists + GET /api/lists/:id/items, served by the
-         shared lists primitive — PHA-1621). For now this is a thin
-         placeholder shell; the Lists module is feature-flagged off by
-         default, so this div is hidden by `body[data-layout="feed-only"]`
-         CSS unless the user explicitly enables `lists` from
-         /modules.html. The placeholder gives the smoke suite a real
-         DOM target to assert tab-count parity against — the previous
-         bug was that this div didn't exist, so layout.tabs.length
-         disagreed with rendered tab count. -->
+    <!-- PHA-2557 / PHA-2586: Lists page. The `lists` module's registry
+         `room` field is "r-lists", so applyLayout() matches this div by
+         `data-p="r-lists"`. The content is the real lists primitive:
+         server.js wires GET/POST /api/lists and /api/lists/:id/items
+         (lib/lists.js), snapshot.js exposes lists stats in the §7
+         contract, and this page renders the chip list + per-list
+         editor with add/check/delete. seed() in lib/lists.js creates
+         a "Groceries" list on a fresh install so a new user can see
+         the surface immediately. -->
     <div class="page" id="page-r-lists">
-      <div class="sec">Shared lists</div>
-      <div class="card"><div class="card-in" id="listsRoot">
-        <div class="muted" style="padding:12px 0;font-size:13px">
-          Lists module is enabled. The full list editor loads after
-          <code>/api/lists</code> returns data.
-        </div>
-      </div></div>
+      <div class="sec lists-sec">
+        <span>Shared lists</span>
+        <button class="link" id="listsAddBtn" type="button">+ New list</button>
+      </div>
+      <div class="card"><div class="card-in" id="listsRoot"></div></div>
     </div>
     <div class="page" id="page-r-calendar">
       <div class="card"><div class="card-in">
@@ -1002,9 +1031,238 @@ async function refreshMerged(){
   }
 }
 async function refresh(){
-  [TASKS,EVENTS,SVCS]=await Promise.all([api('GET','/api/tasks'),api('GET','/api/events'),api('GET','/api/services')]);
+  const [tasks, events, services, listPayload] = await Promise.all([
+    api('GET','/api/tasks'),
+    api('GET','/api/events'),
+    api('GET','/api/services'),
+    api('GET','/api/lists'),
+  ]);
+  TASKS=tasks;EVENTS=events;SVCS=services;
   await refreshMerged();
-  renderHome();renderTasks();renderCal();renderSvcs();
+  await refreshLists(listPayload);
+  renderHome();renderTasks();renderCal();renderSvcs();renderLists();
+}
+
+/* ---- lists (PHA-2586) ---- */
+//
+// Front-end of the lists primitive. Two state slices:
+//   LISTS  — Array<list>, mirrored from GET /api/lists on every refresh().
+//   ITEMS  — Object<listId, Array<item>> keyed by the selected list id.
+//
+// The page chip-row + per-list item list live entirely inside the
+// #page-r-lists div. No iframe, no modal — the lists module is
+// frame-mode in the registry, so the SPA renders it in-place.
+// Initial render is in boot() / refresh(); user interactions stay
+// local until they trigger a network call.
+let LISTS = [];
+let ITEMS = {};
+let CURRENT_LIST_ID = null;
+
+async function refreshLists(prefetched){
+  try {
+    const r = prefetched || await api('GET','/api/lists');
+    LISTS = (r && r.lists) || [];
+    if (CURRENT_LIST_ID && !LISTS.some(l => l.id === CURRENT_LIST_ID)) {
+      CURRENT_LIST_ID = null;
+      ITEMS = {};
+    }
+    if (!CURRENT_LIST_ID && LISTS.length) CURRENT_LIST_ID = LISTS[0].id;
+    if (CURRENT_LIST_ID && !ITEMS[CURRENT_LIST_ID]) {
+      const ir = await api('GET', `/api/lists/${encodeURIComponent(CURRENT_LIST_ID)}/items?include_checked=1`);
+      ITEMS[CURRENT_LIST_ID] = (ir && ir.items) || [];
+    }
+  } catch (e) {
+    LISTS = [];
+    ITEMS = {};
+  }
+}
+
+function listChipHtml(l){
+  const on = l.id === CURRENT_LIST_ID ? ' on' : '';
+  const sub = l.open_count > 0
+    ? `${l.open_count} open`
+    : (l.item_count > 0 ? `${l.item_count} done` : 'empty');
+  return `<button class="list-chip${on}" data-list-id="${esc(l.id)}" type="button">
+    <span class="ico" aria-hidden="true">${esc(l.icon || '📝')}</span>
+    <span>${esc(l.name)}</span><span class="count">${esc(sub)}</span>
+  </button>`;
+}
+
+function listItemRow(it){
+  return `<div class="list-item ${it.checked?'done':''}" data-item-id="${esc(it.id)}">
+    <button class="chk ${it.checked?'done':''}" data-act="toggle" aria-label="${it.checked?'Uncheck':'Check'} ${esc(it.label)}"></button>
+    <div class="lbl">${esc(it.label)}</div>
+    ${it.quantity?`<span class="qty">${esc(it.quantity)}</span>`:''}
+    <button class="x" data-act="del" aria-label="Delete ${esc(it.label)}">✕</button>
+  </div>`;
+}
+
+function renderLists(){
+  const root = $('#listsRoot');
+  if (!root) return;
+  if (!LISTS.length) {
+    root.innerHTML = `<div class="list-empty">No lists yet — tap "+ New list" to start one.</div>`;
+    return;
+  }
+  const cur = LISTS.find(l => l.id === CURRENT_LIST_ID) || LISTS[0];
+  if (cur.id !== CURRENT_LIST_ID) CURRENT_LIST_ID = cur.id;
+  const items = ITEMS[CURRENT_LIST_ID] || [];
+  const open = items.filter(i => !i.checked);
+  const done = items.filter(i => i.checked);
+  root.innerHTML = `
+    <div class="lists-grid">${LISTS.map(listChipHtml).join('')}</div>
+    <div class="list-meta">
+      <div class="name"><span class="ico" aria-hidden="true">${esc(cur.icon || '📝')}</span><span>${esc(cur.name)}</span></div>
+      <div class="sub">${open.length} open · ${done.length} done</div>
+    </div>
+    <div class="list-section-title">Open</div>
+    ${open.length ? open.map(listItemRow).join('') : '<div class="list-empty">Nothing here — add something below.</div>'}
+    ${done.length ? `<div class="list-section-title">Done</div>${done.map(listItemRow).join('')}` : ''}
+    <div class="list-add">
+      <input class="field" id="listItemInput" type="text" autocomplete="off" placeholder="Add an item" maxlength="200">
+      <button class="add-btn" id="listItemAdd" type="button">Add</button>
+    </div>`;
+  // Wire interactions. Each handler reads the data-* attribute on
+  // the closest list-item / list-chip so we don't close over stale
+  // element references after innerHTML replacement.
+  root.querySelectorAll('.list-chip').forEach(b => {
+    b.onclick = () => selectList(b.dataset.listId);
+  });
+  root.querySelectorAll('.list-item').forEach(r => {
+    const id = r.dataset.itemId;
+    r.querySelector('[data-act="toggle"]').onclick = () => toggleListItem(id);
+    r.querySelector('[data-act="del"]').onclick = () => deleteListItem(id);
+  });
+  const inp = $('#listItemInput');
+  const btn = $('#listItemAdd');
+  if (inp && btn) {
+    const doAdd = async () => {
+      const label = (inp.value || '').trim();
+      if (!label) return;
+      btn.disabled = true;
+      try {
+        const r = await api('POST', `/api/lists/${encodeURIComponent(CURRENT_LIST_ID)}/items`, { label });
+        if (!ITEMS[CURRENT_LIST_ID]) ITEMS[CURRENT_LIST_ID] = [];
+        ITEMS[CURRENT_LIST_ID].push(r);
+        // Bump local list's open_count so the chip sub-text refreshes.
+        const meta = LISTS.find(l => l.id === CURRENT_LIST_ID);
+        if (meta) { meta.open_count = (meta.open_count||0)+1; meta.item_count = (meta.item_count||0)+1; }
+        renderLists();
+      } catch (e) {
+        alert((e && (e.error || e.message)) || 'Could not add item');
+      } finally {
+        btn.disabled = false;
+        inp.value = '';
+        inp.focus();
+      }
+    };
+    btn.onclick = doAdd;
+    inp.onkeydown = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); doAdd(); } };
+  }
+}
+
+async function selectList(id){
+  if (!id || id === CURRENT_LIST_ID) return;
+  CURRENT_LIST_ID = id;
+  if (!ITEMS[id]) {
+    try {
+      const r = await api('GET', `/api/lists/${encodeURIComponent(id)}/items?include_checked=1`);
+      ITEMS[id] = (r && r.items) || [];
+    } catch (e) {
+      ITEMS[id] = [];
+    }
+  }
+  renderLists();
+}
+
+async function toggleListItem(itemId){
+  const listId = CURRENT_LIST_ID;
+  const items = ITEMS[listId] || [];
+  const it = items.find(x => x.id === itemId);
+  if (!it) return;
+  const next = !it.checked;
+  // Optimistic UI — flip the row, then reconcile against server.
+  it.checked = next;
+  it.checked_by = next ? (ME && ME.username) : null;
+  it.checked_at = next ? new Date().toISOString().replace('T',' ').slice(0,19) : null;
+  // Bump the chip counters locally so the row text "N open · N done"
+  // stays accurate without a full list reload.
+  const meta = LISTS.find(l => l.id === listId);
+  if (meta) {
+    if (next) meta.open_count = Math.max(0, (meta.open_count||0)-1);
+    else meta.open_count = (meta.open_count||0)+1;
+  }
+  renderLists();
+  try {
+    const updated = await api('PATCH', `/api/list-items/${encodeURIComponent(itemId)}`, { checked: next });
+    // Server is authoritative — sync our copy.
+    Object.assign(it, updated);
+    if (meta) {
+      // Re-derive from server-known counts in case of drift.
+      try {
+        const fresh = await api('GET', `/api/lists/${encodeURIComponent(listId)}`);
+        Object.assign(meta, fresh);
+      } catch (_) {}
+    }
+    renderLists();
+  } catch (e) {
+    // Rollback on failure.
+    it.checked = !next;
+    if (meta) {
+      if (next) meta.open_count = (meta.open_count||0)+1;
+      else meta.open_count = Math.max(0, (meta.open_count||0)-1);
+    }
+    renderLists();
+    alert((e && (e.error || e.message)) || 'Could not update item');
+  }
+}
+
+async function deleteListItem(itemId){
+  const listId = CURRENT_LIST_ID;
+  const items = ITEMS[listId] || [];
+  const idx = items.findIndex(x => x.id === itemId);
+  if (idx === -1) return;
+  const removed = items[idx];
+  items.splice(idx, 1);
+  const meta = LISTS.find(l => l.id === listId);
+  if (meta) {
+    meta.item_count = Math.max(0, (meta.item_count||0)-1);
+    if (!removed.checked) meta.open_count = Math.max(0, (meta.open_count||0)-1);
+  }
+  renderLists();
+  try {
+    await api('DELETE', `/api/list-items/${encodeURIComponent(itemId)}`);
+  } catch (e) {
+    // Rollback.
+    items.splice(idx, 0, removed);
+    if (meta) {
+      meta.item_count = (meta.item_count||0)+1;
+      if (!removed.checked) meta.open_count = (meta.open_count||0)+1;
+    }
+    renderLists();
+    alert((e && (e.error || e.message)) || 'Could not delete item');
+  }
+}
+
+async function createListFlow(){
+  const name = (prompt('Name your new list:', 'Packing') || '').trim();
+  if (!name) return;
+  // Heuristic: detect kind from name — `grocery`/`groceries` → 🛒,
+  // `pack`/`trip` → 🧳, otherwise generic 📝.
+  let kind = 'list';
+  let icon = '📝';
+  const n = name.toLowerCase();
+  if (/grocery/.test(n)) { kind = 'groceries'; icon = '🛒'; }
+  else if (/pack|trip|travel/.test(n)) { kind = 'packing'; icon = '🧳'; }
+  try {
+    const created = await api('POST', '/api/lists', { name, kind, icon });
+    LISTS.push(created);
+    CURRENT_LIST_ID = created.id;
+    ITEMS[created.id] = [];
+    renderLists();
+  } catch (e) {
+    alert((e && (e.error || e.message)) || 'Could not create list');
+  }
 }
 
 /* ---- rendering ---- */
@@ -1347,6 +1605,15 @@ function openSvcSheet(id){
 }
 async function delSvc(id){if(confirm('Remove this service?')){await api('DELETE',`/api/services/${id}`);closeSheet();await refresh()}}
 $('#addSvc').onclick=()=>openSvcSheet();
+
+// PHA-2586: lists page "+ New list" — defers to createListFlow, which
+// prompts for a name and posts to /api/lists. The chip-row + add-item
+// composer inside the page is wired inside renderLists() because the
+// DOM is rebuilt on every refresh.
+document.addEventListener('DOMContentLoaded', () => {
+  const addBtn = document.getElementById('listsAddBtn');
+  if (addBtn) addBtn.onclick = createListFlow;
+});
 
 /* ---- avatar menu / settings ---- */
 $('#avatarBtn').onclick=()=>{

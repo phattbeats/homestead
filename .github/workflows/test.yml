@@ -67,6 +67,9 @@ jobs:
       - name: PHA-2585 — Home always-visible smoke
         run: node scripts/smoke-2585-home-always-visible.js
 
+      - name: PHA-2586 — Lists fresh-install journey smoke
+        run: node scripts/smoke-2586-lists-ui.js
+
       - name: Upload verify-out screenshots
         if: always()
         uses: actions/upload-artifact@v4
