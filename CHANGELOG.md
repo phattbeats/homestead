@@ -1,3 +1,50 @@
+## v0.4.4 (2026-08-28) — Shared lists primitive lands + repo consolidation (PHA-2586 + PHA-2640)
+
+**Lists is no longer a dead-end.** Every seeded user had Lists
+enabled, but `GET /api/lists` returned 404 — the chip-row rendered
+to placeholder copy and tapping an item was impossible. This
+release lands the full shared-lists primitive:
+
+- **`lib/lists.js` (new, 353 lines).** `lists` + `list_items`
+  schema, scope-gated `read:lists` / `write:lists`, ORDER BY
+  `position, created_at` on every public listing, position-tracked
+  reorder, archive (soft-delete), seed-time "Groceries" list on
+  fresh install, snapshot defensive `safeListsStats` for
+  back-compat with older DBs.
+- **`server.js`** — `/api/lists` CRUD + `/api/lists/:id/items`
+  CRUD + `/api/lists/stats` + `/api/lists/reorder`. Cookie
+  sessions + header-trust sessions read; app-scoped bearer tokens
+  require the matching scope.
+- **`public/index.html`** — Lists page renders chip-row + per-list
+  item editor with add/check/delete; `+ New list` prompts for a
+  name and posts; optimistic toggle with rollback on server
+  failure.
+- **`scripts/test-lists.js` (new, 70 assertions).** Schema +
+  seed + CRUD + position-reorder + archive + cascade + snapshot
+  defensive; no out-of-band SQLite writes.
+- **`scripts/test-registry-no-hardcoded-keys.js`** — allow-list
+  entries for `lib/lists.js` (table namespace) + `lib/snapshot.js`
+  (sqlite_master lookup) so the audit doesn't flag the new
+  primitive.
+- **`scripts/test-snapshot.js`** — `out.lists` is now an envelope
+  (`{list_count, open_item_count, active_lists}`), not `{}`.
+- **`scripts/smoke-2586-lists-ui.js` (new)** — fresh-install
+  journey: a household user opens Lists on mobile (390×844), adds
+  an item, screenshot lands in `verify-out/`. Wired into
+  `verify.sh` step 6/7 and `.github/workflows/test.yml` as the
+  PHA-2586 acceptance smoke.
+- **`README.md`** — Shared lists now documented as a first-class
+  feature.
+- **`package.json`** — `test` chain gains `scripts/test-lists.js`
+  adjacent to `test-walls.js` (PHA-2209 Amendment-3 ordering).
+  Version bump `0.4.3 → 0.4.4`.
+
+**Repo consolidation (PHA-2640).** Closed the last open PR
+(#76 lists primitive) and pruned 49 stale branches from `origin`
+whose owning issues were already `done`. Local clones no longer
+see pre-v0.3 release archaeology; the kept set is the active v0.3
+modular stack and recent in-flight work.
+
 # Changelog
 
 ## v0.4.3 (2026-08-25) — Layout-route contract repair (PHA-2587 + PHA-2588)
