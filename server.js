@@ -1033,6 +1033,9 @@ app.delete('/api/me/identities', auth, (req, res) => {
     if (!Number.isInteger(targetId)) return res.status(400).json({ error: 'invalid user_id' });
   }
   const result = identity.unlinkIdentity(db, targetId, provider, issuer, provider_subject);
+  if (result.blocked === 'would_lock_out_owner') {
+    return res.status(409).json({ error: 'would_lock_out_owner', message: 'Refusing to unlink the last login path for the household owner. Use the owner recovery CLI to rotate their password; never delete the owner\'s break-glass credential via this API.' });
+  }
   if (result.blocked === 'no_login_path') {
     return res.status(409).json({ error: 'no_login_path', message: 'Refusing to unlink the last identity for a user with no local credential — would orphan the account.' });
   }
@@ -1040,9 +1043,82 @@ app.delete('/api/me/identities', auth, (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- owner recovery (PHA-2708) ----
+//
+// Homestead's owner-recovery surface has two halves:
+//
+//   * `GET /api/admin/owner/login-paths` — read-only inventory of
+//     the owner's viable login methods. Used by ops + tests to
+//     confirm the owner has at least one break-glass path, and
+//     that no recent change accidentally removed it. Never returns
+//     hashes, tokens, or plaintext.
+//
+//   * `POST /api/admin/owner/recover` — consume a recovery token
+//     minted by `scripts/reset-owner-password.js`. The plaintext
+//     token is sent in the request body; the server validates via
+//     sha256 against the stored hash, rotates the owner's password
+//     via `identity.setLocalPassword`, and clears the token row.
+//     Replay is impossible — the hash is wiped on consume.
+//
+// Both endpoints require an authenticated admin session. The
+// recovery token is the ONLY thing that bypasses the
+// "current-password required" check; the operator's flow is
+//   1. Run `scripts/reset-owner-password.js` on the host → prints
+//      token + curl example. The token is host-bound at this point.
+//   2. Hit `POST /api/admin/owner/recover` from the SPA with the
+//      token + new password. The audit log gets
+//      `owner_recovery_consumed` with the operator's username.
+app.get('/api/admin/owner/login-paths', auth, requireAdmin, (req, res) => {
+  const ownerId = identity.findOwnerUserId(db);
+  if (ownerId == null) return res.status(404).json({ error: 'no_owner' });
+  const owner = db.prepare('SELECT id, username, display, is_admin FROM users WHERE id = ?').get(ownerId);
+  const links = identity.listIdentityLinks(db, ownerId);
+  const local = db.prepare('SELECT recovery_token_expires_at AS exp FROM local_credentials WHERE user_id = ?').get(ownerId);
+  const hasLocal = identity.hasLocalCredential(db, ownerId);
+  const hasRecoveryToken = !!(local && local.exp && identity.parseExpiresAt(local.exp) > Date.now());
+  res.json({
+    owner: { id: owner.id, username: owner.username, display: owner.display, isAdmin: !!owner.is_admin },
+    login_paths: {
+      local_credential: hasLocal,
+      identity_links: links.length,
+      recovery_token_active: hasRecoveryToken,
+      recovery_token_expires_at: hasRecoveryToken ? local.exp : null,
+    },
+    identity_links: links.map(l => ({ provider: l.provider, issuer: l.issuer, linked_at: l.linked_at, last_used_at: l.last_used_at })),
+  });
+});
+
+app.post('/api/admin/owner/recover', auth, requireAdmin, (req, res) => {
+  const { token, new_password } = req.body || {};
+  if (!token || typeof token !== 'string' || !new_password || typeof new_password !== 'string') {
+    return res.status(400).json({ error: 'token and new_password required' });
+  }
+  if (new_password.length < 8) {
+    return res.status(400).json({ error: 'new_password too short', message: 'Owner recovery requires a new password of at least 8 characters.' });
+  }
+  const me = db.prepare('SELECT username FROM users WHERE id = (SELECT id FROM users WHERE username = ?)').get(req.session.user.username);
+  const result = identity.consumeOwnerRecoveryToken(db, token, new_password);
+  if (!result.ok) {
+    identity.auditOwnerRecovery(db, {
+      kind: 'owner_recovery_rejected',
+      actor: me ? me.username : 'unknown',
+      userId: null,
+      meta: { route: '/api/admin/owner/recover', code: result.code },
+    });
+    return res.status(401).json({ error: result.code });
+  }
+  identity.auditOwnerRecovery(db, {
+    kind: 'owner_recovery_consumed',
+    actor: me ? me.username : 'unknown',
+    userId: result.userId,
+    meta: { route: '/api/admin/owner/recover' },
+  });
+  res.json({ ok: true, username: result.username });
+});
+
 app.post('/api/users/:username/password', auth, (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
-  const target = db.prepare('SELECT id, username FROM users WHERE username = ?').get(req.params.username);
+  const target = db.prepare('SELECT id, username, is_admin FROM users WHERE username = ?').get(req.params.username);
   if (!target) return res.status(404).json({ error: 'not found' });
   const { current, next } = req.body || {};
   if (!next || next.length < 4) return res.status(400).json({ error: 'New password too short' });
@@ -1055,6 +1131,22 @@ app.post('/api/users/:username/password', auth, (req, res) => {
   }
   identity.setLocalPassword(db, target.id, next);
   db.prepare('UPDATE users SET pass_hash = (SELECT password_hash FROM local_credentials WHERE user_id = ?) WHERE id = ?').run(target.id, target.id);
+  // PHA-2708: when an admin resets another user's password (no
+  // `current` provided, actor != target), record an audit event.
+  // This is the normal "non-recovery" admin reset path — different
+  // from the recovery path so the operator can tell them apart in
+  // the analytics feed. Owner resets get a dedicated
+  // `owner_password_reset_by_admin` kind so lockout-postmortems can
+  // surface them with one filter.
+  if (me.username !== target.username) {
+    const kind = target.is_admin ? 'owner_password_reset_by_admin' : 'password_reset_by_admin';
+    identity.auditOwnerRecovery(db, {
+      kind,
+      actor: me.username,
+      userId: target.id,
+      meta: { route: '/api/users/:username/password' },
+    });
+  }
   res.json({ ok: true });
 });
 
