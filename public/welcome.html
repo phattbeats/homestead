@@ -203,9 +203,10 @@ async function bootstrap() {
   content.appendChild(el('h1', { class: 'heading', text: 'Welcome to ' + wall.name }));
   content.appendChild(el('p', {
     class: 'subheading',
-    text: 'You\'re in. ' + (members.length
-      ? 'Here\'s who else is on this wall.'
-      : 'You\'re the first one here — post something to break the silence.'),
+    text: 'You\'re in. The Porch is where everyone in this wall sees what\'s new — ' +
+          (members.length
+            ? 'scroll to catch up on what the others have posted, then jump in with your own.'
+            : 'you\'re the first one here — post something to break the silence.'),
   }));
 
   const card = el('div', { class: 'wall-card' });

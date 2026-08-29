@@ -105,6 +105,11 @@ const EXCLUDE_FILES = new Set([
   // credentials shape. Same pattern as the sibling acceptance tests.
   'scripts/test-2704-identity-foundation.js',
   'scripts/test-2704-identity-api.js',
+  // PHA-2711 invite-signup tests: assert the public invite path uses
+  // 'password' as the auth_provider and 'household' as the seed wall
+  // slug. Same pattern as sibling acceptance tests — test fixtures,
+  // not render branches.
+  'scripts/test-2711-invite-signup.js',
 ]);
 
 const SCAN_EXTS = new Set([

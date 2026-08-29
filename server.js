@@ -852,6 +852,168 @@ app.get('/api/invites/:code/redemptions', auth, requireAdmin, (req, res) => {
   res.json({ redemptions: rows });
 });
 
+// ---- PHA-2711: same-day closed-beta vertical path ----
+//
+// Public (no-auth) invite-handshake endpoints so a fresh browser can
+// complete the entire path without an Authentik session or a
+// pre-provisioned account. The two routes mirror the two choices the
+// /invite/:code page offers:
+//
+//   * POST /api/public/invites/:code/signup — create a fresh standalone
+//     local account, atomically seed defaults + add wall membership +
+//     consume the invite. Single transaction; any failure rolls back.
+//
+//   * POST /api/public/invites/:code/signin — claim the invite on an
+//     existing local account. Verifies the local credential, then adds
+//     the wall membership and stamps the redemption. Preserves the
+//     invite target through sign-in (the user is signing in WITH the
+//     invite, not bouncing to /api/login first).
+//
+// The public peek (GET /api/public/invites/:code) is the third leg:
+// it's what the /invite/:code HTML page hits BEFORE the user has
+// decided between signup and signin, so the page can render the wall
+// card + the inviter + the admin note without an auth round-trip.
+//
+// All three paths use the existing users/pass_hash local-account
+// model (PHA-2711 implementation boundary). They do NOT depend on
+// PHA-2704's local_credentials table — but they DO write to it
+// because identity.createUser is the canonical path and it populates
+// both users and local_credentials in one tx, with users.pass_hash
+// shadow-synced. Future PHA-2705/2706 hardening is additive and
+// lossless against this data.
+//
+// Break-glass: POST /api/public/invites/reset consumes a one-shot
+// recovery token (minted via the reset CLI in scripts/ — see
+// scripts/reset-owner-password.js). This is the documented
+// "Brandon's owner account has a working local credential independent
+// of Authentik" path: if the env-seeded password is forgotten, the
+// admin mints a 1-hour token via host-side CLI, uses it once, and the
+// new password takes effect. The token is stored as a sha256 hash
+// with a 1-hour TTL and cleared on consume.
+
+// GET /api/public/invites/:code — peek an invite without auth, so the
+// /invite/:code page can render "what is Homestead / who invited you /
+// which wall" before any signup/signin choice is made. 410 on
+// expired/exhausted/revoked; 404 on unknown.
+app.get('/api/public/invites/:code', (req, res) => {
+  try {
+    const inv = invites.peek(db, req.params.code);
+    if (!inv) return res.status(404).json({ error: 'invite_not_found' });
+    res.json({
+      id: inv.id,
+      wall_slug: inv.wall_slug,
+      wall_name: inv.wall_name,
+      note: inv.note || null,
+      inviter: inv.created_by_username ? {
+        username: inv.created_by_username,
+        display: inv.created_by_display || inv.created_by_username,
+      } : null,
+      expires_at: inv.expires_at,
+      max_uses: inv.max_uses,
+      uses_count: inv.uses_count,
+      remaining: Math.max(0, inv.max_uses - inv.uses_count),
+    });
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.code, detail: err.message, invite: { id: err.invite && err.invite.id, wall_slug: err.invite && err.invite.wall_slug, wall_name: err.invite && err.invite.wall_name } });
+    console.error('[api/public/invites/:code GET]', err);
+    res.status(500).json({ error: 'peek_failed' });
+  }
+});
+
+// POST /api/public/invites/:code/signup — public signup path.
+// Body: { username, display, password }
+// On success: 201 with { user, wall_slug, wall_name, first_run, redirect, members }
+// On failure: 400 invalid_username/weak_password, 404 invite_not_found,
+//             409 username_taken, 410 invite_expired/invite_already_redeemed/invite_revoked.
+app.post('/api/public/invites/:code/signup', (req, res) => {
+  const { username, display, password } = req.body || {};
+  try {
+    const result = invites.signupViaInvite(db, req.params.code, { username, display, password });
+    // Start a session for the new user immediately — same shape the
+    // /api/login handler sets, so the SPA can land on /welcome.html
+    // without a second round-trip.
+    req.session.user = {
+      username: result.user.username,
+      display: result.user.display,
+      color: db.prepare('SELECT color FROM users WHERE id = ?').get(result.user.id)?.color || '#7c9a72',
+      isAdmin: false,
+      authProvider: 'password',
+    };
+    recordSessionStart(req, { id: result.user.id, username: result.user.username, display: result.user.display }, 'password');
+    res.status(201).json({
+      ok: true,
+      user: result.user,
+      wall_slug: result.wall_slug,
+      wall_name: result.wall_name,
+      first_run: result.first_run,
+      redirect: result.redirect,
+      members: wallMembers.getMembers(db, result.wall_slug).members,
+    });
+  } catch (err) {
+    if (err && err.status) {
+      const body = { error: err.code || 'invalid', detail: err.message };
+      if (err.field) body.field = err.field;
+      return res.status(err.status).json(body);
+    }
+    console.error('[api/public/invites/:code/signup]', err);
+    res.status(500).json({ error: 'signup_failed' });
+  }
+});
+
+// POST /api/public/invites/:code/signin — public signin-and-claim path.
+// Body: { username, password }
+// On success: 200 with same shape as signup.
+// On failure: 401 invalid_credentials (ambiguous for both unknown user
+//             and wrong password, same as /api/login), 404/410 for invite.
+app.post('/api/public/invites/:code/signin', (req, res) => {
+  const { username, password } = req.body || {};
+  try {
+    const result = invites.signinViaInvite(db, req.params.code, { username, password });
+    req.session.user = {
+      username: result.user.username,
+      display: result.user.display,
+      color: db.prepare('SELECT color FROM users WHERE id = ?').get(result.user.id)?.color || '#7c9a72',
+      isAdmin: false,
+      authProvider: 'password',
+    };
+    recordSessionStart(req, { id: result.user.id, username: result.user.username, display: result.user.display }, 'password');
+    res.json({
+      ok: true,
+      user: result.user,
+      wall_slug: result.wall_slug,
+      wall_name: result.wall_name,
+      first_run: result.first_run,
+      redirect: result.redirect,
+      members: wallMembers.getMembers(db, result.wall_slug).members,
+    });
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.code || 'invalid', detail: err.message });
+    console.error('[api/public/invites/:code/signin]', err);
+    res.status(500).json({ error: 'signin_failed' });
+  }
+});
+
+// POST /api/public/invites/reset — break-glass owner recovery.
+// Body: { token, new_password } — the token is minted by the
+// scripts/reset-owner-password.js CLI (or by an admin via the
+// lib/invites.createResetToken API). On success: 200 with { user_id, username }.
+// The endpoint is intentionally PUBLIC (no session, no auth) because
+// the whole point is to recover from a state where you can't log in.
+// The token itself is the credential; sha256-hashed + 1-hour TTL +
+// single-use, so a leak is short-lived and replay-resistant.
+app.post('/api/public/invites/reset', (req, res) => {
+  const { token, new_password } = req.body || {};
+  try {
+    const userId = invites.consumeResetToken(db, token, new_password);
+    const u = db.prepare('SELECT id, username, display, color FROM users WHERE id = ?').get(userId);
+    res.json({ ok: true, user_id: userId, username: u && u.username });
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.code || 'invalid', detail: err.message });
+    console.error('[api/public/invites/reset]', err);
+    res.status(500).json({ error: 'reset_failed' });
+  }
+});
+
 // POST /api/invites/:code/redeem — authed user redeems an invite.
 //   1. resolve caller (session OR header-trust)
 //   2. look up invite (peek semantics; 410 if expired/redeemed)

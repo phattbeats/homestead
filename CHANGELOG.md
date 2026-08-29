@@ -1,3 +1,42 @@
+## v0.5.1 (2026-08-29) — Same-day closed-beta invite vertical path (PHA-2711)
+
+The vertical path that the TODAY closed-beta tester needs: a fresh
+browser can complete the entire invite-handshake without an
+Authentik session or a pre-provisioned account.
+
+**Shipped:**
+- `GET /api/public/invites/:code` — public peek (no auth) returning
+  wall + inviter + admin note + remaining capacity.
+- `POST /api/public/invites/:code/signup` — create a fresh local
+  account, atomically seed defaults + add wall membership + consume
+  the invite. Single transaction; failure rolls back.
+- `POST /api/public/invites/:code/signin` — claim an invite on an
+  existing local account (ambiguous-401 to avoid username probing).
+- `POST /api/public/invites/reset` — break-glass owner-account reset,
+  consumes a sha256-hashed single-use 1-hour recovery token.
+- `scripts/reset-owner-password.js` — host-side CLI to mint a reset
+  token for a user (default username=brandon, --ttl 1h).
+- `public/invite.html` rebuilt: Homestead intro + inviter + wall
+  card, two clear choices (Create standalone / Sign in existing).
+- `public/welcome.html` copy updated to mention the Porch + the
+  obvious next action.
+- `scripts/test-2711-invite-signup.js` — 9 direct lib tests + 12 HTTP
+  route tests covering valid/invalid/expired/revoked/exhausted/
+  username-collision/concurrent-redemption/sign-out-sign-in/
+  reset-token round-trips.
+
+**Implementation boundary** (per PHA-2711): the path uses the
+existing `users`/`pass_hash` local-account model. It does NOT wait
+for PHA-2704 — but it does write to `local_credentials` because
+`identity.createUser` populates both tables in one tx, with
+`users.pass_hash` shadow-synced. Future PHA-2705/2706 hardening is
+additive and lossless against this data.
+
+**Identity migration:** users.id values are permanent. The new
+signup path creates a fresh users row + fresh local_credentials row
+atomically — no collision against any seeded CLAIM profile because
+the chosen username is validated for uniqueness before the tx.
+
 ## v0.5.0 (2026-08-29) — Identity foundation: stable users.id + local_credentials + identity_links (PHA-2704)
 
 **The P0 invite flow depends on this.** PHA-2703 (Invite-created
