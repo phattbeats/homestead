@@ -75,6 +75,16 @@ jobs:
       - name: PHA-2586 — Lists fresh-install journey smoke
         run: node scripts/smoke-2586-lists-ui.js
 
+      # PHA-2707: post-invite-redemption welcome screen. Mints an
+      # invite, signs up a fresh account through it, and asserts the
+      # welcome screen actually explains Homestead + the Porch + the
+      # wall/members + what the invite granted + a contextual first
+      # action + (local-account) the Authentik-later note — plus the
+      # dismiss (Escape), skip-for-returning-user, and explicit
+      # ?revisit=1 reopen paths. Captures three 390px screenshots.
+      - name: PHA-2707 — invite-redemption welcome screen smoke
+        run: node scripts/smoke-2707-invite-welcome.js
+
       - name: Upload verify-out screenshots
         if: always()
         uses: actions/upload-artifact@v4

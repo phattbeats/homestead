@@ -1,3 +1,52 @@
+## v0.5.3 (2026-08-29) — invite-redemption welcome screen (PHA-2707)
+
+`public/welcome.html` (the page `/welcome.html?wall=<slug>` an invite
+redemption redirects to) only covered "which wall + who's in it" —
+the PHA-2703 parent's welcome requirements went further. The screen
+now also covers:
+
+- **What Homestead is** — a one-line explainer above the fold.
+- **The Porch is home** — a short section naming the Porch as the
+  default feed, not just the wall card that follows it.
+- **What the invite granted** — an access-card explaining membership
+  in the specific wall (view/react/comment/post; nothing outside the
+  wall is shared).
+- **One contextual first action** — the CTA copy itself states the
+  action ("Post the first thing on the Porch →" for an empty wall,
+  "Say hi on the Porch →" otherwise) instead of a generic "Open the
+  feed →".
+- **Authentik-later note** — shown only for `authProvider: 'password'`
+  sessions (invite-signup accounts): explains the account can add
+  Authentik SSO later via Linked Accounts (PHA-2706, in flight)
+  without losing the standalone account.
+
+**Dismissible + accessible:**
+- A corner `×` (skip) button and the Escape key both stamp
+  `first-run-complete` and land on the Porch — same destination as
+  the primary CTA, just without reading the rest of the page.
+- The heading receives focus on render (screen-reader route-change
+  parity); the close button carries an `aria-label`; decorative
+  avatar stacks are `aria-hidden`; the accessible member list uses
+  `role="list"`/`"listitem"`.
+
+**Skipped for returning users, unless explicitly reopened:**
+`first_run: false` still redirects straight to the Porch (unchanged
+behavior), UNLESS the URL carries `?revisit=1` — an explicit-reopen
+escape hatch for a future "show me that again" entry point (e.g. a
+Linked Accounts settings page).
+
+No server/schema changes — the screen composes existing `/api/me`,
+`/api/walls/:slug/members`, and `/api/me/first-run-complete` data;
+the access-granted copy is derived client-side from wall visibility
+(every invite still grants the `member` role, per `lib/invites.js`).
+
+**Tests:**
+- `scripts/smoke-2707-invite-welcome.js` — Playwright end-to-end smoke
+  (mint invite → signup → welcome screen content assertions → Escape
+  dismiss → returning-user skip → `?revisit=1` reopen); wired into
+  `.github/workflows/test.yml` as a new CI step so the mobile
+  (390px) screenshot evidence is captured on every PR/push.
+
 ## v0.5.2 (2026-08-29) — invite page inviter-name render fix (PHA-2711)
 
 Found during the production fresh-browser verification pass for
