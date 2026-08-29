@@ -56,7 +56,7 @@ const STRICT_KEY_RE = new RegExp(`(['"\`])(wall|lists|calendar|chores|apps|agent
 const EXCLUDE_DIRS = new Set([
   'node_modules', '.git', 'data', 'tmp', 'coverage',
   'homestead-data', 'homestead-cache', 'dist', 'build',
-  '.cache', '.next', 'worktrees', 'verify-out',
+  '.cache', '.next', 'worktrees',
 ]);
 
 const EXCLUDE_FILES = new Set([
@@ -100,16 +100,13 @@ const EXCLUDE_FILES = new Set([
   // the layout API never advertises a 404 HTML route. Same pattern as the
   // sibling acceptance tests above — literals are test config, not render code.
   'scripts/test-2587-layout-route-contract.js',
-  // PHA-2704 identity foundation tests: assert the new identity_links
-  // schema (provider/issuer/provider_subject literals) and the local
-  // credentials shape. Same pattern as the sibling acceptance tests.
-  'scripts/test-2704-identity-foundation.js',
-  'scripts/test-2704-identity-api.js',
-  // PHA-2711 invite-signup tests: assert the public invite path uses
-  // 'password' as the auth_provider and 'household' as the seed wall
-  // slug. Same pattern as sibling acceptance tests — test fixtures,
-  // not render branches.
-  'scripts/test-2711-invite-signup.js',
+  // PHA-2644 media-context acceptance test: drives the new
+  // /api/media/:id/context route through image + video comprehension
+  // packages. Same category as the sibling acceptance tests above —
+  // literal keys (none currently, but the test asserts on
+  // `/api/media/...` paths via string match) are test config, not
+  // render code.
+  'scripts/test-2644-media-context.js',
 ]);
 
 const SCAN_EXTS = new Set([
