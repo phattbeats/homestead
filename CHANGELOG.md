@@ -1,3 +1,65 @@
+## v0.4.5 (2026-08-29) — Media-comprehension package (PHA-2644)
+
+**The Porch needs agents that can see, not just text-match.** A
+participation contract that only reads the caption misses the
+substance of a friend's post — a meme's joke, a video's
+scene-cut, the line someone actually said. PHA-2644 lands the
+comprehension package that the Porch trigger loop (PHA-2646) and
+identity UI (PHA-2647) will build on:
+
+- **`lib/media.js`** — new `getMediaContext(id)` builds the
+  comprehension package per media id: `{kind, file, thumb,
+  caption}` for images; `{kind, frames[3..12], firstFrame,
+  lastFrame, audioTranscript, audioTranscriptStatus, caption}`
+  for videos. Frames are ffmpeg scene-change keyframes
+  (`select=gt(scene,0.4)`, capped at 12, first + last always
+  included), resized to 480px wide and served via
+  `/api/media-frames/:mediaId/:filename`. Audio is whisper-class
+  ASR via the OpenAI /v1/audio/transcriptions endpoint, using a
+  request-scoped BYOK key (`X-Whisper-Key` header or `?byok=`
+  query) by default with a server-staged `OPENAI_API_KEY`
+  fallback; without a key, the package surfaces
+  `audioTranscript: null` and `audioTranscriptStatus: 'no_key'`
+  so the caller can decide whether to retry. A 24h
+  `media_context_cache` table keyed on `(media_id, source_mtime)`
+  means extraction runs once per re-upload; ON DELETE CASCADE
+  from `media_uploads` keeps the cache honest through the
+  existing soft-delete + sweep path. A new `caption` column on
+  `media_uploads` (added via `ALTER TABLE` so v0.4.x DBs upgrade
+  in place) is set on upload via a multipart text field and
+  surfaced verbatim by both `publicView` and the comprehension
+  package.
+- **`server.js`** — `GET /api/media/:id/context` mounted next to
+  the existing PHA-2149 routes (auth-gated). `GET
+  /api/media-frames/:mediaId/:filename` serves extracted
+  keyframes; both `mediaId` and `filename` are validated against
+  `..` / `/` / `\` traversal before the path join. The upload
+  route now accepts the optional `caption` text field.
+- **`Dockerfile`** — `ffmpeg` added to the deps stage's
+  apt-get line. Without it, the comprehension package 500s
+  on every video request. Image without ffmpeg would
+  silently break `GET /api/media/:id/context` for video.
+- **`scripts/test-2644-media-context.js` (new, ~50
+  assertions).** Image comprehension + video comprehension +
+  cache-hit on second call (verified via mtime) + bust +
+  rebuild + silent-video cheap-skip + frame-serve
+  (verifies JPG magic bytes) + soft-delete cascade + caption
+  migration (`ALTER TABLE` against a v0.4.4-shape legacy DB
+  via a child Node process so the module-level `_db` doesn't
+  rebind mid-test). Wired into `npm test` adjacent to
+  `test-media.js` (PHA-2209 Amendment-3 ordering) and into
+  `test:smoke`.
+- **`scripts/test-registry-no-hardcoded-keys.js`** — allow-list
+  entry for the new test file (same category as the
+  PHA-2209 / PHA-2587 sibling acceptance tests).
+- **`package.json`** — version bump `0.4.4 → 0.4.5`.
+
+**Out of scope (deliberately):** entity extraction from the
+comprehension package (separate concern; goes via the
+entity-graph service), search indexing, and the agent
+participation trigger loop itself (covered by the PHA-2646
+sibling).
+
 ## v0.4.4 (2026-08-28) — Shared lists primitive lands + repo consolidation (PHA-2586 + PHA-2640)
 
 **Lists is no longer a dead-end.** Every seeded user had Lists

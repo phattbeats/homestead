@@ -100,6 +100,13 @@ const EXCLUDE_FILES = new Set([
   // the layout API never advertises a 404 HTML route. Same pattern as the
   // sibling acceptance tests above — literals are test config, not render code.
   'scripts/test-2587-layout-route-contract.js',
+  // PHA-2644 media-context acceptance test: drives the new
+  // /api/media/:id/context route through image + video comprehension
+  // packages. Same category as the sibling acceptance tests above —
+  // literal keys (none currently, but the test asserts on
+  // `/api/media/...` paths via string match) are test config, not
+  // render code.
+  'scripts/test-2644-media-context.js',
 ]);
 
 const SCAN_EXTS = new Set([
