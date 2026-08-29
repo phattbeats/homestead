@@ -110,6 +110,19 @@ const EXCLUDE_FILES = new Set([
   // slug. Same pattern as sibling acceptance tests — test fixtures,
   // not render branches.
   'scripts/test-2711-invite-signup.js',
+  // PHA-2708 owner-recovery tests: assert the recovery primitive
+  // strings ("owner_recovery_minted"/"owner_recovery_consumed"/
+  // etc.) and the audit kind enum ("owner_recovery"). Same
+  // pattern as the sibling acceptance tests — literals are test
+  // config, not render code.
+  'scripts/test-2708-owner-recovery.js',
+  // PHA-2706 OIDC link tests: assert the oidc_link_states schema
+  // (provider/issuer/handle literals) and the OIDC link lifecycle
+  // (PKCE code_verifier, state, nonce, issuer subject). Same pattern
+  // as the sibling acceptance tests — literals are test config, not
+  // render code.
+  'scripts/test-2706-oidc-link.js',
+  'scripts/smoke-2706-oidc-link.js',
 ]);
 
 const SCAN_EXTS = new Set([
