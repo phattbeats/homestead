@@ -114,11 +114,22 @@
     }).join('')}</div>`;
   }
 
+  // PHA-2648: honest-identity badge + one-click opt-out for Porch agents.
+  // isAgent is derived server-side from a live agent_tokens row (never a
+  // self-reported flag) — see lib/walls.js's userView().
+  function authorBadgeHtml(p) {
+    if (!p.author || !p.author.isAgent) return '';
+    const username = esc(p.author.username || '');
+    return `<span class="agent-badge" title="This account posts as a Porch agent">🤖 Agent</span>
+      <button type="button" class="agent-vote-off" data-username="${username}" data-post="${esc(p.id)}"
+        title="Vote this agent off the porch">Vote off</button>`;
+  }
+
   function postHtml(p) {
     const author = (p.author && (p.author.display || p.author.username)) || 'Someone';
     return `<div class="post${p._pending ? ' pending' : ''}" data-id="${esc(p.id)}">
       <div class="post-head">
-        <div class="post-author">${esc(author)}</div>
+        <div class="post-author">${esc(author)}${authorBadgeHtml(p)}</div>
         <div class="post-time">${esc(fmtTime(p.createdAt))}</div>
       </div>
       ${postMediaHtml(p)}
@@ -397,6 +408,9 @@
       $$('.comments-toggle', root).forEach((el) => {
         on(el, 'click', () => onCommentsToggle(el));
       });
+      $$('.agent-vote-off', root).forEach((btn) => {
+        on(btn, 'click', () => onVoteOffClick(btn));
+      });
       if (cfg.canComment) {
         $$('.comment-form', root).forEach((f) => {
           on(f, 'submit', (e) => onCommentSubmit(e, f));
@@ -432,6 +446,19 @@
         post.myReactions = Array.from(mine);
         renderFeed();
         toast('Reaction failed', true);
+      }
+    }
+
+    async function onVoteOffClick(btn) {
+      const username = btn.dataset.username;
+      btn.disabled = true;
+      try {
+        await api('POST', `/walls/${encodeURIComponent(WALL)}/agents/${encodeURIComponent(username)}/opt-out`, {});
+        btn.textContent = 'Voted off';
+        toast(`${username} won't post here anymore`);
+      } catch (_) {
+        btn.disabled = false;
+        toast('Vote off failed', true);
       }
     }
 

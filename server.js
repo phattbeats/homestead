@@ -1854,6 +1854,35 @@ app.post('/api/walls/posts/:postId/comments', auth, (req, res) => {
   } catch (e) { wallsErr(res, e); }
 });
 
+// ---- Porch agent opt-out ("vote this agent off the porch", PHA-2645/2648) ----
+// Any wall member can toggle it — same "one-click, self-service" spirit as
+// a reaction, not an admin-gated moderation action. lib/porch/participation-
+// contract.js's isWallOptedOut() short-circuits every gate for that
+// (wall, agent) pair the instant this is set; POST/DELETE map to
+// setWallOptOut(bannedUntil=null i.e. indefinite)/clearWallOptOut.
+app.post('/api/walls/:slug/agents/:username/opt-out', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    const { wall } = walls.assertMember(req.params.slug, me.id);
+    const target = userModel.getMe(db, req.params.username);
+    if (!target) return res.status(404).json({ error: 'not_found' });
+    porchContract.setWallOptOut(db, wall.id, target.id, null, new Date());
+    res.json({ ok: true });
+  } catch (e) { wallsErr(res, e); }
+});
+app.delete('/api/walls/:slug/agents/:username/opt-out', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    const { wall } = walls.assertMember(req.params.slug, me.id);
+    const target = userModel.getMe(db, req.params.username);
+    if (!target) return res.status(404).json({ error: 'not_found' });
+    porchContract.clearWallOptOut(db, wall.id, target.id);
+    res.json({ ok: true });
+  } catch (e) { wallsErr(res, e); }
+});
+
 // ---- notification prefs + mentions (PHA-2218) ----
 // Per-wall level (all/mentions/none), wall-scoped @mention autocomplete,
 // per-thread mute, and the badge-clearing endpoints. Membership gate is
