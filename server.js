@@ -29,6 +29,7 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 const webpush = require('web-push');
+const crypto = require('crypto');
 
 const userModel = require('./lib/user-model');
 const identity = require('./lib/identity');
@@ -59,6 +60,7 @@ const invites = require('./lib/invites');
 const wallMembers = require('./lib/wall-members');
 const porchSweep = require('./lib/porch/sweep');
 const porchContract = require('./lib/porch/participation-contract');
+const oidcLink = require('./lib/oidc-link');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -81,6 +83,10 @@ appApiLog.migrate(db);
 // users(id), so it runs after userModel.migrate; no dependency on
 // installed_apps (consent tokens exist before an app is installed).
 appInstall.migrate(db);
+// PHA-2706: self-service OIDC identity-linking state table. FK to
+// users(id), so it runs after userModel.migrate (same boot-migration
+// pattern as the tables above).
+oidcLink.migrate(db);
 // Connector Forge's immutable specs, encrypted per-user secrets, installs,
 // and surface-cache tables. This must boot before the wizard routes below.
 connectorInstall.migrate(db);
@@ -1205,6 +1211,399 @@ app.delete('/api/me/identities', auth, (req, res) => {
     if (!Number.isInteger(targetId)) return res.status(400).json({ error: 'invalid user_id' });
   }
   const result = identity.unlinkIdentity(db, targetId, provider, issuer, provider_subject);
+  if (result.blocked === 'would_lock_out_owner') {
+    return res.status(409).json({ error: 'would_lock_out_owner', message: 'Refusing to unlink the last login path for the household owner. Use the owner recovery CLI to rotate their password; never delete the owner\'s break-glass credential via this API.' });
+  }
+  if (result.blocked === 'no_login_path') {
+    return res.status(409).json({ error: 'no_login_path', message: 'Refusing to unlink the last identity for a user with no local credential — would orphan the account.' });
+  }
+  if (!result.removed) return res.status(404).json({ error: 'identity_not_found' });
+  res.json({ ok: true });
+});
+
+// ---- owner recovery (PHA-2708, ported forward as PHA-2719) ----
+//
+// Homestead's owner-recovery surface has two halves:
+//
+//   * `GET /api/admin/owner/login-paths` — read-only inventory of
+//     the owner's viable login methods. Used by ops + tests to
+//     confirm the owner has at least one break-glass path, and
+//     that no recent change accidentally removed it. Never returns
+//     hashes, tokens, or plaintext.
+//
+//   * `POST /api/admin/owner/recover` — consume a recovery token
+//     minted by `scripts/owner-recovery.js`. The plaintext token is
+//     sent in the request body; the server validates via sha256
+//     against the stored hash, rotates the owner's password via
+//     `identity.setLocalPassword`, and clears the token row. Replay
+//     is impossible — the hash is wiped on consume.
+//
+// `login-paths` is a read-only inventory and stays gated behind an
+// authenticated admin session — it's an ops/test convenience, not
+// part of the break-glass path itself.
+//
+// `recover` is DELIBERATELY UNAUTHENTICATED. Break-glass means the
+// owner has no working credential (forgotten LAN password) AND
+// Authentik is unreachable (no x-authentik-* headers, no way to
+// establish a session at all) — gating this route behind `auth` +
+// `requireAdmin` would make it unreachable in exactly the scenario
+// PHA-2708 exists to fix. The one-shot, 256-bit, TTL-bound,
+// timing-safe-compared recovery token minted by
+// `scripts/owner-recovery.js` (host-side, out of band) IS the
+// authentication for this route, the same way a password IS the
+// authentication for `/api/login`. The operator's flow is
+//   1. Run `scripts/owner-recovery.js` on the host → prints
+//      token + curl example. The token is host-bound at this point.
+//   2. POST the token + new password to `/api/admin/owner/recover`
+//      from any client — no prior login required. The audit log
+//      gets `owner_recovery_consumed`.
+//
+// This mechanism is intentionally separate from PHA-2711's
+// general-purpose `POST /api/public/invites/reset` (any user, via
+// `lib/invites.js` createResetToken/consumeResetToken, stored in
+// `local_credentials.recovery_token_hash`). Owner recovery is
+// owner-only, stores its token in the dedicated
+// `owner_recovery_token_hash` / `owner_recovery_token_expires_at`
+// columns, and carries the fuller audit trail + lockout-guard
+// integration described above.
+app.get('/api/admin/owner/login-paths', auth, requireAdmin, (req, res) => {
+  const ownerId = identity.findOwnerUserId(db);
+  if (ownerId == null) return res.status(404).json({ error: 'no_owner' });
+  const owner = db.prepare('SELECT id, username, display, is_admin FROM users WHERE id = ?').get(ownerId);
+  const links = identity.listIdentityLinks(db, ownerId);
+  const local = db.prepare('SELECT owner_recovery_token_expires_at AS exp FROM local_credentials WHERE user_id = ?').get(ownerId);
+  const hasLocal = identity.hasLocalCredential(db, ownerId);
+  const hasRecoveryToken = !!(local && local.exp && identity.parseExpiresAt(local.exp) > Date.now());
+  res.json({
+    owner: { id: owner.id, username: owner.username, display: owner.display, isAdmin: !!owner.is_admin },
+    login_paths: {
+      local_credential: hasLocal,
+      identity_links: links.length,
+      recovery_token_active: hasRecoveryToken,
+      recovery_token_expires_at: hasRecoveryToken ? local.exp : null,
+    },
+    identity_links: links.map(l => ({ provider: l.provider, issuer: l.issuer, linked_at: l.linked_at, last_used_at: l.last_used_at })),
+  });
+});
+
+app.post('/api/admin/owner/recover', (req, res) => {
+  const { token, new_password } = req.body || {};
+  if (!token || typeof token !== 'string' || !new_password || typeof new_password !== 'string') {
+    return res.status(400).json({ error: 'token and new_password required' });
+  }
+  if (new_password.length < 8) {
+    return res.status(400).json({ error: 'new_password too short', message: 'Owner recovery requires a new password of at least 8 characters.' });
+  }
+  // No prior session is required or expected — see the comment above
+  // this route. `actor` reflects an existing session if one happens
+  // to be present (e.g. an admin rotating the owner's password on
+  // their behalf), but the recovery token is what actually authorizes
+  // this request.
+  const actor = (req.session && req.session.user && req.session.user.username) || 'unauthenticated-recovery';
+  const result = identity.consumeOwnerRecoveryToken(db, token, new_password);
+  if (!result.ok) {
+    identity.auditOwnerRecovery(db, {
+      kind: 'owner_recovery_rejected',
+      actor,
+      userId: null,
+      meta: { route: '/api/admin/owner/recover', code: result.code },
+    });
+    return res.status(401).json({ error: result.code });
+  }
+  identity.auditOwnerRecovery(db, {
+    kind: 'owner_recovery_consumed',
+    actor,
+    userId: result.userId,
+    meta: { route: '/api/admin/owner/recover' },
+  });
+  res.json({ ok: true, username: result.username });
+});
+
+// ---- identity linking: self-service OIDC flow (PHA-2706) ----
+// "Link Authentik later" — a Homestead user who already has a local
+// password can add an OIDC identity (Authentik in production) as a
+// SECOND way to sign in. The flow is intentionally explicit:
+//   1. POST /api/me/identities/link/start  { password }   — verify
+//      local password, mint a one-time handle + PKCE + state + nonce.
+//   2. Browser is redirected to the IdP's /authorize. The IdP
+//      authenticates the user and redirects back to /callback with
+//      ?code=...&state=...
+//   3. GET /api/me/identities/link/callback exchanges the code for
+//      an id_token, validates signature/iss/aud/nonce/exp, and
+//      returns a confirmation payload naming both identities.
+//   4. POST /api/me/identities/link/confirm  { handle }       —
+//      user has read the confirmation and clicked "Link." Writes
+//      identity_links row.
+//   5. POST /api/me/identities/link/cancel  { handle }       —
+//      user bailed at any point before step 4.
+//
+// Every step is gated on `auth` (existing Homestead session) AND on
+// the requesting user owning the handle. The local password is
+// re-verified at step 1 only — the callback/confirm steps inherit
+// trust from the session + handle binding.
+//
+// All routes use 401/403/409 consistently with the existing
+// /api/me/identities surface.
+
+app.post('/api/me/identities/link/start', auth, (req, res) => {
+  const me = db.prepare('SELECT id, username, display FROM users WHERE username = ?').get(req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { password } = req.body || {};
+  if (!password || typeof password !== 'string') {
+    return res.status(400).json({ error: 'password_required', message: 'Local re-authentication is required to start an identity link.' });
+  }
+  // Local re-auth: verify the plaintext password against the
+  // local_credentials row. This guards against a session-hijacker who
+  // could otherwise permanently attach an OIDC identity to a stolen
+  // session.
+  if (!identity.hasLocalCredential(db, me.id)) {
+    return res.status(400).json({
+      error: 'no_local_credential',
+      message: 'This account has no local password — cannot start a self-service identity link. Contact an admin.',
+    });
+  }
+  if (!identity.verifyLocalPassword(db, me.id, password)) {
+    return res.status(401).json({ error: 'invalid_password', message: 'Local re-authentication failed.' });
+  }
+  try {
+    const pending = oidcLink.createPending(db, me.id);
+    res.json({
+      ok: true,
+      handle: pending.handle,
+      authorize_url: pending.authorizeUrl,
+      expires_at: pending.expiresAt,
+      provider: pending.provider,
+      issuer: pending.issuer,
+    });
+  } catch (e) {
+    if (e.code === 'oidc_not_configured') {
+      return res.status(503).json({ error: 'oidc_not_configured', message: 'Identity linking is not configured on this server.' });
+    }
+    throw e;
+  }
+});
+
+// GET /api/me/identities/link/callback?handle=...&code=...&state=...
+// Called by the browser after the IdP redirects back. Exchanges the
+// code for tokens, validates the ID token, then redirects the
+// browser to /identities-link.html (which carries the handle in
+// sessionStorage) so the SPA can render the confirmation card.
+// The actual token exchange + ID-token validation lives here; the
+// SPA does NOT do crypto.
+//
+// The endpoint accepts both:
+//   * Browser navigation (IdP redirect — 302 back to /identities-link.html
+//     with the handle + code + state carried in the query string so
+//     the SPA can re-fetch the JSON payload via the dedicated
+//     `/api/me/identities/link/callback/json` route).
+//   * Programmatic JSON via `Accept: application/json` (test scripts
+//     and previews — returns the payload directly).
+async function runLinkCallback(req, res, { json }) {
+  const me = db.prepare('SELECT id, username, display FROM users WHERE username = ?').get(req.session.user.username);
+  if (!me) {
+    if (json) return res.status(401).json({ error: 'unknown_user' });
+    return res.redirect('/identities-link.html?error=unknown_user');
+  }
+  const { handle, code, state, error: oauthError } = req.query || {};
+  if (oauthError) {
+    if (handle) oidcLink.cancelPending(db, handle, me.id);
+    if (json) return res.status(400).json({ error: 'oidc_denied', message: `Identity provider returned: ${oauthError}` });
+    return res.redirect('/identities-link.html?error=oidc_denied&detail=' + encodeURIComponent(String(oauthError)));
+  }
+  if (!handle || !code || !state) {
+    if (json) return res.status(400).json({ error: 'missing_params', message: 'handle, code, state are required.' });
+    return res.redirect('/identities-link.html?error=missing_params');
+  }
+  const pending = oidcLink.findPending(db, handle);
+  if (!pending || pending._stale) {
+    if (json) return res.status(410).json({ error: 'handle_invalid_or_expired', message: 'Link session expired — restart the flow.' });
+    return res.redirect('/identities-link.html?error=handle_expired');
+  }
+  if (pending.user_id !== me.id) {
+    if (json) return res.status(403).json({ error: 'handle_owner_mismatch' });
+    return res.redirect('/identities-link.html?error=handle_owner_mismatch');
+  }
+  if (pending.state !== state) {
+    if (json) return res.status(400).json({ error: 'state_mismatch', message: 'OIDC state mismatch — possible tampering.' });
+    return res.redirect('/identities-link.html?error=state_mismatch');
+  }
+  const cfg = oidcLink.loadConfig();
+  const tokenUrl = process.env.OIDC_TOKEN_URL || cfg.issuer.replace(/\/+$/, '') + '/application/o/token/';
+  let tokens;
+  try {
+    tokens = await oidcLink.exchangeCodeForTokens({
+      tokenUrl,
+      clientId: pending.client_id,
+      clientSecret: cfg.clientSecret,
+      redirectUri: pending.redirect_uri,
+      code,
+      codeVerifier: pending.code_verifier,
+    });
+  } catch (e) {
+    if (json) return res.status(502).json({ error: e.code || 'token_exchange_failed', message: e.message });
+    return res.redirect('/identities-link.html?error=token_exchange_failed');
+  }
+  if (!tokens.id_token) {
+    if (json) return res.status(502).json({ error: 'no_id_token', message: 'Token endpoint did not return an id_token.' });
+    return res.redirect('/identities-link.html?error=no_id_token');
+  }
+  let publicKeyPem = process.env.OIDC_ID_TOKEN_PEM || null;
+  if (!publicKeyPem) {
+    try {
+      const jwksUrl = cfg.issuer.replace(/\/+$/, '') + '/application/o/jwks/';
+      const jr = await fetch(jwksUrl);
+      if (!jr.ok) throw new Error(`jwks ${jr.status}`);
+      const jwks = await jr.json();
+      const headerKid = JSON.parse(Buffer.from(tokens.id_token.split('.')[0], 'base64url').toString('utf8')).kid;
+      const jwk = jwks.keys.find(k => k.kid === headerKid);
+      if (!jwk) throw new Error('kid not found in JWKS');
+      publicKeyPem = crypto.createPublicKey({ key: jwk, format: 'jwk' }).export({ type: 'spki', format: 'pem' });
+    } catch (e) {
+      if (json) return res.status(502).json({ error: 'jwks_unavailable', message: e.message });
+      return res.redirect('/identities-link.html?error=jwks_unavailable');
+    }
+  }
+  let claims;
+  try {
+    claims = oidcLink.verifyIdToken(tokens.id_token, {
+      expectedIssuer: pending.issuer,
+      expectedAudience: pending.client_id,
+      expectedNonce: pending.nonce,
+      publicKeyPem,
+    });
+  } catch (e) {
+    if (json) return res.status(400).json({ error: e.code || 'id_token_invalid', message: e.message });
+    return res.redirect('/identities-link.html?error=' + encodeURIComponent(e.code || 'id_token_invalid'));
+  }
+  // Stamp the validated claims onto the pending row. /preview and
+  // /confirm read these values; the SPA never sees the raw id_token.
+  oidcLink.recordValidated(db, handle, claims);
+  if (json) {
+    const payload = oidcLink.formatLinkPayload(me, claims, pending.issuer);
+    return res.json({
+      ok: true,
+      handle: pending.handle,
+      expires_at: pending.expires_at,
+      ...payload,
+    });
+  }
+  // Browser redirect — the SPA lands on /identities-link.html?handle=...
+  // and fetches /api/me/identities/link/preview?handle=... to render
+  // the confirmation card.
+  const target = new URL('/identities-link.html', `${req.protocol}://${req.get('host')}`);
+  target.searchParams.set('handle', pending.handle);
+  res.redirect(target.toString());
+}
+
+app.get('/api/me/identities/link/callback', auth, (req, res) => {
+  const accept = String(req.get('accept') || '');
+  const json = accept.includes('application/json');
+  return runLinkCallback(req, res, { json });
+});
+
+// GET /api/me/identities/link/preview?handle=...
+// Returns the validated OIDC identity + the Homestead identity for
+// the confirmation card. Read-only; never writes. The /confirm
+// endpoint enforces the write — /preview just renders the choice.
+app.get('/api/me/identities/link/preview', auth, (req, res) => {
+  const me = db.prepare('SELECT id, username, display FROM users WHERE username = ?').get(req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const handle = String(req.query.handle || '');
+  if (!handle) return res.status(400).json({ error: 'handle_required' });
+  const v = oidcLink.findValidated(db, handle);
+  if (!v) return res.status(410).json({ error: 'handle_invalid_or_expired' });
+  if (v.user_id !== me.id) return res.status(403).json({ error: 'handle_owner_mismatch' });
+  if (v._stale) return res.status(410).json({ error: 'handle_invalid_or_expired' });
+  if (!v.validated_subject) return res.status(400).json({ error: 'not_validated', message: 'Callback has not completed for this handle yet.' });
+  res.json({
+    ok: true,
+    handle,
+    expires_at: v.expires_at,
+    homestead: { user_id: me.id, username: me.username, display: me.display },
+    oidc: {
+      provider: v.provider,
+      issuer: v.issuer,
+      subject: v.validated_subject,
+      email: v.validated_email,
+      email_verified: !!v.validated_email_verified,
+      display: v.validated_display,
+    },
+  });
+});
+
+// POST /api/me/identities/link/confirm { handle }
+// User has reviewed the confirmation page and clicked "Link." Now we:
+//   * re-look up the handle and check it's still pending + validated + owned by us
+//   * consume the handle (one-shot)
+//   * call identity.linkIdentity with the validated subject — never
+//     a client-supplied subject (the subject was stamped onto the
+//     pending row by /callback after IdP verification, so the SPA
+//     cannot influence what gets written).
+//   * map identity_collision to 409 + a clear "contact admin" hint.
+app.post('/api/me/identities/link/confirm', auth, (req, res) => {
+  const me = db.prepare('SELECT id, username, display FROM users WHERE username = ?').get(req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { handle } = req.body || {};
+  if (!handle) return res.status(400).json({ error: 'handle_required' });
+  const v = oidcLink.findValidated(db, handle);
+  if (!v) return res.status(410).json({ error: 'handle_invalid_or_expired' });
+  if (v.user_id !== me.id) return res.status(403).json({ error: 'handle_owner_mismatch' });
+  if (v._stale) return res.status(410).json({ error: 'handle_invalid_or_expired' });
+  if (!v.validated_subject) return res.status(400).json({ error: 'not_validated', message: 'Callback has not completed for this handle yet.' });
+  // Atomically consume the handle so a replay of this /confirm call
+  // returns a 410 instead of writing a duplicate row.
+  const consumed = oidcLink.consumePending(db, handle);
+  if (!consumed) {
+    return res.status(410).json({ error: 'handle_invalid_or_expired', message: 'Link session was already used or expired.' });
+  }
+  try {
+    const result = identity.linkIdentity(db, me.id, v.provider, v.issuer, v.validated_subject);
+    res.status(result.alreadyLinked ? 200 : 201).json({
+      ok: true,
+      alreadyLinked: !!result.alreadyLinked,
+      link_id: result.id,
+      provider: v.provider,
+      issuer: v.issuer,
+      subject: v.validated_subject,
+    });
+  } catch (e) {
+    if (e.code === 'identity_collision') {
+      return res.status(409).json({
+        error: 'identity_collision',
+        message: 'This OIDC identity is already linked to a different Homestead user. Contact an admin for recovery.',
+        conflictingUserId: e.conflictingUserId,
+      });
+    }
+    // Re-throw — anything else is a real bug.
+    throw e;
+  }
+});
+
+app.post('/api/me/identities/link/cancel', auth, (req, res) => {
+  const me = db.prepare('SELECT id FROM users WHERE username = ?').get(req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { handle } = req.body || {};
+  if (!handle) return res.status(400).json({ error: 'handle_required' });
+  const changed = oidcLink.cancelPending(db, handle, me.id);
+  res.json({ ok: true, cancelled: changed > 0 });
+});
+
+// POST /api/me/identities/:linkId/unlink — self-service unlink by
+// row id. Used by the identities-list page where each row carries
+// its identity_links.id. Refuses the last viable login path via the
+// existing identity.unlinkIdentity() guard (no_login_path → 409, or
+// would_lock_out_owner → 409 for the household owner — PHA-2708).
+app.post('/api/me/identities/:linkId/unlink', auth, (req, res) => {
+  const me = db.prepare('SELECT id FROM users WHERE username = ?').get(req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const linkId = Number(req.params.linkId);
+  if (!Number.isInteger(linkId)) return res.status(400).json({ error: 'invalid_link_id' });
+  const row = db.prepare('SELECT provider, issuer, provider_subject FROM identity_links WHERE id = ? AND user_id = ?').get(linkId, me.id);
+  if (!row) return res.status(404).json({ error: 'identity_not_found' });
+  const result = identity.unlinkIdentity(db, me.id, row.provider, row.issuer, row.provider_subject);
+  if (result.blocked === 'would_lock_out_owner') {
+    return res.status(409).json({ error: 'would_lock_out_owner', message: 'Refusing to unlink the last login path for the household owner. Use the owner recovery CLI to rotate their password; never delete the owner\'s break-glass credential via this API.' });
+  }
   if (result.blocked === 'no_login_path') {
     return res.status(409).json({ error: 'no_login_path', message: 'Refusing to unlink the last identity for a user with no local credential — would orphan the account.' });
   }
@@ -1214,7 +1613,7 @@ app.delete('/api/me/identities', auth, (req, res) => {
 
 app.post('/api/users/:username/password', auth, (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
-  const target = db.prepare('SELECT id, username FROM users WHERE username = ?').get(req.params.username);
+  const target = db.prepare('SELECT id, username, is_admin FROM users WHERE username = ?').get(req.params.username);
   if (!target) return res.status(404).json({ error: 'not found' });
   const { current, next } = req.body || {};
   if (!next || next.length < 4) return res.status(400).json({ error: 'New password too short' });
@@ -1227,6 +1626,22 @@ app.post('/api/users/:username/password', auth, (req, res) => {
   }
   identity.setLocalPassword(db, target.id, next);
   db.prepare('UPDATE users SET pass_hash = (SELECT password_hash FROM local_credentials WHERE user_id = ?) WHERE id = ?').run(target.id, target.id);
+  // PHA-2708 (ported forward as PHA-2719): when an admin resets
+  // another user's password (no `current` provided, actor != target),
+  // record an audit event. This is the normal "non-recovery" admin
+  // reset path — different from the owner-recovery break-glass path
+  // so the operator can tell them apart in the analytics feed. Owner
+  // resets get a dedicated `owner_password_reset_by_admin` kind so
+  // lockout-postmortems can surface them with one filter.
+  if (me.username !== target.username) {
+    const kind = target.is_admin ? 'owner_password_reset_by_admin' : 'password_reset_by_admin';
+    identity.auditOwnerRecovery(db, {
+      kind,
+      actor: me.username,
+      userId: target.id,
+      meta: { route: '/api/users/:username/password' },
+    });
+  }
   res.json({ ok: true });
 });
 
