@@ -1,3 +1,13 @@
+## v0.5.2 (2026-08-29) — invite page inviter-name render fix (PHA-2711)
+
+Found during the production fresh-browser verification pass for
+v0.5.1: `public/invite.html`'s `el()` DOM helper had no case for the
+`html` prop, so the "Invited by Brandon" line fell through to
+`setAttribute('html', ...)` — a dead attribute instead of visible
+content. Fixed by giving `el()` an explicit `html` → `innerHTML`
+case. Single call site, already-escaped content, no behavior change
+beyond making the line actually render.
+
 ## v0.5.1 (2026-08-29) — Same-day closed-beta invite vertical path (PHA-2711)
 
 The vertical path that the TODAY closed-beta tester needs: a fresh
