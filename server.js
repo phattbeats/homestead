@@ -58,6 +58,7 @@ const analytics = require('./lib/analytics');
 const invites = require('./lib/invites');
 const wallMembers = require('./lib/wall-members');
 const porchSweep = require('./lib/porch/sweep');
+const porchContract = require('./lib/porch/participation-contract');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -103,6 +104,10 @@ walls.seed(db);
 // agent-action budget/cooldown ledger). FKs to walls(id)/wall_posts(id)/
 // users(id), so it runs after walls.migrate().
 porchSweep.migrate(db);
+// PHA-2645: participation contract's own ledger (banter memory for
+// dedupe/callbacks + per-wall opt-out). Same FK dependencies as
+// porchSweep above, so it runs right after.
+porchContract.migrate(db);
 analytics.migrate(db);
 // PHA-2207 (PHA-2200.6): invite codes. FKs to walls(slug), so it
 // runs after walls.migrate().
@@ -3290,10 +3295,16 @@ function startHealthChecker() {
 
 // ---- Porch sweep scheduler boot (PHA-2646) ----
 // Same independent-setInterval pattern as startHealthChecker above.
-// onDecision is left at lib/porch/sweep.js's default (log-only) stub
-// until the participation contract (PHA-2645) lands — this loop's job
-// is only to decide WHEN an agent should consider a post, not whether
-// it actually reacts.
+// onDecision is left at lib/porch/sweep.js's default (log-only) stub.
+// The participation contract (PHA-2645, lib/porch/participation-contract.js)
+// has landed, but nothing yet produces the candidate comment text per
+// register it gates — that needs the media-comprehension package + a
+// per-register LLM draft (still PHA-2636). Once that exists, onDecision
+// here becomes: build {character, comprehension, candidates} for the
+// decision, call porchContract.decide(db, ...), and on a 'post'/'riff'
+// action actually create the reaction/comment + call
+// porchSweep.recordAction(). Until then this loop only ever decides
+// WHEN an agent should consider a post, never whether it reacts.
 let porchSweepHandle = null;
 function startPorchSweep() {
   if (porchSweepHandle) return;
