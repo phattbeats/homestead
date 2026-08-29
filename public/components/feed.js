@@ -323,6 +323,8 @@
       }
       const cur = WALLS.find((w) => w.slug === WALL) || WALLS[0];
       $('#wallName', root).textContent = (cur && (cur.name || cur.slug)) || WALL;
+      wireNotifyLevel();
+      await refreshNotifyLevel();
       await loadPosts(true);
 
       if (cfg.canPost) wireComposer();
@@ -343,6 +345,44 @@
         const w = WALLS.find((x) => x.slug === WALL);
         $('#wallName', root).textContent = (w && w.name) || WALL;
         await loadPosts(true);
+        await refreshNotifyLevel();
+      });
+    }
+
+    // ---- per-wall notify level (PHA-2656: dropdown was decorative — no
+    // load/save wired to the wall_notification_prefs table behind
+    // GET/PUT /api/walls/:slug/notifications, added in PHA-2218) ----
+
+    async function refreshNotifyLevel() {
+      const sel = $('#notifyLevel', root);
+      if (!sel || !WALL) return;
+      try {
+        const res = await api('GET', `/walls/${encodeURIComponent(WALL)}/notifications`);
+        const level = (res && res.level) || 'all';
+        sel.value = level;
+        sel.dataset.prev = level;
+      } catch (_) {
+        // Non-fatal: leave the select at its current value so the user
+        // can still try to change it.
+      }
+    }
+
+    function wireNotifyLevel() {
+      const sel = $('#notifyLevel', root);
+      if (!sel) return;
+      on(sel, 'change', async () => {
+        const level = sel.value;
+        const prev = sel.dataset.prev || 'all';
+        sel.disabled = true;
+        try {
+          await api('PUT', `/walls/${encodeURIComponent(WALL)}/notifications`, { level });
+          sel.dataset.prev = level;
+        } catch (_) {
+          sel.value = prev;
+          toast('Could not save notification setting', true);
+        } finally {
+          sel.disabled = false;
+        }
       });
     }
 
