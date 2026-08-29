@@ -1,3 +1,112 @@
+## v0.5.0 (2026-08-29) — Identity foundation: stable users.id + local_credentials + identity_links (PHA-2704)
+
+**The P0 invite flow depends on this.** PHA-2703 (Invite-created
+standalone accounts + optional Authentik linking) unblocks three
+sibling issues — PHA-2705 (invite enrollment), PHA-2706 (link
+Authentik later), PHA-2708 (owner recovery) — but every one of those
+needs the canonical identity model to land first. This release ships
+that foundation.
+
+The pre-PHA-2704 model crammed identity onto the `users` row:
+`pass_hash`, `auth_provider`, and `provider_subject` all lived as
+single-slot columns. That made the first Authentik username that
+matched a seeded profile the permanent CLAIM for that row, and a
+user could only have ONE external identity linked at a time. Both
+constraints blocked the P0 release gate.
+
+### What's new
+
+- **`lib/identity.js` (new, 280 lines).** `migrate(db)` creates the
+  `local_credentials` and `identity_links` tables and runs the
+  additive, idempotent backfill from `users.pass_hash` /
+  `users.auth_provider` / `users.provider_subject` exactly once per
+  installation. The `_identity_migration_state` flag table guards
+  the backfill so re-runs are no-ops.
+- **`local_credentials(user_id, password_hash, recovery_token_hash,
+  recovery_token_expires_at, ...)`** — one row per user (PRIMARY KEY
+  is `user_id`). Replaces the deprecated `users.pass_hash` column
+  for read/write; the column stays as a backward-compat shadow that
+  `/api/password` syncs after every write.
+- **`identity_links(user_id, provider, issuer, provider_subject,
+  linked_at, last_used_at)`** — UNIQUE on `(provider, issuer,
+  provider_subject)` for collision detection, FK to `users(id)`
+  with `ON DELETE CASCADE`. Multiple providers per user (the new
+  "link Authentik later" path requires this).
+- **`identity.findUserByIdentityLink(provider, issuer, subject)`**
+  — the canonical lookup. `users.username` is no longer the
+  long-term link mechanism; it stays UNIQUE COLLATE NOCASE for
+  backward-compat with the legacy `/api/users/:username` surface,
+  but new code routes through `identity_links`.
+- **`provisionOrClaim(db, username, provider, subject, groups)`**
+  — re-orders to (1) identity_links match, (2) username fallback
+  (transitional), (3) CREATE new user + link in one transaction.
+  The username fallback upgrades the profile to an identity_links
+  row on the next CLAIM so subsequent lookups skip the fallback.
+- **`identity.linkIdentity` / `unlinkIdentity`** — explicit, scoped
+  operations. `linkIdentity` throws `code: 'identity_collision'`
+  on UNIQUE-constraint conflicts (mapped to HTTP 409). `unlinkIdentity`
+  refuses to drop the last link when the user has no local
+  credential (would orphan the account — mapped to HTTP 409
+  `no_login_path`).
+- **`identity.createUser({ username, display, plaintext, ... })`** —
+  atomic CREATE for the PHA-2705 invite flow. Inserts the user row
+  and (optionally) the `local_credentials` row in one transaction.
+- **API surface (server.js):**
+  - `GET /api/me/identities` — list the signed-in user's linked identities.
+  - `POST /api/me/identities` — link a new identity (admin-only today;
+    PHA-2706 will replace with the OIDC-flow version).
+  - `DELETE /api/me/identities` — unlink an identity (self for own
+    account; admin can target another user via `user_id` for
+    collision-recovery tooling).
+- **`/api/login` + `/api/password` + `/api/users/:username/password`**
+  rewritten to read/write through `local_credentials`. The legacy
+  `users.pass_hash` column stays in sync as a deprecated shadow so
+  any pre-PHA-2704 reader still sees the value.
+
+### Migration safety
+
+- **Idempotent.** Every step is guarded by `IF NOT EXISTS`,
+  `PRAGMA table_info` checks, or the `_identity_migration_state`
+  flag table. Re-running `migrate()` on a fresh or live DB is safe
+  — backfill skips itself on the second run; `users.id` values are
+  never changed; memberships/history is untouched.
+- **Rollback-safe.** The legacy `users.pass_hash`,
+  `users.auth_provider`, and `users.provider_subject` columns are
+  NOT dropped. A rollback that bypasses `lib/identity.js` still
+  finds the original data on `users`. A future PHA can drop the
+  legacy columns once every install is confirmed migrated.
+- **Collision-safe.** `identity_links` enforces UNIQUE on
+  `(provider, issuer, provider_subject)`. `linkIdentity` raises
+  `code: 'identity_collision'` so the API can surface a 409 and
+  the admin recovery tooling (PHA-2703 release gate) can resolve
+  it.
+
+### Tests
+
+- **`scripts/test-2704-identity-foundation.js`** — 60 assertions
+  covering schema, backfill, idempotency, identity_links-preferred
+  lookup, collision rejection, multi-provider, password round-trip,
+  and user_id preservation.
+- **`scripts/test-2704-identity-api.js`** — 27 assertions covering
+  the full HTTP surface for `/api/me/identities` (GET/POST/DELETE,
+  admin-only, collision 409, orphan 409, `/api/login` regression).
+- **`scripts/smoke-2704-identity-foundation.js`** — end-to-end
+  smoke against a fresh-boot server, capturing the post-migration
+  DB shape and the API responses into `verify-out/`.
+
+### Sibling issues unblocked
+
+- **PHA-2705** (Invite enrollment: explain Homestead, create
+  standalone user, redeem atomically) — uses `identity.createUser`
+  for the new-account path.
+- **PHA-2706** (Link Authentik later: explicit secure identity
+  linking and collision handling) — uses `POST /api/me/identities`
+  + the OIDC flow; the `identity_collision` 409 path is already
+  wired.
+- **PHA-2708** (Owner recovery: local break-glass access and
+  Authentik outage resilience) — uses the `local_credentials`
+  row that the migration populates.
+
 ## v0.4.4 (2026-08-28) — Shared lists primitive lands + repo consolidation (PHA-2586 + PHA-2640)
 
 **Lists is no longer a dead-end.** Every seeded user had Lists

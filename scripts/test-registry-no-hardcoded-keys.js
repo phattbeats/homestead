@@ -56,7 +56,7 @@ const STRICT_KEY_RE = new RegExp(`(['"\`])(wall|lists|calendar|chores|apps|agent
 const EXCLUDE_DIRS = new Set([
   'node_modules', '.git', 'data', 'tmp', 'coverage',
   'homestead-data', 'homestead-cache', 'dist', 'build',
-  '.cache', '.next', 'worktrees',
+  '.cache', '.next', 'worktrees', 'verify-out',
 ]);
 
 const EXCLUDE_FILES = new Set([
@@ -100,6 +100,11 @@ const EXCLUDE_FILES = new Set([
   // the layout API never advertises a 404 HTML route. Same pattern as the
   // sibling acceptance tests above — literals are test config, not render code.
   'scripts/test-2587-layout-route-contract.js',
+  // PHA-2704 identity foundation tests: assert the new identity_links
+  // schema (provider/issuer/provider_subject literals) and the local
+  // credentials shape. Same pattern as the sibling acceptance tests.
+  'scripts/test-2704-identity-foundation.js',
+  'scripts/test-2704-identity-api.js',
 ]);
 
 const SCAN_EXTS = new Set([

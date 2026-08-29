@@ -31,6 +31,7 @@ const fs = require('fs');
 const webpush = require('web-push');
 
 const userModel = require('./lib/user-model');
+const identity = require('./lib/identity');
 const modules = require('./lib/modules');
 const plexSync = require('./lib/sync/plex');
 const kavitaSync = require('./lib/sync/kavita');
@@ -526,8 +527,12 @@ app.get('/api/login', (req, res) => {
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body || {};
   const cleanUser = userModel.validateUsername(username);
-  const u = db.prepare('SELECT * FROM users WHERE username = ?').get(cleanUser || '');
-  if (!u || !u.pass_hash || !bcrypt.compareSync(password || '', u.pass_hash)) {
+  const u = db.prepare('SELECT id, username, display, color, is_admin FROM users WHERE username = ?').get(cleanUser || '');
+  // PHA-2704: password lives in local_credentials now, not users.pass_hash.
+  // hasLocalCredential() returns false for users without a local account
+  // (e.g. header-trust-only profiles) — we still respond 401 in that case
+  // so the LAN probe can't tell 'wrong password' from 'no local account'.
+  if (!u || !identity.hasLocalCredential(db, u.id) || !identity.verifyLocalPassword(db, u.id, password || '')) {
     return res.status(401).json({ error: 'Wrong username or password' });
   }
   userModel.touchLastSeen(db, u.id);
@@ -911,10 +916,17 @@ app.get('/api/walls/:slug/members', auth, (req, res) => {
 
 app.post('/api/password', auth, (req, res) => {
   const { current, next } = req.body || {};
-  const u = db.prepare('SELECT * FROM users WHERE username = ?').get(req.session.user.username);
-  if (!bcrypt.compareSync(current || '', u.pass_hash)) return res.status(400).json({ error: 'Current password is wrong' });
+  const u = db.prepare('SELECT id, username FROM users WHERE username = ?').get(req.session.user.username);
+  if (!u) return res.status(401).json({ error: 'unknown_user' });
+  // PHA-2704: read current password via identity.verifyLocalPassword;
+  // write the new password via identity.setLocalPassword. The legacy
+  // users.pass_hash column is kept in sync as a deprecated shadow so
+  // pre-PHA-2704 readers (other lib/ modules, future migrations) still
+  // see the value. New code MUST go through the local_credentials table.
+  if (!identity.verifyLocalPassword(db, u.id, current || '')) return res.status(400).json({ error: 'Current password is wrong' });
   if (!next || next.length < 4) return res.status(400).json({ error: 'New password too short' });
-  db.prepare('UPDATE users SET pass_hash = ? WHERE username = ?').run(bcrypt.hashSync(next, 10), u.username);
+  identity.setLocalPassword(db, u.id, next);
+  db.prepare('UPDATE users SET pass_hash = (SELECT password_hash FROM local_credentials WHERE user_id = ?) WHERE id = ?').run(u.id, u.id);
   res.json({ ok: true });
 });
 
@@ -962,18 +974,87 @@ app.put('/api/users/:username', auth, (req, res) => {
   );
   res.json({ ok: true });
 });
+// ---- identity foundation (PHA-2704) ----
+// Read/write endpoints for the canonical identity surface. New API
+// paths that downstream features (PHA-2705 invite enrollment, PHA-2706
+// Authentik linking, PHA-2708 owner recovery) build on top of.
+//
+// GET  /api/me/identities       — list linked external identities for the signed-in user
+// POST /api/me/identities       — link a new external identity (admin-gated; PHA-2706 will
+//                                  replace this with the OIDC-flow version)
+// DELETE /api/me/identities     — unlink an external identity (refuses the last link when
+//                                  the user also has no local credential)
+app.get('/api/me/identities', auth, (req, res) => {
+  const u = db.prepare('SELECT id FROM users WHERE username = ?').get(req.session.user.username);
+  if (!u) return res.status(401).json({ error: 'unknown_user' });
+  res.json({ identities: identity.listIdentityLinks(db, u.id) });
+});
+app.post('/api/me/identities', auth, (req, res) => {
+  const me = db.prepare('SELECT id, is_admin FROM users WHERE username = ?').get(req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { user_id, provider, issuer, provider_subject } = req.body || {};
+  // PHA-2704 surface: link an identity on behalf of an existing user.
+  // Today this is admin-only — the self-service Authentik OIDC flow
+  // lands in PHA-2706. The admin path is required so the migration
+  // tooling (PHA-2703 release gate "provider collisions stop safely
+  // and require recovery/admin review") can resolve collisions.
+  if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+  if (!provider || !issuer || !provider_subject) {
+    return res.status(400).json({ error: 'provider, issuer, provider_subject required' });
+  }
+  const targetId = user_id != null ? Number(user_id) : me.id;
+  try {
+    const result = identity.linkIdentity(db, targetId, provider, issuer, provider_subject);
+    res.status(result.alreadyLinked ? 200 : 201).json({ ok: true, ...result });
+  } catch (e) {
+    if (e.code === 'identity_collision') {
+      return res.status(409).json({ error: 'identity_collision', conflictingUserId: e.conflictingUserId });
+    }
+    if (e.message && e.message.startsWith('provider required')) return res.status(400).json({ error: 'provider required' });
+    if (e.message && e.message.startsWith('issuer required')) return res.status(400).json({ error: 'issuer required' });
+    if (e.message && e.message.startsWith('provider_subject required')) return res.status(400).json({ error: 'provider_subject required' });
+    throw e;
+  }
+});
+app.delete('/api/me/identities', auth, (req, res) => {
+  const me = db.prepare('SELECT id, is_admin FROM users WHERE username = ?').get(req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { provider, issuer, provider_subject, user_id } = req.body || {};
+  if (!provider || !issuer || !provider_subject) {
+    return res.status(400).json({ error: 'provider, issuer, provider_subject required' });
+  }
+  // Admins can target another user via user_id (recovery tooling per
+  // PHA-2703 release gate "provider collisions require recovery/admin
+  // review"). Self-service path is always me.id.
+  let targetId = me.id;
+  if (user_id != null && user_id !== me.id) {
+    if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+    targetId = Number(user_id);
+    if (!Number.isInteger(targetId)) return res.status(400).json({ error: 'invalid user_id' });
+  }
+  const result = identity.unlinkIdentity(db, targetId, provider, issuer, provider_subject);
+  if (result.blocked === 'no_login_path') {
+    return res.status(409).json({ error: 'no_login_path', message: 'Refusing to unlink the last identity for a user with no local credential — would orphan the account.' });
+  }
+  if (!result.removed) return res.status(404).json({ error: 'identity_not_found' });
+  res.json({ ok: true });
+});
+
 app.post('/api/users/:username/password', auth, (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
-  const target = db.prepare('SELECT * FROM users WHERE username = ?').get(req.params.username);
+  const target = db.prepare('SELECT id, username FROM users WHERE username = ?').get(req.params.username);
   if (!target) return res.status(404).json({ error: 'not found' });
   const { current, next } = req.body || {};
   if (!next || next.length < 4) return res.status(400).json({ error: 'New password too short' });
   if (me.username === target.username) {
-    if (!bcrypt.compareSync(current || '', target.pass_hash)) return res.status(400).json({ error: 'Current password is wrong' });
+    // PHA-2704: same path as /api/password — verify via local_credentials,
+    // write via setLocalPassword, sync the legacy users.pass_hash shadow.
+    if (!identity.verifyLocalPassword(db, target.id, current || '')) return res.status(400).json({ error: 'Current password is wrong' });
   } else if (!me.is_admin) {
     return res.status(403).json({ error: 'admin only' });
   }
-  db.prepare('UPDATE users SET pass_hash = ? WHERE username = ?').run(bcrypt.hashSync(next, 10), target.username);
+  identity.setLocalPassword(db, target.id, next);
+  db.prepare('UPDATE users SET pass_hash = (SELECT password_hash FROM local_credentials WHERE user_id = ?) WHERE id = ?').run(target.id, target.id);
   res.json({ ok: true });
 });
 
