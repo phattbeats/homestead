@@ -1,3 +1,218 @@
+## v0.5.4 (2026-08-29) — Link Authentik later: OIDC self-service identity linking (PHA-2706, landed via PHA-2719)
+
+The standalone-Homestead user who registered with username + password
+can now add Authentik (or any RFC-compliant OIDC provider) as a
+SECOND sign-in path without migrating or replacing their account.
+Built on top of PHA-2704's canonical identity foundation (which
+landed on `main` separately via PHA-2711 before this port). PHA-2706
+was originally built on a stale point in history and never merged;
+PHA-2719 ports it forward onto current `main`, alongside the
+PHA-2708 owner-recovery cascade above.
+
+### What's new
+
+- **`lib/oidc-link.js` (new).** Pure-function OIDC
+  authorization-code + PKCE (RFC 7636) + state (RFC 6749 §10.12) +
+  nonce (OIDC Core §3.1.2.1) machinery. `createPending(db, userId)`
+  mints a one-time handle, PKCE pair, state, and nonce and binds
+  them to the requesting user + local-re-auth timestamp. `findPending`
+  / `recordValidated` / `consumePending` / `cancelPending` are the
+  state-machine transitions; `consumePending` is atomic and refuses
+  replays. `verifyIdToken` validates RS256 signature + `iss` + `aud` +
+  `nonce` + `exp` and rejects algorithm downgrade (HS256 / none).
+- **`oidc_link_states(handle, user_id, provider, issuer, ...,
+  state, nonce, code_verifier, code_challenge,
+  code_challenge_method, expires_at, status,
+  validated_subject, validated_email, validated_email_verified,
+  validated_display, ...)`** — pending-link state table, owned by
+  `lib/oidc-link.js`'s own `migrate()`. `status` is
+  `pending → consumed | cancelled | expired`. Validated OIDC claims
+  are stamped onto the row so `/confirm` never trusts
+  client-supplied subjects.
+- **`POST /api/me/identities/link/start { password }`** — verify
+  the local password (re-auth gate), mint a handle, return the
+  `authorize_url`. Refuses unauthenticated (401), missing password
+  (400), wrong password (401), users with no local credential
+  (400).
+- **`GET /api/me/identities/link/callback?handle=...&code=***&state=...`**
+  — token exchange + ID-token validation. 302's the browser to
+  `/identities-link.html?handle=...` after stamping validated claims
+  onto the pending row. JSON mode (Accept: application/json) for
+  programmatic callers (tests, future API integrations).
+- **`GET /api/me/identities/link/preview?handle=...`** — read-only
+  confirmation payload that names both identities explicitly so
+  the SPA can show "you are about to link <homestead_user> to
+  <oidc_account>".
+- **`POST /api/me/identities/link/confirm { handle }`** — writes
+  one `identity_links` row pointing at the existing `users.id` via
+  the current `lib/identity.js` `linkIdentity`. Subject comes from
+  the validated row, NEVER from the client. Refuses replays (410).
+  Maps `identity_collision` to 409 with a clear "contact admin for
+  recovery" hint and the conflicting user id.
+- **`POST /api/me/identities/link/cancel { handle }`** — user
+  bailed before confirming; burns the pending row.
+- **`POST /api/me/identities/:linkId/unlink`** — self-service
+  unlink by identity_links.id. Delegates to `identity.unlinkIdentity`
+  so the no_login_path / would_lock_out_owner rules (the latter from
+  the PHA-2708 port above) are uniform across admin and self-service
+  paths.
+- **`public/identities-link.html`** — three-screen SPA: start
+  (verify local password + click Continue), confirm (names both
+  identities + click Link), done. Handle carried in
+  `sessionStorage` across the IdP round-trip; the SPA never sees
+  the id_token (server validates + stamps the row, SPA fetches
+  the read-only `/preview`).
+- **`lib/oidc-link-test-helper.js` (new)** — in-process OIDC mock
+  IdP for tests (RFC-compliant discovery, JWKS, /authorize,
+  /token). Generates an RSA keypair, signs id_tokens with the
+  matching private key, validates PKCE. No external network.
+
+### Security
+
+- The IdP subject is the only thing that becomes `provider_subject`.
+  Email is surfaced for display only — never used as the link key.
+- One-time handles prevent replay across the OIDC dance. State and
+  nonce are validated at `/callback`; the validated subject is
+  stamped onto the pending row; `/confirm` reads from the row, not
+  the request body.
+- Local re-auth (plaintext password verify against
+  `local_credentials`) is mandatory before starting a link. This
+  blocks a session-hijacker from silently adding an account they
+  can later sign in with.
+- Algorithm downgrade is refused at the verify step: only RS256
+  signatures are accepted (HS256 / none would let an attacker
+  forge a token signed with the client_secret).
+- Provider-subject collision (UNIQUE on
+  `(provider, issuer, provider_subject)`) is mapped to 409
+  `identity_collision` and surfaces the conflicting user id so the
+  SPA can show "this Authentik account is already linked to a
+  different Homestead user — contact an admin."
+
+### Tests
+
+- `scripts/test-2706-oidc-link.js` (77 assertions across 14
+  groups): schema, unauth/missing-password/wrong-password/no-local
+  rejection on /start, happy-path PKCE + state + nonce round-trip,
+  callback with mock IdP, /preview confirmation payload, /confirm
+  writing one identity_links row, replay refusal (410), collision
+  refusal (409 with conflicting user id), cancel burns handle,
+  state mismatch rejection (400), HS256 algorithm downgrade
+  rejection at verifyIdToken, self-service /unlink, data-layer
+  no_login_path orphan-block, orphan-allow when local credential
+  exists, handle ownership (one user can't consume another's
+  handle).
+- `scripts/smoke-2706-oidc-link.js` — end-to-end smoke against a
+  real server.js boot + real OIDC mock IdP. Writes verify-out
+  artifacts (authorize-url, preview, link-row, collision response,
+  unlink result, db shape).
+
+### Configuration
+
+Production Authentik integration requires four env vars:
+
+```
+OIDC_ISSUER=https://authentik.phatt.vip/application/oauth/homestead/
+OIDC_CLIENT_ID=<from Authentik application config>
+OIDC_CLIENT_SECRET=<from Authentik application config>
+OIDC_REDIRECT_URI=https://life.phatt.vip/api/me/identities/link/callback
+```
+
+OIDC_SCOPES, OIDC_LINK_TTL_MS (default 600000 / 10min, max 15min),
+and OIDC_AUTHORIZE_URL / OIDC_TOKEN_URL / OIDC_ID_TOKEN_PEM are
+optional overrides.
+
+## v0.5.4 (2026-08-29) — Owner recovery: audited break-glass + Authentik outage resilience (PHA-2708, landed via PHA-2719)
+
+**Prevent another owner lockout.** Builds on the PHA-2704 identity
+foundation. The owner (`is_admin = 1`) is the household's break-glass
+target; PHA-2708 closes the three loops that made them lockable:
+
+1. **Authentik unreachable** — owner still signs in via the LAN
+   password fallback (`/api/login` already worked; PHA-2708 ships
+   tests for the outage path so we don't lose coverage).
+2. **Owner forgot the password** — new host-side CLI
+   (`scripts/owner-recovery.js`) mints a 1h, one-shot,
+   sha256-hashed reset token directly against the SQLite DB.
+   Does not depend on Homestead being up, does not depend on
+   Authentik, does not depend on the owner's session.
+3. **Owner's last login path** — `unlinkIdentity` now refuses to
+   remove the OWNER's last identity link with `would_lock_out_owner`
+   (409). The owner recovery CLI is the only sanctioned way to
+   rotate their local credential.
+
+PHA-2708 was originally built on a stale point in history and never
+merged; PHA-2719 ports the same feature forward onto current `main`.
+In the meantime `main` had independently absorbed a general-purpose,
+any-user password-reset flow (PHA-2711:
+`scripts/reset-owner-password.js`, `POST /api/public/invites/reset`,
+`lib/invites.js` `createResetToken`/`consumeResetToken`) that shares
+a filename convention and the `local_credentials` table with this
+feature. To land both without collision, PHA-2708's storage was
+moved to two DEDICATED columns — `owner_recovery_token_hash` /
+`owner_recovery_token_expires_at` — and its CLI was renamed to
+`scripts/owner-recovery.js`. PHA-2711's `reset-owner-password.js`
+and its `recovery_token_hash` / `recovery_token_expires_at` columns
+are untouched and remain the general-purpose reset path for
+non-owner accounts.
+
+### What's new
+
+- **`lib/identity.js` PHA-2708 section.** Adds `findOwnerUserId`,
+  `isOwner`, `mintOwnerRecoveryToken`, `clearOwnerRecoveryToken`,
+  `consumeOwnerRecoveryToken`, `auditOwnerRecovery`, and
+  `parseExpiresAt`/`parseIsoUtc`. Strengthens `unlinkIdentity` to
+  block owner lockout. Storage lives in two NEW `local_credentials`
+  columns added by an idempotent migration:
+  `owner_recovery_token_hash`, `owner_recovery_token_expires_at`.
+  Expiry stored as millisecond-integer for exact comparison.
+- **`POST /api/admin/owner/recover`** — deliberately unauthenticated;
+  the one-shot token IS the credential. Rotates the owner's
+  password, clears the recovery columns, writes
+  `owner_recovery_consumed` (or `_rejected`) to `analytics_events`.
+  Returns 401 `invalid_or_expired_token` on bad/expired/replay;
+  does not leak which.
+- **`GET /api/admin/owner/login-paths`** — read-only inventory
+  of the owner's viable login methods (local credential, identity
+  links count, recovery-token presence + expiry). Never returns
+  hashes, tokens, or plaintext. Admin only.
+- **`scripts/owner-recovery.js`** — host-side CLI. Mints a
+  one-shot 60-minute reset token directly against
+  `$DATA_DIR/life.db`. No HTTP calls. Writes one
+  `owner_recovery_minted` audit row. `--revoke` clears an
+  active token without minting a new one. Prints a ready-to-paste
+  curl line for the consume endpoint.
+- **`scripts/test-2708-owner-recovery.js`** — assertions across
+  five groups: privilege preservation, recovery primitives,
+  outage resilience, API surfaces, CLI round-trip.
+- **`scripts/smoke-2708-owner-recovery.js`** — end-to-end smoke
+  against a real `server.js` boot. Writes `verify-out/` artifacts:
+  db-shape, login-paths, mint (token redacted), recover-success,
+  recover-replay, recover-badtoken, audit-events.
+- **`docs/OWNER-RECOVERY.md`** — operational runbook. No hashes,
+  tokens, or passwords. Maps every behavior to the test that
+  guards it, and calls out how this mechanism differs from
+  PHA-2711's `reset-owner-password.js`.
+
+### Migration
+
+Additive: `local_credentials` gains `owner_recovery_token_hash` and
+`owner_recovery_token_expires_at` columns via a guarded
+`ALTER TABLE ... ADD COLUMN`, applied once per install. The existing
+`recovery_token_hash` / `recovery_token_expires_at` columns are
+untouched and keep serving PHA-2711's general-purpose reset flow.
+
+### Known Limitations
+
+- One active token at a time (intentional — keeps the threat
+  model simple; the operator can wait for expiry or `--revoke`).
+- The recovery path is for the owner only. Family-member
+  reset uses the existing `/api/users/:username/password`
+  admin path or PHA-2711's `reset-owner-password.js`.
+- CLI does not validate the DB schema before writing. If you
+  point it at a half-migrated DB, the helper functions throw
+  but the row may have been written. Always take a backup
+  before running on a production instance.
+
 ## v0.5.3 (2026-08-29) — invite-redemption welcome screen (PHA-2707)
 
 `public/welcome.html` (the page `/welcome.html?wall=<slug>` an invite
