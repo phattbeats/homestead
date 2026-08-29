@@ -1,209 +1,64 @@
-## v0.5.3 (2026-08-29) — invite-redemption welcome screen (PHA-2707)
+## v0.4.5 (2026-08-29) — Media-comprehension package (PHA-2644)
 
-`public/welcome.html` (the page `/welcome.html?wall=<slug>` an invite
-redemption redirects to) only covered "which wall + who's in it" —
-the PHA-2703 parent's welcome requirements went further. The screen
-now also covers:
+**The Porch needs agents that can see, not just text-match.** A
+participation contract that only reads the caption misses the
+substance of a friend's post — a meme's joke, a video's
+scene-cut, the line someone actually said. PHA-2644 lands the
+comprehension package that the Porch trigger loop (PHA-2646) and
+identity UI (PHA-2647) will build on:
 
-- **What Homestead is** — a one-line explainer above the fold.
-- **The Porch is home** — a short section naming the Porch as the
-  default feed, not just the wall card that follows it.
-- **What the invite granted** — an access-card explaining membership
-  in the specific wall (view/react/comment/post; nothing outside the
-  wall is shared).
-- **One contextual first action** — the CTA copy itself states the
-  action ("Post the first thing on the Porch →" for an empty wall,
-  "Say hi on the Porch →" otherwise) instead of a generic "Open the
-  feed →".
-- **Authentik-later note** — shown only for `authProvider: 'password'`
-  sessions (invite-signup accounts): explains the account can add
-  Authentik SSO later via Linked Accounts (PHA-2706, in flight)
-  without losing the standalone account.
+- **`lib/media.js`** — new `getMediaContext(id)` builds the
+  comprehension package per media id: `{kind, file, thumb,
+  caption}` for images; `{kind, frames[3..12], firstFrame,
+  lastFrame, audioTranscript, audioTranscriptStatus, caption}`
+  for videos. Frames are ffmpeg scene-change keyframes
+  (`select=gt(scene,0.4)`, capped at 12, first + last always
+  included), resized to 480px wide and served via
+  `/api/media-frames/:mediaId/:filename`. Audio is whisper-class
+  ASR via the OpenAI /v1/audio/transcriptions endpoint, using a
+  request-scoped BYOK key (`X-Whisper-Key` header or `?byok=`
+  query) by default with a server-staged `OPENAI_API_KEY`
+  fallback; without a key, the package surfaces
+  `audioTranscript: null` and `audioTranscriptStatus: 'no_key'`
+  so the caller can decide whether to retry. A 24h
+  `media_context_cache` table keyed on `(media_id, source_mtime)`
+  means extraction runs once per re-upload; ON DELETE CASCADE
+  from `media_uploads` keeps the cache honest through the
+  existing soft-delete + sweep path. A new `caption` column on
+  `media_uploads` (added via `ALTER TABLE` so v0.4.x DBs upgrade
+  in place) is set on upload via a multipart text field and
+  surfaced verbatim by both `publicView` and the comprehension
+  package.
+- **`server.js`** — `GET /api/media/:id/context` mounted next to
+  the existing PHA-2149 routes (auth-gated). `GET
+  /api/media-frames/:mediaId/:filename` serves extracted
+  keyframes; both `mediaId` and `filename` are validated against
+  `..` / `/` / `\` traversal before the path join. The upload
+  route now accepts the optional `caption` text field.
+- **`Dockerfile`** — `ffmpeg` added to the deps stage's
+  apt-get line. Without it, the comprehension package 500s
+  on every video request. Image without ffmpeg would
+  silently break `GET /api/media/:id/context` for video.
+- **`scripts/test-2644-media-context.js` (new, ~50
+  assertions).** Image comprehension + video comprehension +
+  cache-hit on second call (verified via mtime) + bust +
+  rebuild + silent-video cheap-skip + frame-serve
+  (verifies JPG magic bytes) + soft-delete cascade + caption
+  migration (`ALTER TABLE` against a v0.4.4-shape legacy DB
+  via a child Node process so the module-level `_db` doesn't
+  rebind mid-test). Wired into `npm test` adjacent to
+  `test-media.js` (PHA-2209 Amendment-3 ordering) and into
+  `test:smoke`.
+- **`scripts/test-registry-no-hardcoded-keys.js`** — allow-list
+  entry for the new test file (same category as the
+  PHA-2209 / PHA-2587 sibling acceptance tests).
+- **`package.json`** — version bump `0.4.4 → 0.4.5`.
 
-**Dismissible + accessible:**
-- A corner `×` (skip) button and the Escape key both stamp
-  `first-run-complete` and land on the Porch — same destination as
-  the primary CTA, just without reading the rest of the page.
-- The heading receives focus on render (screen-reader route-change
-  parity); the close button carries an `aria-label`; decorative
-  avatar stacks are `aria-hidden`; the accessible member list uses
-  `role="list"`/`"listitem"`.
-
-**Skipped for returning users, unless explicitly reopened:**
-`first_run: false` still redirects straight to the Porch (unchanged
-behavior), UNLESS the URL carries `?revisit=1` — an explicit-reopen
-escape hatch for a future "show me that again" entry point (e.g. a
-Linked Accounts settings page).
-
-No server/schema changes — the screen composes existing `/api/me`,
-`/api/walls/:slug/members`, and `/api/me/first-run-complete` data;
-the access-granted copy is derived client-side from wall visibility
-(every invite still grants the `member` role, per `lib/invites.js`).
-
-**Tests:**
-- `scripts/smoke-2707-invite-welcome.js` — Playwright end-to-end smoke
-  (mint invite → signup → welcome screen content assertions → Escape
-  dismiss → returning-user skip → `?revisit=1` reopen); wired into
-  `.github/workflows/test.yml` as a new CI step so the mobile
-  (390px) screenshot evidence is captured on every PR/push.
-
-## v0.5.2 (2026-08-29) — invite page inviter-name render fix (PHA-2711)
-
-Found during the production fresh-browser verification pass for
-v0.5.1: `public/invite.html`'s `el()` DOM helper had no case for the
-`html` prop, so the "Invited by Brandon" line fell through to
-`setAttribute('html', ...)` — a dead attribute instead of visible
-content. Fixed by giving `el()` an explicit `html` → `innerHTML`
-case. Single call site, already-escaped content, no behavior change
-beyond making the line actually render.
-
-## v0.5.1 (2026-08-29) — Same-day closed-beta invite vertical path (PHA-2711)
-
-The vertical path that the TODAY closed-beta tester needs: a fresh
-browser can complete the entire invite-handshake without an
-Authentik session or a pre-provisioned account.
-
-**Shipped:**
-- `GET /api/public/invites/:code` — public peek (no auth) returning
-  wall + inviter + admin note + remaining capacity.
-- `POST /api/public/invites/:code/signup` — create a fresh local
-  account, atomically seed defaults + add wall membership + consume
-  the invite. Single transaction; failure rolls back.
-- `POST /api/public/invites/:code/signin` — claim an invite on an
-  existing local account (ambiguous-401 to avoid username probing).
-- `POST /api/public/invites/reset` — break-glass owner-account reset,
-  consumes a sha256-hashed single-use 1-hour recovery token.
-- `scripts/reset-owner-password.js` — host-side CLI to mint a reset
-  token for a user (default username=brandon, --ttl 1h).
-- `public/invite.html` rebuilt: Homestead intro + inviter + wall
-  card, two clear choices (Create standalone / Sign in existing).
-- `public/welcome.html` copy updated to mention the Porch + the
-  obvious next action.
-- `scripts/test-2711-invite-signup.js` — 9 direct lib tests + 12 HTTP
-  route tests covering valid/invalid/expired/revoked/exhausted/
-  username-collision/concurrent-redemption/sign-out-sign-in/
-  reset-token round-trips.
-
-**Implementation boundary** (per PHA-2711): the path uses the
-existing `users`/`pass_hash` local-account model. It does NOT wait
-for PHA-2704 — but it does write to `local_credentials` because
-`identity.createUser` populates both tables in one tx, with
-`users.pass_hash` shadow-synced. Future PHA-2705/2706 hardening is
-additive and lossless against this data.
-
-**Identity migration:** users.id values are permanent. The new
-signup path creates a fresh users row + fresh local_credentials row
-atomically — no collision against any seeded CLAIM profile because
-the chosen username is validated for uniqueness before the tx.
-
-## v0.5.0 (2026-08-29) — Identity foundation: stable users.id + local_credentials + identity_links (PHA-2704)
-
-**The P0 invite flow depends on this.** PHA-2703 (Invite-created
-standalone accounts + optional Authentik linking) unblocks three
-sibling issues — PHA-2705 (invite enrollment), PHA-2706 (link
-Authentik later), PHA-2708 (owner recovery) — but every one of those
-needs the canonical identity model to land first. This release ships
-that foundation.
-
-The pre-PHA-2704 model crammed identity onto the `users` row:
-`pass_hash`, `auth_provider`, and `provider_subject` all lived as
-single-slot columns. That made the first Authentik username that
-matched a seeded profile the permanent CLAIM for that row, and a
-user could only have ONE external identity linked at a time. Both
-constraints blocked the P0 release gate.
-
-### What's new
-
-- **`lib/identity.js` (new, 280 lines).** `migrate(db)` creates the
-  `local_credentials` and `identity_links` tables and runs the
-  additive, idempotent backfill from `users.pass_hash` /
-  `users.auth_provider` / `users.provider_subject` exactly once per
-  installation. The `_identity_migration_state` flag table guards
-  the backfill so re-runs are no-ops.
-- **`local_credentials(user_id, password_hash, recovery_token_hash,
-  recovery_token_expires_at, ...)`** — one row per user (PRIMARY KEY
-  is `user_id`). Replaces the deprecated `users.pass_hash` column
-  for read/write; the column stays as a backward-compat shadow that
-  `/api/password` syncs after every write.
-- **`identity_links(user_id, provider, issuer, provider_subject,
-  linked_at, last_used_at)`** — UNIQUE on `(provider, issuer,
-  provider_subject)` for collision detection, FK to `users(id)`
-  with `ON DELETE CASCADE`. Multiple providers per user (the new
-  "link Authentik later" path requires this).
-- **`identity.findUserByIdentityLink(provider, issuer, subject)`**
-  — the canonical lookup. `users.username` is no longer the
-  long-term link mechanism; it stays UNIQUE COLLATE NOCASE for
-  backward-compat with the legacy `/api/users/:username` surface,
-  but new code routes through `identity_links`.
-- **`provisionOrClaim(db, username, provider, subject, groups)`**
-  — re-orders to (1) identity_links match, (2) username fallback
-  (transitional), (3) CREATE new user + link in one transaction.
-  The username fallback upgrades the profile to an identity_links
-  row on the next CLAIM so subsequent lookups skip the fallback.
-- **`identity.linkIdentity` / `unlinkIdentity`** — explicit, scoped
-  operations. `linkIdentity` throws `code: 'identity_collision'`
-  on UNIQUE-constraint conflicts (mapped to HTTP 409). `unlinkIdentity`
-  refuses to drop the last link when the user has no local
-  credential (would orphan the account — mapped to HTTP 409
-  `no_login_path`).
-- **`identity.createUser({ username, display, plaintext, ... })`** —
-  atomic CREATE for the PHA-2705 invite flow. Inserts the user row
-  and (optionally) the `local_credentials` row in one transaction.
-- **API surface (server.js):**
-  - `GET /api/me/identities` — list the signed-in user's linked identities.
-  - `POST /api/me/identities` — link a new identity (admin-only today;
-    PHA-2706 will replace with the OIDC-flow version).
-  - `DELETE /api/me/identities` — unlink an identity (self for own
-    account; admin can target another user via `user_id` for
-    collision-recovery tooling).
-- **`/api/login` + `/api/password` + `/api/users/:username/password`**
-  rewritten to read/write through `local_credentials`. The legacy
-  `users.pass_hash` column stays in sync as a deprecated shadow so
-  any pre-PHA-2704 reader still sees the value.
-
-### Migration safety
-
-- **Idempotent.** Every step is guarded by `IF NOT EXISTS`,
-  `PRAGMA table_info` checks, or the `_identity_migration_state`
-  flag table. Re-running `migrate()` on a fresh or live DB is safe
-  — backfill skips itself on the second run; `users.id` values are
-  never changed; memberships/history is untouched.
-- **Rollback-safe.** The legacy `users.pass_hash`,
-  `users.auth_provider`, and `users.provider_subject` columns are
-  NOT dropped. A rollback that bypasses `lib/identity.js` still
-  finds the original data on `users`. A future PHA can drop the
-  legacy columns once every install is confirmed migrated.
-- **Collision-safe.** `identity_links` enforces UNIQUE on
-  `(provider, issuer, provider_subject)`. `linkIdentity` raises
-  `code: 'identity_collision'` so the API can surface a 409 and
-  the admin recovery tooling (PHA-2703 release gate) can resolve
-  it.
-
-### Tests
-
-- **`scripts/test-2704-identity-foundation.js`** — 60 assertions
-  covering schema, backfill, idempotency, identity_links-preferred
-  lookup, collision rejection, multi-provider, password round-trip,
-  and user_id preservation.
-- **`scripts/test-2704-identity-api.js`** — 27 assertions covering
-  the full HTTP surface for `/api/me/identities` (GET/POST/DELETE,
-  admin-only, collision 409, orphan 409, `/api/login` regression).
-- **`scripts/smoke-2704-identity-foundation.js`** — end-to-end
-  smoke against a fresh-boot server, capturing the post-migration
-  DB shape and the API responses into `verify-out/`.
-
-### Sibling issues unblocked
-
-- **PHA-2705** (Invite enrollment: explain Homestead, create
-  standalone user, redeem atomically) — uses `identity.createUser`
-  for the new-account path.
-- **PHA-2706** (Link Authentik later: explicit secure identity
-  linking and collision handling) — uses `POST /api/me/identities`
-  + the OIDC flow; the `identity_collision` 409 path is already
-  wired.
-- **PHA-2708** (Owner recovery: local break-glass access and
-  Authentik outage resilience) — uses the `local_credentials`
-  row that the migration populates.
+**Out of scope (deliberately):** entity extraction from the
+comprehension package (separate concern; goes via the
+entity-graph service), search indexing, and the agent
+participation trigger loop itself (covered by the PHA-2646
+sibling).
 
 ## v0.4.4 (2026-08-28) — Shared lists primitive lands + repo consolidation (PHA-2586 + PHA-2640)
 
