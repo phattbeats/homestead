@@ -105,6 +105,12 @@ const EXCLUDE_FILES = new Set([
   // credentials shape. Same pattern as the sibling acceptance tests.
   'scripts/test-2704-identity-foundation.js',
   'scripts/test-2704-identity-api.js',
+  // PHA-2708 owner-recovery tests: assert the recovery primitive
+  // strings ("owner_recovery_minted"/"owner_recovery_consumed"/
+  // etc.) and the audit kind enum ("owner_recovery"). Same
+  // pattern as the sibling acceptance tests — literals are test
+  // config, not render code.
+  'scripts/test-2708-owner-recovery.js',
 ]);
 
 const SCAN_EXTS = new Set([

@@ -1,3 +1,79 @@
+## v0.5.1 (2026-08-29) — Owner recovery: audited break-glass + Authentik outage resilience (PHA-2708)
+
+**Prevent another owner lockout.** Builds on the PHA-2704 identity
+foundation. The owner (`is_admin = 1`) is the household's break-glass
+target; PHA-2708 closes the three loops that made them lockable:
+
+1. **Authentik unreachable** — owner still signs in via the LAN
+   password fallback (`/api/login` already worked; PHA-2708 ships
+   tests for the outage path so we don't lose coverage).
+2. **Owner forgot the password** — new host-side CLI
+   (`scripts/reset-owner-password.js`) mints a 1h, one-shot,
+   sha256-hashed reset token directly against the SQLite DB.
+   Does not depend on Homestead being up, does not depend on
+   Authentik, does not depend on the owner's session.
+3. **Owner's last login path** — `unlinkIdentity` now refuses to
+   remove the OWNER's last identity link with `would_lock_out_owner`
+   (409). The owner recovery CLI is the only sanctioned way to
+   rotate their local credential.
+
+### What's new
+
+- **`lib/identity.js` PHA-2708 section.** Adds `findOwnerUserId`,
+  `isOwner`, `mintOwnerRecoveryToken`, `clearOwnerRecoveryToken`,
+  `consumeOwnerRecoveryToken`, `auditOwnerRecovery`, and
+  `parseExpiresAt`. Strengthens `unlinkIdentity` to block owner
+  lockout. Storage stays in the PHA-2704 `local_credentials`
+  columns (`recovery_token_hash`, `recovery_token_expires_at`).
+  Expiry stored as millisecond-integer for exact comparison.
+- **`POST /api/admin/owner/recover`** — consumes a minted token
+  via header-trust OR session-cookie auth (admin only). Rotates
+  the owner's password, clears the recovery columns, writes
+  `owner_recovery_consumed` (or `_rejected`) to
+  `analytics_events`. Returns 401 `invalid_or_expired_token` on
+  bad/expired/replay; does not leak which.
+- **`GET /api/admin/owner/login-paths`** — read-only inventory
+  of the owner's viable login methods (local credential, identity
+  links count, recovery-token presence + expiry). Never returns
+  hashes, tokens, or plaintext. Admin only.
+- **`scripts/reset-owner-password.js`** — host-side CLI. Mints a
+  one-shot 60-minute reset token directly against
+  `$DATA_DIR/life.db`. No HTTP calls. Writes one
+  `owner_recovery_minted` audit row. `--revoke` clears an
+  active token without minting a new one. Prints a ready-to-paste
+  curl line for the consume endpoint.
+- **`scripts/test-2708-owner-recovery.js`** — 92 assertions across
+  five groups: privilege preservation, recovery primitives,
+  outage resilience, API surfaces, CLI round-trip.
+- **`scripts/smoke-2708-owner-recovery.js`** — end-to-end smoke
+  against a real `server.js` boot. Writes six `verify-out/`
+  artifacts: db-shape, login-paths, mint (token redacted),
+  recover-success, recover-replay, recover-badtoken,
+  audit-events.
+- **`docs/OWNER-RECOVERY.md`** — operational runbook. No hashes,
+  tokens, or passwords. Maps every behavior to the test that
+  guards it.
+
+### Migration
+
+Zero. The PHA-2704 schema already carries the
+`recovery_token_hash` and `recovery_token_expires_at` columns.
+PHA-2708 reads + writes them; nothing else does (yet). All
+existing Homestead installs pick up the recovery surface on
+their next boot.
+
+### Known Limitations
+
+- One active token at a time (intentional — keeps the threat
+  model simple; the operator can wait for expiry or `--revoke`).
+- The recovery path is for the owner only. Family-member
+  reset uses the existing `/api/users/:username/password`
+  admin path.
+- CLI does not validate the DB schema before writing. If you
+  point it at a half-migrated DB, the helper functions throw
+  but the row may have been written. Always take a backup
+  before running on a production instance.
+
 ## v0.5.0 (2026-08-29) — Identity foundation: stable users.id + local_credentials + identity_links (PHA-2704)
 
 **The P0 invite flow depends on this.** PHA-2703 (Invite-created
