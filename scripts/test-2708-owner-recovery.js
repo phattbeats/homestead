@@ -309,13 +309,12 @@ async function loginRaw(username, password) {
   // ---- GROUP 4: API surfaces for admin recovery ----
   console.log('\nGroup 4 — /api/admin/owner/* endpoints');
 
-  // Admin endpoints accept header-trust auth. The server.js
-  // `authenticate` middleware recognizes x-authentik-username and
-  // provisions/claims the user on the fly; requireAdmin then
-  // checks `is_admin` on the resolved user. Head-admin is_admin=1
-  // → admin. Head-brandon is_admin=0 → non-admin. Empty headers →
-  // no auth. This avoids the session-cookie dance entirely; the
-  // outage-resilience posture is what Group 3 already proved.
+  // `login-paths` is a read-only ops/test inventory and stays gated
+  // behind `auth` + `requireAdmin` (header-trust or session). `recover`
+  // is DELIBERATELY unauthenticated — see server.js. The one-shot
+  // token is what authorizes the request, not the caller's session,
+  // because a real break-glass scenario has no session or headers to
+  // present at all.
 
   // GET /api/admin/owner/login-paths (no auth) → 401
   const r5 = await GET('/api/admin/owner/login-paths', HEAD_NONE);
@@ -345,15 +344,22 @@ async function loginRaw(username, password) {
   const minted = identity.mintOwnerRecoveryToken(db3, { ttlMs: 60_000 });
   assert(!minted.alreadyActive, 'mint for /recover test succeeds');
 
-  // Step B: POST /recover with a WRONG token → 401 invalid_or_expired_token.
-  const r8 = await POST('/api/admin/owner/recover', { token: 'b'.repeat(64), new_password: 'freshownerpw-12345' }, HEAD_ADMIN);
-  assertEq(r8.status, 401, '/recover with wrong token → 401');
+  // Step B: POST /recover with a WRONG token and ZERO auth headers
+  // (the true outage scenario) → 401 invalid_or_expired_token.
+  const r8 = await POST('/api/admin/owner/recover', { token: 'b'.repeat(64), new_password: 'freshownerpw-12345' }, HEAD_NONE);
+  assertEq(r8.status, 401, '/recover with wrong token, no auth at all → 401');
   const r8body = await r8.json();
   assertEq(r8body.error, 'invalid_or_expired_token', '/recover wrong-token error code matches');
 
-  // Step C: POST /recover with the CORRECT token → 200, password rotated.
-  const r9 = await POST('/api/admin/owner/recover', { token: minted.token, new_password: 'freshownerpw-12345' }, HEAD_ADMIN);
-  assertEq(r9.status, 200, '/recover with right token → 200');
+  // Step C: POST /recover with the CORRECT token and ZERO auth headers
+  // — no session, no x-authentik-* headers. This is the load-bearing
+  // assertion for PHA-2708: the owner forgot their password AND
+  // Authentik is unreachable, so there is nothing to authenticate
+  // with except the token itself. If this required a prior admin
+  // session it would be unreachable in the exact scenario it exists
+  // to fix.
+  const r9 = await POST('/api/admin/owner/recover', { token: minted.token, new_password: 'freshownerpw-12345' }, HEAD_NONE);
+  assertEq(r9.status, 200, '/recover with right token and NO auth (true outage) → 200');
   const r9body = await r9.json();
   assertEq(r9body.ok, true, '/recover response.ok === true');
   assertEq(r9body.username, 'admin', '/recover returns admin username');
@@ -362,21 +368,30 @@ async function loginRaw(username, password) {
   const relogin = await loginRaw('admin', 'freshownerpw-12345');
   assertEq(relogin.status, 200, 'owner re-login with rotated password → 200');
 
-  // Step E: replay within TTL → 401.
-  const replayApi = await POST('/api/admin/owner/recover', { token: minted.token, new_password: 'never-applied-9999' }, HEAD_ADMIN);
+  // Step E: replay within TTL, still with no auth → 401.
+  const replayApi = await POST('/api/admin/owner/recover', { token: minted.token, new_password: 'never-applied-9999' }, HEAD_NONE);
   assertEq(replayApi.status, 401, 'replay of consumed token → 401');
 
-  // Step F: short password rejected at the API layer.
-  const shortPw = await POST('/api/admin/owner/recover', { token: 'a'.repeat(64), new_password: 'short' }, HEAD_ADMIN);
+  // Step F: short password rejected at the API layer, no auth.
+  const shortPw = await POST('/api/admin/owner/recover', { token: 'a'.repeat(64), new_password: 'short' }, HEAD_NONE);
   assertEq(shortPw.status, 400, 'new_password too short → 400');
 
-  // Step G: missing token → 400.
-  const noToken = await POST('/api/admin/owner/recover', { new_password: 'rejected-no-token' }, HEAD_ADMIN);
+  // Step G: missing token, no auth → 400.
+  const noToken = await POST('/api/admin/owner/recover', { new_password: 'rejected-no-token' }, HEAD_NONE);
   assertEq(noToken.status, 400, 'missing token → 400');
 
-  // Step H: non-admin calling /recover → 403.
-  const nonAdmin = await POST('/api/admin/owner/recover', { token: 'c'.repeat(64), new_password: 'never-applied-9999' }, HEAD_BRANDON);
-  assertEq(nonAdmin.status, 403, '/recover as non-admin → 403');
+  // Step H: the caller's session identity is irrelevant to /recover —
+  // a valid token succeeds under a non-admin household member's
+  // session (e.g. Authentik is actually up, but for someone other
+  // than the owner) exactly as it does with no session, and a bad
+  // token still fails regardless of who's logged in. The TOKEN is
+  // the authorization, not the session.
+  const minted2 = identity.mintOwnerRecoveryToken(db3, { ttlMs: 60_000 });
+  assert(!minted2.alreadyActive, 'second mint for cross-identity test succeeds');
+  const nonAdminGoodToken = await POST('/api/admin/owner/recover', { token: minted2.token, new_password: 'freshownerpw-67890' }, HEAD_BRANDON);
+  assertEq(nonAdminGoodToken.status, 200, '/recover with right token succeeds under a non-admin session too');
+  const nonAdminBadToken = await POST('/api/admin/owner/recover', { token: 'c'.repeat(64), new_password: 'never-applied-9999' }, HEAD_BRANDON);
+  assertEq(nonAdminBadToken.status, 401, '/recover with wrong token still fails under a non-admin session');
 
   // Step I: GET /login-paths now shows recovery_token_active=false
   // (the consume cleared it).
@@ -433,9 +448,10 @@ async function loginRaw(username, password) {
   assertEq(revokeJson.cleared, true, 'CLI --revoke clears the active token');
 
   // After revoke, minting a fresh token succeeds (no alreadyActive).
-  // Login as owner with the rotated password from Group 4
-  // (freshownerpw-12345). Confirm password wasn't touched by --revoke.
-  const stillWorks = await POST('/api/login', { username: 'admin', password: 'freshownerpw-12345' }, HEAD_NONE);
+  // Login as owner with the last password rotation from Group 4's
+  // cross-identity step (freshownerpw-67890). Confirm password wasn't
+  // touched by --revoke.
+  const stillWorks = await POST('/api/login', { username: 'admin', password: 'freshownerpw-67890' }, HEAD_NONE);
   assertEq(stillWorks.status, 200, 'owner password NOT touched by revoke');
   db4.close();
   ok('Group 5: CLI round-trip works end-to-end');

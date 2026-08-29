@@ -18,8 +18,10 @@
 //   * The plaintext recovery token (one shot). The DB only sees the
 //     sha256(token); this stdout is the ONLY copy.
 //   * A ready-to-paste `curl` line the operator can run from any
-//     machine with an admin session to drive the actual password
-//     rotation through POST /api/admin/owner/recover.
+//     machine that can reach Homestead — no login required — to
+//     drive the actual password rotation through
+//     POST /api/admin/owner/recover. That endpoint is deliberately
+//     unauthenticated; the token itself is the credential.
 //   * The expiry timestamp (default 60 minutes).
 //   * The audit kind (`owner_recovery_minted`) and the OS user who
 //     ran the CLI, so the analytics_events row carries provenance.
@@ -99,7 +101,9 @@ try {
   // The plaintext token and a ready-to-paste curl line. Keep these on
   // ONE line so screen-scrapers don't accidentally split them.
   const host = process.env.RECOVERY_HOST || 'http://127.0.0.1:3001';
-  const curlExample = `curl -sS -X POST -b cookies.txt -H 'Content-Type: application/json' \\\n` +
+  // No -b cookies.txt / auth headers here on purpose — the recover
+  // endpoint is unauthenticated by design; the token is the credential.
+  const curlExample = `curl -sS -X POST -H 'Content-Type: application/json' \\\n` +
     `  -d '{"token":"${minted.token}","new_password":"REPLACE_ME_8_CHARS_MIN"}' \\\n` +
     `  ${host}/api/admin/owner/recover`;
 

@@ -121,22 +121,27 @@ because there is at most one of each.
 
 ## Procedure — consume the token
 
-From any machine with an authenticated admin session, run the
-`curl_example` line printed by the CLI:
+From any machine that can reach Homestead — no login required, run
+the `curl_example` line printed by the CLI:
 
 ```bash
-curl -sS -X POST -b cookies.txt \
+curl -sS -X POST \
   -H 'Content-Type: application/json' \
   -d '{"token":"<paste plaintext>","new_password":"REPLACE_ME_8_CHARS_MIN"}' \
   http://homestead.lan:3001/api/admin/owner/recover
 ```
 
-The endpoint requires an authenticated admin session
-(cookie auth or `x-authentik-username` header). The endpoint
-rotates the owner's `local_credentials.password_hash` via the
-canonical `setLocalPassword` (bcrypt + user-table sync), clears
-the recovery token columns, and writes
-`kind = 'owner_recovery_consumed'` to the audit log.
+The endpoint is **deliberately unauthenticated** — no session
+cookie, no `x-authentik-username` header, nothing. This is the
+whole point: the scenario this runbook exists for is "Authentik is
+unreachable AND the owner forgot their password," which means there
+is no session or header to present. The one-shot, 256-bit,
+TTL-bound token IS the credential, the same way a password is the
+credential for `/api/login`. The endpoint rotates the owner's
+`local_credentials.password_hash` via the canonical
+`setLocalPassword` (bcrypt + user-table sync), clears the recovery
+token columns, and writes `kind = 'owner_recovery_consumed'` to the
+audit log.
 
 A successful response looks like:
 
@@ -224,7 +229,7 @@ SELECT ts, kind, subject_id, meta
 | `/api/login` works with **no** `x-authentik-username` header — outage-resilience. | `Group 3` |
 | `/api/me` returns `{ user: null }` (200) with no headers — soft-unauthenticated, not 401. | `Group 3` |
 | `GET /api/admin/owner/login-paths` requires admin; carries no secret columns. | `Group 4` |
-| `POST /api/admin/owner/recover` requires admin; rejects new_password < 8 chars. | `Group 4` |
+| `POST /api/admin/owner/recover` requires NO prior session or headers — the token is the only credential — and rejects new_password < 8 chars. | `Group 4` |
 | Audit `meta` has no plaintext tokens or passwords. | `Group 2 + 4` |
 
 If any of these fail, reject the change. The owner lockout

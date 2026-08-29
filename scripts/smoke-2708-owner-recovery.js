@@ -146,12 +146,16 @@ const POST = (urlPath, body, head = HEAD_ADMIN) => fetch(`http://127.0.0.1:${por
     }, null, 2));
     console.log(`[smoke-2708] wrote smoke-2708-mint.json (owner=${cliJson.username}, actor=${cliJson.actor})`);
 
-    // 4) POST /api/admin/owner/recover with the FRESH token →
-    //    200, password rotated. Use HEAD_ADMIN for the admin gate.
+    // 4) POST /api/admin/owner/recover with the FRESH token, and NO
+    //    Authentik headers / session at all — this is the true
+    //    break-glass scenario the whole feature exists for (owner
+    //    forgot the password AND Authentik is unreachable, so there
+    //    is nothing else to authenticate with). The token alone must
+    //    be sufficient → 200, password rotated.
     const recoverResp = await POST('/api/admin/owner/recover', {
       token: cliJson.token,
       new_password: 'rotated-via-recovery-pw-12345',
-    }, HEAD_ADMIN);
+    }, HEAD_NONE);
     const recoverBody = await recoverResp.json();
     fs.writeFileSync(path.join(verifyOut, 'smoke-2708-recover-success.json'), JSON.stringify({
       status: recoverResp.status,
@@ -172,11 +176,11 @@ const POST = (urlPath, body, head = HEAD_ADMIN) => fetch(`http://127.0.0.1:${por
     if (relogin.status !== 200) throw new Error('relogin: owner must be able to log in with new password');
     if (!reloginBody.user || reloginBody.user.username !== 'admin') throw new Error('relogin: response.user.username must be admin');
 
-    // 6) Replay of the consumed token → 401.
+    // 6) Replay of the consumed token, still no auth → 401.
     const replay = await POST('/api/admin/owner/recover', {
       token: cliJson.token,
       new_password: 'replay-attempt-pw-9999',
-    }, HEAD_ADMIN);
+    }, HEAD_NONE);
     const replayBody = await replay.json();
     fs.writeFileSync(path.join(verifyOut, 'smoke-2708-recover-replay.json'), JSON.stringify({
       status: replay.status,
@@ -185,11 +189,11 @@ const POST = (urlPath, body, head = HEAD_ADMIN) => fetch(`http://127.0.0.1:${por
     console.log(`[smoke-2708] POST /api/admin/owner/recover (replay) → ${replay.status}`);
     if (replay.status !== 401) throw new Error('replay must return 401');
 
-    // 7) Wrong token → 401.
+    // 7) Wrong token, no auth → 401.
     const wrong = await POST('/api/admin/owner/recover', {
       token: 'a'.repeat(64),
       new_password: 'wrong-token-pw-1234',
-    }, HEAD_ADMIN);
+    }, HEAD_NONE);
     const wrongBody = await wrong.json();
     fs.writeFileSync(path.join(verifyOut, 'smoke-2708-recover-badtoken.json'), JSON.stringify({
       status: wrong.status,

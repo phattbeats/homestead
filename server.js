@@ -1060,14 +1060,25 @@ app.delete('/api/me/identities', auth, (req, res) => {
 //     via `identity.setLocalPassword`, and clears the token row.
 //     Replay is impossible — the hash is wiped on consume.
 //
-// Both endpoints require an authenticated admin session. The
-// recovery token is the ONLY thing that bypasses the
-// "current-password required" check; the operator's flow is
+// `login-paths` is a read-only inventory and stays gated behind an
+// authenticated admin session — it's an ops/test convenience, not
+// part of the break-glass path itself.
+//
+// `recover` is DELIBERATELY UNAUTHENTICATED. Break-glass means the
+// owner has no working credential (forgotten LAN password) AND
+// Authentik is unreachable (no x-authentik-* headers, no way to
+// establish a session at all) — gating this route behind `auth` +
+// `requireAdmin` would make it unreachable in exactly the scenario
+// PHA-2708 exists to fix. The one-shot, 256-bit, TTL-bound,
+// timing-safe-compared recovery token minted by
+// `scripts/reset-owner-password.js` (host-side, out of band) IS the
+// authentication for this route, the same way a password IS the
+// authentication for `/api/login`. The operator's flow is
 //   1. Run `scripts/reset-owner-password.js` on the host → prints
 //      token + curl example. The token is host-bound at this point.
-//   2. Hit `POST /api/admin/owner/recover` from the SPA with the
-//      token + new password. The audit log gets
-//      `owner_recovery_consumed` with the operator's username.
+//   2. POST the token + new password to `/api/admin/owner/recover`
+//      from any client — no prior login required. The audit log
+//      gets `owner_recovery_consumed`.
 app.get('/api/admin/owner/login-paths', auth, requireAdmin, (req, res) => {
   const ownerId = identity.findOwnerUserId(db);
   if (ownerId == null) return res.status(404).json({ error: 'no_owner' });
@@ -1088,7 +1099,7 @@ app.get('/api/admin/owner/login-paths', auth, requireAdmin, (req, res) => {
   });
 });
 
-app.post('/api/admin/owner/recover', auth, requireAdmin, (req, res) => {
+app.post('/api/admin/owner/recover', (req, res) => {
   const { token, new_password } = req.body || {};
   if (!token || typeof token !== 'string' || !new_password || typeof new_password !== 'string') {
     return res.status(400).json({ error: 'token and new_password required' });
@@ -1096,12 +1107,17 @@ app.post('/api/admin/owner/recover', auth, requireAdmin, (req, res) => {
   if (new_password.length < 8) {
     return res.status(400).json({ error: 'new_password too short', message: 'Owner recovery requires a new password of at least 8 characters.' });
   }
-  const me = db.prepare('SELECT username FROM users WHERE id = (SELECT id FROM users WHERE username = ?)').get(req.session.user.username);
+  // No prior session is required or expected — see the comment above
+  // this route. `actor` reflects an existing session if one happens
+  // to be present (e.g. an admin rotating the owner's password on
+  // their behalf), but the recovery token is what actually authorizes
+  // this request.
+  const actor = (req.session && req.session.user && req.session.user.username) || 'unauthenticated-recovery';
   const result = identity.consumeOwnerRecoveryToken(db, token, new_password);
   if (!result.ok) {
     identity.auditOwnerRecovery(db, {
       kind: 'owner_recovery_rejected',
-      actor: me ? me.username : 'unknown',
+      actor,
       userId: null,
       meta: { route: '/api/admin/owner/recover', code: result.code },
     });
@@ -1109,7 +1125,7 @@ app.post('/api/admin/owner/recover', auth, requireAdmin, (req, res) => {
   }
   identity.auditOwnerRecovery(db, {
     kind: 'owner_recovery_consumed',
-    actor: me ? me.username : 'unknown',
+    actor,
     userId: result.userId,
     meta: { route: '/api/admin/owner/recover' },
   });
