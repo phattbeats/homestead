@@ -1,3 +1,120 @@
+## v0.5.1 (2026-08-29) — Link Authentik later: OIDC self-service identity linking (PHA-2706)
+
+The standalone-Homestead user who registered with username + password
+can now add Authentik (or any RFC-compliant OIDC provider) as a
+SECOND sign-in path without migrating or replacing their account.
+Built on top of PHA-2704's canonical identity foundation.
+
+### What's new
+
+- **`lib/oidc-link.js` (new, 600 lines).** Pure-function OIDC
+  authorization-code + PKCE (RFC 7636) + state (RFC 6749 §10.12) +
+  nonce (OIDC Core §3.1.2.1) machinery. `createPending(db, userId)`
+  mints a one-time handle, PKCE pair, state, and nonce and binds
+  them to the requesting user + local-re-auth timestamp. `findPending`
+  / `recordValidated` / `consumePending` / `cancelPending` are the
+  state-machine transitions; `consumePending` is atomic and refuses
+  replays. `verifyIdToken` validates RS256 signature + `iss` + `aud` +
+  `nonce` + `exp` and rejects algorithm downgrade (HS256 / none).
+- **`oidc_link_states(handle, user_id, provider, issuer, ...,
+  state, nonce, code_verifier, code_challenge,
+  code_challenge_method, expires_at, status,
+  validated_subject, validated_email, validated_email_verified,
+  validated_display, ...)`** — pending-link state table.
+  `status` is `pending → consumed | cancelled | expired`. Validated
+  OIDC claims are stamped onto the row so `/confirm` never trusts
+  client-supplied subjects.
+- **`POST /api/me/identities/link/start { password }`** — verify
+  the local password (re-auth gate), mint a handle, return the
+  `authorize_url`. Refuses unauthenticated (401), missing password
+  (400), wrong password (401), users with no local credential
+  (400).
+- **`GET /api/me/identities/link/callback?handle=...&code=***&state=...`**
+  — token exchange + ID-token validation. 302's the browser to
+  `/identities-link.html?handle=...` after stamping validated claims
+  onto the pending row. JSON mode (Accept: application/json) for
+  programmatic callers (tests, future API integrations).
+- **`GET /api/me/identities/link/preview?handle=...`** — read-only
+  confirmation payload that names both identities explicitly so
+  the SPA can show "you are about to link <homestead_user> to
+  <oidc_account>".
+- **`POST /api/me/identities/link/confirm { handle }`** — writes
+  one `identity_links` row pointing at the existing `users.id`.
+  Subject comes from the validated row, NEVER from the client.
+  Refuses replays (410). Maps `identity_collision` to 409 with a
+  clear "contact admin for recovery" hint and the conflicting
+  user id.
+- **`POST /api/me/identities/link/cancel { handle }`** — user
+  bailed before confirming; burns the pending row.
+- **`POST /api/me/identities/:linkId/unlink`** — self-service
+  unlink by identity_links.id. Delegates to `identity.unlinkIdentity`
+  so the no_login_path rule is uniform across admin and
+  self-service paths.
+- **`public/identities-link.html`** — three-screen SPA: start
+  (verify local password + click Continue), confirm (names both
+  identities + click Link), done. Handle carried in
+  `sessionStorage` across the IdP round-trip; the SPA never sees
+  the id_token (server validates + stamps the row, SPA fetches
+  the read-only `/preview`).
+- **`lib/oidc-link-test-helper.js` (new)** — in-process OIDC mock
+  IdP for tests (RFC-compliant discovery, JWKS, /authorize,
+  /token). Generates an RSA keypair, signs id_tokens with the
+  matching private key, validates PKCE. No external network.
+
+### Security
+
+- The IdP subject is the only thing that becomes `provider_subject`.
+  Email is surfaced for display only — never used as the link key.
+- One-time handles prevent replay across the OIDC dance. State and
+  nonce are validated at `/callback`; the validated subject is
+  stamped onto the pending row; `/confirm` reads from the row, not
+  the request body.
+- Local re-auth (plaintext password verify against
+  `local_credentials`) is mandatory before starting a link. This
+  blocks a session-hijacker from silently adding an account they
+  can later sign in with.
+- Algorithm downgrade is refused at the verify step: only RS256
+  signatures are accepted (HS256 / none would let an attacker
+  forge a token signed with the client_secret).
+- Provider-subject collision (UNIQUE on
+  `(provider, issuer, provider_subject)`) is mapped to 409
+  `identity_collision` and surfaces the conflicting user id so the
+  SPA can show "this Authentik account is already linked to a
+  different Homestead user — contact an admin."
+
+### Tests
+
+- `scripts/test-2706-oidc-link.js` (77 assertions across 16
+  groups): schema, unauth/missing-password/wrong-password/no-local
+  rejection on /start, happy-path PKCE + state + nonce round-trip,
+  callback with mock IdP, /preview confirmation payload, /confirm
+  writing one identity_links row, replay refusal (410), collision
+  refusal (409 with conflicting user id), cancel burns handle,
+  state mismatch rejection (400), HS256 algorithm downgrade
+  rejection at verifyIdToken, self-service /unlink, data-layer
+  no_login_path orphan-block, orphan-allow when local credential
+  exists, handle ownership (one user can't consume another's
+  handle).
+- `scripts/smoke-2706-oidc-link.js` — end-to-end smoke against a
+  real server.js boot + real OIDC mock IdP. Writes 6 verify-out
+  artifacts (authorize-url, preview, link-row, collision response,
+  unlink result, db shape).
+
+### Configuration
+
+Production Authentik integration requires four env vars:
+
+```
+OIDC_ISSUER=https://authentik.phatt.vip/application/oauth/homestead/
+OIDC_CLIENT_ID=<from Authentik application config>
+OIDC_CLIENT_SECRET=<from Authentik application config>
+OIDC_REDIRECT_URI=https://life.phatt.vip/api/me/identities/link/callback
+```
+
+OIDC_SCOPES, OIDC_LINK_TTL_MS (default 600000 / 10min, max 15min),
+and OIDC_AUTHORIZE_URL / OIDC_TOKEN_URL / OIDC_ID_TOKEN_PEM are
+optional overrides.
+
 ## v0.5.0 (2026-08-29) — Identity foundation: stable users.id + local_credentials + identity_links (PHA-2704)
 
 **The P0 invite flow depends on this.** PHA-2703 (Invite-created

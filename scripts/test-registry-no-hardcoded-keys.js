@@ -105,6 +105,13 @@ const EXCLUDE_FILES = new Set([
   // credentials shape. Same pattern as the sibling acceptance tests.
   'scripts/test-2704-identity-foundation.js',
   'scripts/test-2704-identity-api.js',
+  // PHA-2706 OIDC link tests: assert the oidc_link_states schema
+  // (provider/issuer/handle literals) and the OIDC link lifecycle
+  // (PKCE code_verifier, state, nonce, issuer subject). Same pattern
+  // as the sibling acceptance tests — literals are test config, not
+  // render code.
+  'scripts/test-2706-oidc-link.js',
+  'scripts/smoke-2706-oidc-link.js',
 ]);
 
 const SCAN_EXTS = new Set([
