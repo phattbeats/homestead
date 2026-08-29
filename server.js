@@ -31,6 +31,7 @@ const fs = require('fs');
 const webpush = require('web-push');
 
 const userModel = require('./lib/user-model');
+const identity = require('./lib/identity');
 const modules = require('./lib/modules');
 const plexSync = require('./lib/sync/plex');
 const kavitaSync = require('./lib/sync/kavita');
@@ -526,8 +527,12 @@ app.get('/api/login', (req, res) => {
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body || {};
   const cleanUser = userModel.validateUsername(username);
-  const u = db.prepare('SELECT * FROM users WHERE username = ?').get(cleanUser || '');
-  if (!u || !u.pass_hash || !bcrypt.compareSync(password || '', u.pass_hash)) {
+  const u = db.prepare('SELECT id, username, display, color, is_admin FROM users WHERE username = ?').get(cleanUser || '');
+  // PHA-2704: password lives in local_credentials now, not users.pass_hash.
+  // hasLocalCredential() returns false for users without a local account
+  // (e.g. header-trust-only profiles) — we still respond 401 in that case
+  // so the LAN probe can't tell 'wrong password' from 'no local account'.
+  if (!u || !identity.hasLocalCredential(db, u.id) || !identity.verifyLocalPassword(db, u.id, password || '')) {
     return res.status(401).json({ error: 'Wrong username or password' });
   }
   userModel.touchLastSeen(db, u.id);
@@ -847,6 +852,168 @@ app.get('/api/invites/:code/redemptions', auth, requireAdmin, (req, res) => {
   res.json({ redemptions: rows });
 });
 
+// ---- PHA-2711: same-day closed-beta vertical path ----
+//
+// Public (no-auth) invite-handshake endpoints so a fresh browser can
+// complete the entire path without an Authentik session or a
+// pre-provisioned account. The two routes mirror the two choices the
+// /invite/:code page offers:
+//
+//   * POST /api/public/invites/:code/signup — create a fresh standalone
+//     local account, atomically seed defaults + add wall membership +
+//     consume the invite. Single transaction; any failure rolls back.
+//
+//   * POST /api/public/invites/:code/signin — claim the invite on an
+//     existing local account. Verifies the local credential, then adds
+//     the wall membership and stamps the redemption. Preserves the
+//     invite target through sign-in (the user is signing in WITH the
+//     invite, not bouncing to /api/login first).
+//
+// The public peek (GET /api/public/invites/:code) is the third leg:
+// it's what the /invite/:code HTML page hits BEFORE the user has
+// decided between signup and signin, so the page can render the wall
+// card + the inviter + the admin note without an auth round-trip.
+//
+// All three paths use the existing users/pass_hash local-account
+// model (PHA-2711 implementation boundary). They do NOT depend on
+// PHA-2704's local_credentials table — but they DO write to it
+// because identity.createUser is the canonical path and it populates
+// both users and local_credentials in one tx, with users.pass_hash
+// shadow-synced. Future PHA-2705/2706 hardening is additive and
+// lossless against this data.
+//
+// Break-glass: POST /api/public/invites/reset consumes a one-shot
+// recovery token (minted via the reset CLI in scripts/ — see
+// scripts/reset-owner-password.js). This is the documented
+// "Brandon's owner account has a working local credential independent
+// of Authentik" path: if the env-seeded password is forgotten, the
+// admin mints a 1-hour token via host-side CLI, uses it once, and the
+// new password takes effect. The token is stored as a sha256 hash
+// with a 1-hour TTL and cleared on consume.
+
+// GET /api/public/invites/:code — peek an invite without auth, so the
+// /invite/:code page can render "what is Homestead / who invited you /
+// which wall" before any signup/signin choice is made. 410 on
+// expired/exhausted/revoked; 404 on unknown.
+app.get('/api/public/invites/:code', (req, res) => {
+  try {
+    const inv = invites.peek(db, req.params.code);
+    if (!inv) return res.status(404).json({ error: 'invite_not_found' });
+    res.json({
+      id: inv.id,
+      wall_slug: inv.wall_slug,
+      wall_name: inv.wall_name,
+      note: inv.note || null,
+      inviter: inv.created_by_username ? {
+        username: inv.created_by_username,
+        display: inv.created_by_display || inv.created_by_username,
+      } : null,
+      expires_at: inv.expires_at,
+      max_uses: inv.max_uses,
+      uses_count: inv.uses_count,
+      remaining: Math.max(0, inv.max_uses - inv.uses_count),
+    });
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.code, detail: err.message, invite: { id: err.invite && err.invite.id, wall_slug: err.invite && err.invite.wall_slug, wall_name: err.invite && err.invite.wall_name } });
+    console.error('[api/public/invites/:code GET]', err);
+    res.status(500).json({ error: 'peek_failed' });
+  }
+});
+
+// POST /api/public/invites/:code/signup — public signup path.
+// Body: { username, display, password }
+// On success: 201 with { user, wall_slug, wall_name, first_run, redirect, members }
+// On failure: 400 invalid_username/weak_password, 404 invite_not_found,
+//             409 username_taken, 410 invite_expired/invite_already_redeemed/invite_revoked.
+app.post('/api/public/invites/:code/signup', (req, res) => {
+  const { username, display, password } = req.body || {};
+  try {
+    const result = invites.signupViaInvite(db, req.params.code, { username, display, password });
+    // Start a session for the new user immediately — same shape the
+    // /api/login handler sets, so the SPA can land on /welcome.html
+    // without a second round-trip.
+    req.session.user = {
+      username: result.user.username,
+      display: result.user.display,
+      color: db.prepare('SELECT color FROM users WHERE id = ?').get(result.user.id)?.color || '#7c9a72',
+      isAdmin: false,
+      authProvider: 'password',
+    };
+    recordSessionStart(req, { id: result.user.id, username: result.user.username, display: result.user.display }, 'password');
+    res.status(201).json({
+      ok: true,
+      user: result.user,
+      wall_slug: result.wall_slug,
+      wall_name: result.wall_name,
+      first_run: result.first_run,
+      redirect: result.redirect,
+      members: wallMembers.getMembers(db, result.wall_slug).members,
+    });
+  } catch (err) {
+    if (err && err.status) {
+      const body = { error: err.code || 'invalid', detail: err.message };
+      if (err.field) body.field = err.field;
+      return res.status(err.status).json(body);
+    }
+    console.error('[api/public/invites/:code/signup]', err);
+    res.status(500).json({ error: 'signup_failed' });
+  }
+});
+
+// POST /api/public/invites/:code/signin — public signin-and-claim path.
+// Body: { username, password }
+// On success: 200 with same shape as signup.
+// On failure: 401 invalid_credentials (ambiguous for both unknown user
+//             and wrong password, same as /api/login), 404/410 for invite.
+app.post('/api/public/invites/:code/signin', (req, res) => {
+  const { username, password } = req.body || {};
+  try {
+    const result = invites.signinViaInvite(db, req.params.code, { username, password });
+    req.session.user = {
+      username: result.user.username,
+      display: result.user.display,
+      color: db.prepare('SELECT color FROM users WHERE id = ?').get(result.user.id)?.color || '#7c9a72',
+      isAdmin: false,
+      authProvider: 'password',
+    };
+    recordSessionStart(req, { id: result.user.id, username: result.user.username, display: result.user.display }, 'password');
+    res.json({
+      ok: true,
+      user: result.user,
+      wall_slug: result.wall_slug,
+      wall_name: result.wall_name,
+      first_run: result.first_run,
+      redirect: result.redirect,
+      members: wallMembers.getMembers(db, result.wall_slug).members,
+    });
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.code || 'invalid', detail: err.message });
+    console.error('[api/public/invites/:code/signin]', err);
+    res.status(500).json({ error: 'signin_failed' });
+  }
+});
+
+// POST /api/public/invites/reset — break-glass owner recovery.
+// Body: { token, new_password } — the token is minted by the
+// scripts/reset-owner-password.js CLI (or by an admin via the
+// lib/invites.createResetToken API). On success: 200 with { user_id, username }.
+// The endpoint is intentionally PUBLIC (no session, no auth) because
+// the whole point is to recover from a state where you can't log in.
+// The token itself is the credential; sha256-hashed + 1-hour TTL +
+// single-use, so a leak is short-lived and replay-resistant.
+app.post('/api/public/invites/reset', (req, res) => {
+  const { token, new_password } = req.body || {};
+  try {
+    const userId = invites.consumeResetToken(db, token, new_password);
+    const u = db.prepare('SELECT id, username, display, color FROM users WHERE id = ?').get(userId);
+    res.json({ ok: true, user_id: userId, username: u && u.username });
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.code || 'invalid', detail: err.message });
+    console.error('[api/public/invites/reset]', err);
+    res.status(500).json({ error: 'reset_failed' });
+  }
+});
+
 // POST /api/invites/:code/redeem — authed user redeems an invite.
 //   1. resolve caller (session OR header-trust)
 //   2. look up invite (peek semantics; 410 if expired/redeemed)
@@ -911,10 +1078,17 @@ app.get('/api/walls/:slug/members', auth, (req, res) => {
 
 app.post('/api/password', auth, (req, res) => {
   const { current, next } = req.body || {};
-  const u = db.prepare('SELECT * FROM users WHERE username = ?').get(req.session.user.username);
-  if (!bcrypt.compareSync(current || '', u.pass_hash)) return res.status(400).json({ error: 'Current password is wrong' });
+  const u = db.prepare('SELECT id, username FROM users WHERE username = ?').get(req.session.user.username);
+  if (!u) return res.status(401).json({ error: 'unknown_user' });
+  // PHA-2704: read current password via identity.verifyLocalPassword;
+  // write the new password via identity.setLocalPassword. The legacy
+  // users.pass_hash column is kept in sync as a deprecated shadow so
+  // pre-PHA-2704 readers (other lib/ modules, future migrations) still
+  // see the value. New code MUST go through the local_credentials table.
+  if (!identity.verifyLocalPassword(db, u.id, current || '')) return res.status(400).json({ error: 'Current password is wrong' });
   if (!next || next.length < 4) return res.status(400).json({ error: 'New password too short' });
-  db.prepare('UPDATE users SET pass_hash = ? WHERE username = ?').run(bcrypt.hashSync(next, 10), u.username);
+  identity.setLocalPassword(db, u.id, next);
+  db.prepare('UPDATE users SET pass_hash = (SELECT password_hash FROM local_credentials WHERE user_id = ?) WHERE id = ?').run(u.id, u.id);
   res.json({ ok: true });
 });
 
@@ -962,18 +1136,87 @@ app.put('/api/users/:username', auth, (req, res) => {
   );
   res.json({ ok: true });
 });
+// ---- identity foundation (PHA-2704) ----
+// Read/write endpoints for the canonical identity surface. New API
+// paths that downstream features (PHA-2705 invite enrollment, PHA-2706
+// Authentik linking, PHA-2708 owner recovery) build on top of.
+//
+// GET  /api/me/identities       — list linked external identities for the signed-in user
+// POST /api/me/identities       — link a new external identity (admin-gated; PHA-2706 will
+//                                  replace this with the OIDC-flow version)
+// DELETE /api/me/identities     — unlink an external identity (refuses the last link when
+//                                  the user also has no local credential)
+app.get('/api/me/identities', auth, (req, res) => {
+  const u = db.prepare('SELECT id FROM users WHERE username = ?').get(req.session.user.username);
+  if (!u) return res.status(401).json({ error: 'unknown_user' });
+  res.json({ identities: identity.listIdentityLinks(db, u.id) });
+});
+app.post('/api/me/identities', auth, (req, res) => {
+  const me = db.prepare('SELECT id, is_admin FROM users WHERE username = ?').get(req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { user_id, provider, issuer, provider_subject } = req.body || {};
+  // PHA-2704 surface: link an identity on behalf of an existing user.
+  // Today this is admin-only — the self-service Authentik OIDC flow
+  // lands in PHA-2706. The admin path is required so the migration
+  // tooling (PHA-2703 release gate "provider collisions stop safely
+  // and require recovery/admin review") can resolve collisions.
+  if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+  if (!provider || !issuer || !provider_subject) {
+    return res.status(400).json({ error: 'provider, issuer, provider_subject required' });
+  }
+  const targetId = user_id != null ? Number(user_id) : me.id;
+  try {
+    const result = identity.linkIdentity(db, targetId, provider, issuer, provider_subject);
+    res.status(result.alreadyLinked ? 200 : 201).json({ ok: true, ...result });
+  } catch (e) {
+    if (e.code === 'identity_collision') {
+      return res.status(409).json({ error: 'identity_collision', conflictingUserId: e.conflictingUserId });
+    }
+    if (e.message && e.message.startsWith('provider required')) return res.status(400).json({ error: 'provider required' });
+    if (e.message && e.message.startsWith('issuer required')) return res.status(400).json({ error: 'issuer required' });
+    if (e.message && e.message.startsWith('provider_subject required')) return res.status(400).json({ error: 'provider_subject required' });
+    throw e;
+  }
+});
+app.delete('/api/me/identities', auth, (req, res) => {
+  const me = db.prepare('SELECT id, is_admin FROM users WHERE username = ?').get(req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { provider, issuer, provider_subject, user_id } = req.body || {};
+  if (!provider || !issuer || !provider_subject) {
+    return res.status(400).json({ error: 'provider, issuer, provider_subject required' });
+  }
+  // Admins can target another user via user_id (recovery tooling per
+  // PHA-2703 release gate "provider collisions require recovery/admin
+  // review"). Self-service path is always me.id.
+  let targetId = me.id;
+  if (user_id != null && user_id !== me.id) {
+    if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+    targetId = Number(user_id);
+    if (!Number.isInteger(targetId)) return res.status(400).json({ error: 'invalid user_id' });
+  }
+  const result = identity.unlinkIdentity(db, targetId, provider, issuer, provider_subject);
+  if (result.blocked === 'no_login_path') {
+    return res.status(409).json({ error: 'no_login_path', message: 'Refusing to unlink the last identity for a user with no local credential — would orphan the account.' });
+  }
+  if (!result.removed) return res.status(404).json({ error: 'identity_not_found' });
+  res.json({ ok: true });
+});
+
 app.post('/api/users/:username/password', auth, (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
-  const target = db.prepare('SELECT * FROM users WHERE username = ?').get(req.params.username);
+  const target = db.prepare('SELECT id, username FROM users WHERE username = ?').get(req.params.username);
   if (!target) return res.status(404).json({ error: 'not found' });
   const { current, next } = req.body || {};
   if (!next || next.length < 4) return res.status(400).json({ error: 'New password too short' });
   if (me.username === target.username) {
-    if (!bcrypt.compareSync(current || '', target.pass_hash)) return res.status(400).json({ error: 'Current password is wrong' });
+    // PHA-2704: same path as /api/password — verify via local_credentials,
+    // write via setLocalPassword, sync the legacy users.pass_hash shadow.
+    if (!identity.verifyLocalPassword(db, target.id, current || '')) return res.status(400).json({ error: 'Current password is wrong' });
   } else if (!me.is_admin) {
     return res.status(403).json({ error: 'admin only' });
   }
-  db.prepare('UPDATE users SET pass_hash = ? WHERE username = ?').run(bcrypt.hashSync(next, 10), target.username);
+  identity.setLocalPassword(db, target.id, next);
+  db.prepare('UPDATE users SET pass_hash = (SELECT password_hash FROM local_credentials WHERE user_id = ?) WHERE id = ?').run(target.id, target.id);
   res.json({ ok: true });
 });
 
