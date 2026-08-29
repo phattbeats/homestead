@@ -57,6 +57,7 @@ const notifications = require('./lib/notifications');
 const analytics = require('./lib/analytics');
 const invites = require('./lib/invites');
 const wallMembers = require('./lib/wall-members');
+const porchSweep = require('./lib/porch/sweep');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -98,6 +99,10 @@ media.migrate(db);
 // media_uploads(id), so it runs after userModel.migrate and media.migrate.
 walls.migrate(db);
 walls.seed(db);
+// PHA-2646: Porch sweep scheduler ledger (sweep-state cadence gate +
+// agent-action budget/cooldown ledger). FKs to walls(id)/wall_posts(id)/
+// users(id), so it runs after walls.migrate().
+porchSweep.migrate(db);
 analytics.migrate(db);
 // PHA-2207 (PHA-2200.6): invite codes. FKs to walls(slug), so it
 // runs after walls.migrate().
@@ -3282,6 +3287,20 @@ function startHealthChecker() {
     },
   });
 }
+
+// ---- Porch sweep scheduler boot (PHA-2646) ----
+// Same independent-setInterval pattern as startHealthChecker above.
+// onDecision is left at lib/porch/sweep.js's default (log-only) stub
+// until the participation contract (PHA-2645) lands — this loop's job
+// is only to decide WHEN an agent should consider a post, not whether
+// it actually reacts.
+let porchSweepHandle = null;
+function startPorchSweep() {
+  if (porchSweepHandle) return;
+  porchSweepHandle = porchSweep.start(db, {
+    log: (...args) => console.log('[porch-sweep]', ...args),
+  });
+}
 if (require.main === module) {
   // ---- daily digest scheduler (PHA-1619) ----
   // Runs once on boot and again every 30 minutes. The scheduler is
@@ -3426,6 +3445,7 @@ if (require.main === module) {
   }
   startScheduler();
   startHealthChecker();
+  startPorchSweep();
   app.listen(PORT, () => console.log(`Homestead on :${PORT}`));
 }
 module.exports = app;
