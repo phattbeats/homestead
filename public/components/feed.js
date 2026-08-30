@@ -1,44 +1,17 @@
-// Homestead — Wall feed/composer/reactions component (PHA-2200.5 / PHA-2206).
+// Homestead — Wall feed/composer/reactions component.
+// Vanilla JS, no framework, no build step. Extracted from porch.js
+// (PHA-2200.5/PHA-2206/PHA-2151). Mounted by both /porch.html and
+// /index.html's #page-wall; same component in both placements.
 //
-// Placement-agnostic feed module extracted from public/porch.js (PHA-2151).
-// Mounts the full wall surface (composer, chronological feed, reactions,
-// comments, "Older" pagination) into ANY container, with optional canPost /
-// canReact / canComment gates. Used in two placements per PHA-2200 §6:
-//
-//   1. /porch.html — full-page standalone (single-wall or wall-picker mode)
-//   2. /index.html — inside #page-wall when the wall module is enabled
-//                    alongside other modules (meadow / feed-tabs layout)
-//
-// The third path — the `wall` module being the SOLE enabled module — is
-// served by /porch.html redirect from /api/me/layout's `defaultRoute`.
-// This component is identical in both placements; the only difference is
-// the chrome (back button, nav) and the page transition logic.
-//
-// Vanilla JS, no framework, no build step — same convention as
-// public/index.html / public/porch.js. Talks to the wall/media routes
-// added in PHA-2150/PHA-2149 (lib/walls.js, lib/media.js) plus the
-// GET /api/link-preview route added alongside PHA-2151.
-//
-// Contract:
-//   window.HomesteadFeed.mount(target, opts) -> { dispose, setWall, root }
-//     target:  HTMLElement to render into (its existing children are kept;
-//              the component appends a .feed-root child)
-//     opts:    { apiBase='/api', wallSlug=null (default: first wall),
-//                canPost=true, canReact=true, canComment=true }
-//   window.HomesteadFeed.unmount(target)
-//     Disposes the instance bound to target. If target was never mounted,
-//     no-op.
-//
-// The component is idempotent: mounting into an already-mounted target
-// unmounts the previous instance first so callers don't have to track
-// lifecycle. Two placements (porch.html + index.html's #page-wall) coexist
-// in different frames / tabs without collision because each mount is keyed
-// to its own target.
+// API:
+//   HomesteadFeed.mount(target, opts) -> { dispose, setWall, root }
+//   HomesteadFeed.unmount(target)
+//     opts: { apiBase='/api', wallSlug=null, canPost=true, canReact=true, canComment=true }
+// Idempotent re-mount: prior instance on the same target is disposed first.
 
 'use strict';
 
 (function () {
-  // Shared constants — these are immutable across instances.
   const REACTIONS = Object.freeze([
     Object.freeze({ emoji: '+1',    label: '👍' }),
     Object.freeze({ emoji: 'joy',   label: '😂' }),
@@ -47,14 +20,10 @@
     Object.freeze({ emoji: 'heart', label: '❤️' }),
   ]);
 
-  // Instance map: lets `unmount(target)` find the right instance and lets
-  // idempotent re-mount clean up the previous binding. WeakMap so
-  // disposing the target element doesn't leak memory.
+  // WeakMap so disposing the target element doesn't leak memory.
   const INSTANCES = new WeakMap();
 
-  // ---------------------------------------------------------------------------
-  // Pure helpers (no DOM, no state — reusable across instances + tests).
-  // ---------------------------------------------------------------------------
+  // Pure helpers — no DOM, reusable across instances + tests.
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -76,21 +45,14 @@
   }
 
   function fmtTime(iso) {
-    try {
-      const d = new Date(iso.replace(' ', 'T') + 'Z');
-      return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-    } catch (_) { return iso || ''; }
+    const d = new Date(String(iso || '').replace(' ', 'T') + 'Z');
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   }
 
   function postMediaHtml(p) {
-    if (p.kind === 'image') {
-      const url = `/api/media/${p.mediaId}`;
-      return `<div class="post-media"><img src="${esc(url)}" loading="lazy" alt=""></div>`;
-    }
-    if (p.kind === 'video') {
-      const url = `/api/media/${p.mediaId}`;
-      return `<div class="post-media"><video src="${esc(url)}" controls preload="metadata"></video></div>`;
-    }
+    const url = p.mediaId ? `/api/media/${p.mediaId}` : '';
+    if (p.kind === 'image') return `<div class="post-media"><img src="${esc(url)}" loading="lazy" alt=""></div>`;
+    if (p.kind === 'video') return `<div class="post-media"><video src="${esc(url)}" controls preload="metadata"></video></div>`;
     if (p.kind === 'link' && p.link) {
       return `<a class="post-link" href="${esc(p.link.url)}" target="_blank" rel="noopener noreferrer">
         <div class="lp-title">${esc(p.link.title || p.link.url)}</div>
@@ -114,10 +76,7 @@
     }).join('')}</div>`;
   }
 
-  // PHA-2647: honest-identity badge + admin-only vote-off, shared markup.
-  // PHA-2827.D: `kind === 'built-in'` (Hearth) gets its own label — he's
-  // not an installed third-party character, so the generic "[agent]"
-  // badge would undersell/misrepresent him.
+  // PHA-2647: agent badge + vote-off. PHA-2827.D: Hearth ('built-in') gets its own label.
   function agentBadgeHtml(kind) {
     if (kind === 'built-in') {
       return `<span class="agent-badge" title="Hearth — the house's built-in agent">[hearth]</span>`;
@@ -161,13 +120,8 @@
     </div>`;
   }
 
-  // ---------------------------------------------------------------------------
-  // Factory: create a new instance bound to a target element. Each instance
-  // owns its own state (ME, WALLS, WALL, POSTS, CURSOR, etc.), DOM refs
-  // scoped via `.feed-root`, and a disposers list for cleanup. boot() is
-  // exposed on the returned object so mount() can kick it off after the
-  // instance is fully bound.
-  // ---------------------------------------------------------------------------
+  // Per-instance factory — each instance owns its own state, DOM refs scoped
+  // via `.feed-root`, and a disposers list for cleanup.
 
   function createInstance(target, cfg) {
     const root = document.createElement('div');
@@ -292,21 +246,11 @@
       <option value="none">Notify: None</option>
     </select>`;
 
-      // PHA-2727 comp A: on the wall-only screen (no other modules enabled,
-      // no bottom bar to dock into) the single available action becomes a
-      // centered floating "+" button, and profile/settings — which had no
-      // entry point at all on this standalone shell — move into a "⋯"
-      // utility chip in the header. Both are opt-in via cfg so the
-      // meadow/feed-tabs placement (mounted inside index.html, which already
-      // has its own fab/avatar/nav chrome) is unaffected.
+      // PHA-2727: centered FAB + util chip. Both opt-in via cfg so the index.html
+      // mount (which has its own chrome) is unaffected.
       const utilChipHtml = cfg.utilityChip ? `<button type="button" id="utilChip" class="util-chip" aria-label="Profile and settings">⋯</button>` : '';
       const composerWrapOpen = cfg.primaryFab ? '' : ' on';
-      // PHA-2822: the standalone wall-only shell is a starting room, not
-      // the whole house — but until now nothing on it said so. A quiet
-      // pill (not a pill row, not a tab strip) is the one door out.
-      // Only rendered when the caller passes addRoomPill (porch.html);
-      // the index.html #page-wall mount already has its own "+ Add
-      // rooms" pill wired to the same /modules.html sheet.
+      // PHA-2822: starting-room pill. Caller passes addRoomPill (porch.html).
       const addRoomPillHtml = cfg.addRoomPill ? `<a href="/modules.html" id="addRoomPill" class="add-room-pill">+ Add a room</a>` : '';
 
       root.innerHTML = `
@@ -344,14 +288,10 @@
 
     async function boot() {
       aborter = new AbortController();
-      // Render the static shell (header, composer, feed container)
-      // BEFORE the first network round-trip — that way the user sees
-      // a populated UI immediately, and the caller's `state: 'visible'`
-      // selectors (Playwright smokes, screenshots) find their targets
-      // even on a slow network. The pre-fix boot() didn't call
-      // renderShell(), leaving an empty <div class="feed-root"> until
-      // loadPosts() succeeded — a regression in the PHA-2206 extraction
-      // (renderShell was defined but never invoked).
+      // Render the static shell before the first network round-trip so the user
+      // sees a populated UI immediately (Playwright `state: 'visible'` selectors
+      // fire even on slow networks). PHA-2206 regression: boot() previously
+      // forgot to call renderShell().
       renderShell();
       try {
         const me = await api('GET', '/me', null, false, aborter.signal);
@@ -403,7 +343,7 @@
     // Reactions omitted: broadcasting needs a per-viewer myReactions diff.
     function connectLive() {
       closeLive();
-      if (typeof EventSource === 'undefined' || !WALL || document.hidden) return;
+      if (!WALL || document.hidden) return;
       sseGaveUp = false;
       sse = new EventSource(url(`/walls/${encodeURIComponent(WALL)}/events`));
       sse.addEventListener('post', (e) => {
@@ -449,9 +389,7 @@
       connectLive();
     }
 
-    // PHA-2727: centered FAB toggles the composer card open/closed instead
-    // of it always occupying the top of the feed. Closes again after a
-    // successful post so the wall reads as content-first between posts.
+    // PHA-2727: centered FAB toggles the composer card. Closes after a successful post.
     function wireComposeFab() {
       const fab = $('#composeFab', root);
       const wrap = $('#composerWrap', root);
@@ -476,10 +414,7 @@
       if (fab) fab.classList.remove('open');
     }
 
-    // PHA-2727: the standalone porch shell had no profile/settings entry
-    // point at all (that chrome lives only in index.html's header). The
-    // "⋯" chip surfaces the minimal set every user needs — password change,
-    // logout — without pulling in the admin-only settings sheet.
+    // PHA-2727: standalone porch shell needed a profile/settings entry point.
     function wireUtilChip() {
       const chip = $('#utilChip', root);
       const sheet = $('#utilSheet', root);
@@ -537,9 +472,7 @@
       });
     }
 
-    // ---- per-wall notify level (PHA-2656: dropdown was decorative — no
-    // load/save wired to the wall_notification_prefs table behind
-    // GET/PUT /api/walls/:slug/notifications, added in PHA-2218) ----
+    // PHA-2656: notify-level dropdown wired to GET/PUT /api/walls/:slug/notifications.
 
     async function refreshNotifyLevel() {
       const sel = $('#notifyLevel', root);
@@ -646,7 +579,7 @@
       });
     }
 
-    // PHA-2647: reversible per-wall opt-out; reload from the server.
+    // PHA-2647: reversible per-wall opt-out.
     async function onVoteOffClick(btn) {
       const username = btn.dataset.username;
       if (!username) return;
@@ -952,9 +885,8 @@
       renderFeed();
       try {
         const created = await api('POST', `/walls/${encodeURIComponent(WALL)}/posts`, body);
-        // The live-update SSE event for this same post can land before
-        // this response does, already inserting `created.id` — drop that
-        // copy so replacing the optimistic placeholder doesn't double it.
+        // SSE for this same post can land first and insert `created.id` already;
+        // drop that copy so replacing the optimistic placeholder doesn't double it.
         POSTS = POSTS.filter((p) => p.id !== created.id);
         const idx = POSTS.findIndex((p) => p.id === tempId);
         if (idx !== -1) POSTS[idx] = created;
@@ -985,8 +917,6 @@
       INSTANCES.delete(target);
     }
 
-    // Public per-instance handle. boot is exposed so mount() can kick it
-    // off after the instance is bound.
     return {
       dispose,
       root,
@@ -995,9 +925,7 @@
     };
   }
 
-  // ---------------------------------------------------------------------------
   // Public API.
-  // ---------------------------------------------------------------------------
 
   function mount(target, opts) {
     if (!target || !(target instanceof HTMLElement)) {
@@ -1010,13 +938,11 @@
       canReact: true,
       canComment: true,
     }, opts || {});
-    // Idempotent re-mount: dispose any prior instance bound to this target.
     const prior = INSTANCES.get(target);
     if (prior) prior.dispose();
     const inst = createInstance(target, cfg);
     INSTANCES.set(target, inst);
-    // Kick off boot — not awaited; mount returns synchronously.
-    // The microtask delay lets synchronous mount() callers finish binding
+    // setTimeout(0) defers boot so synchronous mount() callers finish binding
     // before boot starts touching the DOM.
     setTimeout(() => { try { inst.boot(); } catch (_) {} }, 0);
     return inst;
@@ -1027,17 +953,11 @@
     if (inst) inst.dispose();
   }
 
-  // ---------------------------------------------------------------------------
-  // Expose. Frozen so a runtime bug can't silently extend the API surface.
-  // ---------------------------------------------------------------------------
-
+  // Frozen so a runtime bug can't silently extend the API surface.
   window.HomesteadFeed = Object.freeze({ mount, unmount });
 
-  // ---------------------------------------------------------------------------
-  // Test-only export (vm.runInContext sandbox). NEVER used by production.
-  // The pure helpers above are exported under underscore-prefixed names so
-  // the vm sandbox can drive them without a DOM.
-  // ---------------------------------------------------------------------------
+  // Test-only export (vm.runInContext). NEVER used in production.
+  // Pure helpers exposed under underscore-prefixed names for sandbox tests.
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
