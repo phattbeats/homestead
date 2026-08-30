@@ -100,6 +100,29 @@ const EXCLUDE_FILES = new Set([
   // the layout API never advertises a 404 HTML route. Same pattern as the
   // sibling acceptance tests above — literals are test config, not render code.
   'scripts/test-2587-layout-route-contract.js',
+  // PHA-2704 identity foundation tests: assert the new identity_links
+  // schema (provider/issuer/provider_subject literals) and the local
+  // credentials shape. Same pattern as the sibling acceptance tests.
+  'scripts/test-2704-identity-foundation.js',
+  'scripts/test-2704-identity-api.js',
+  // PHA-2711 invite-signup tests: assert the public invite path uses
+  // 'password' as the auth_provider and 'household' as the seed wall
+  // slug. Same pattern as sibling acceptance tests — test fixtures,
+  // not render branches.
+  'scripts/test-2711-invite-signup.js',
+  // PHA-2708 owner-recovery tests: assert the recovery primitive
+  // strings ("owner_recovery_minted"/"owner_recovery_consumed"/
+  // etc.) and the audit kind enum ("owner_recovery"). Same
+  // pattern as the sibling acceptance tests — literals are test
+  // config, not render code.
+  'scripts/test-2708-owner-recovery.js',
+  // PHA-2706 OIDC link tests: assert the oidc_link_states schema
+  // (provider/issuer/handle literals) and the OIDC link lifecycle
+  // (PKCE code_verifier, state, nonce, issuer subject). Same pattern
+  // as the sibling acceptance tests — literals are test config, not
+  // render code.
+  'scripts/test-2706-oidc-link.js',
+  'scripts/smoke-2706-oidc-link.js',
   // PHA-2644 media-context acceptance test: drives the new
   // /api/media/:id/context route through image + video comprehension
   // packages. Same category as the sibling acceptance tests above —
