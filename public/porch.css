@@ -125,7 +125,7 @@ textarea{resize:vertical;font-family:inherit}
 .older-wrap{display:flex;justify-content:center;padding:10px 0 30px}
 .empty{color:var(--muted);text-align:center;padding:30px 0;font-size:14px}
 
-#toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 20px);transform:translateX(-50%) translateY(20px);
+#toast{position:fixed;left:50%;bottom:calc(var(--hs-nav-h,0px) + env(safe-area-inset-bottom) + 20px);transform:translateX(-50%) translateY(20px);
   background:var(--ink);color:#fff;padding:12px 18px;border-radius:14px;font-size:13px;font-weight:600;
   opacity:0;pointer-events:none;transition:opacity .25s var(--ease),transform .25s var(--ease);z-index:50;max-width:90vw;text-align:center}
 #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
@@ -140,7 +140,7 @@ textarea{resize:vertical;font-family:inherit}
 .composer-wrap-toggle{display:none}
 .composer-wrap-toggle.on{display:block}
 
-.compose-fab{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 26px);transform:translateX(-50%);
+.compose-fab{position:fixed;left:50%;bottom:calc(var(--hs-nav-h,0px) + env(safe-area-inset-bottom) + 26px);transform:translateX(-50%);
   width:64px;height:64px;border-radius:50%;background:var(--accent);color:#fff;font-size:32px;font-weight:400;
   line-height:1;display:flex;align-items:center;justify-content:center;
   box-shadow:0 10px 30px rgba(196,112,60,.35);transition:transform .35s var(--ease);z-index:40}
@@ -152,7 +152,7 @@ textarea{resize:vertical;font-family:inherit}
    side and visually quiet — a text pill, not another FAB — so the
    compose action stays the obvious primary move and this reads as
    "there's more here" rather than a second call to action. */
-.add-room-pill{position:fixed;left:18px;bottom:calc(env(safe-area-inset-bottom) + 34px);
+.add-room-pill{position:fixed;left:18px;bottom:calc(var(--hs-nav-h,0px) + env(safe-area-inset-bottom) + 34px);
   padding:10px 16px;border-radius:99px;background:var(--surface);border:1px solid var(--line);
   color:var(--ink);font-size:13px;font-weight:700;text-decoration:none;
   box-shadow:0 6px 20px rgba(0,0,0,.08);z-index:39;transition:transform .25s var(--ease)}

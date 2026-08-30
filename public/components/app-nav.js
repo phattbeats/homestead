@@ -44,6 +44,13 @@
       'font-family:inherit}' +
       '#hs-app-nav a.on{color:var(--accent,#C4703C)}' +
       '#hs-app-nav .hs-ico{font-size:19px;line-height:1}' +
+      // Nav is fixed/opaque at z-index:50, so it physically covers the
+      // bottom ~64px of viewport and sits above anything with a lower
+      // z-index there (PHA-2821 gate script caught it eating clicks on
+      // porch.html's compose FAB). Fixed-position controls near the
+      // bottom read this var to shift clear of the bar instead of
+      // guessing its height.
+      ':root{--hs-nav-h:64px}' +
       'body{padding-bottom:calc(64px + env(safe-area-inset-bottom))}';
     document.head.appendChild(style);
 
