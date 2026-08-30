@@ -3304,7 +3304,7 @@ app.get(/^\/invite\/([A-Fa-f0-9]{16,64})$/, (req, res) => {
 app.get('/favicon.ico', (req, res) => {
   res.set('Content-Type', 'image/svg+xml');
   res.set('Cache-Control', 'public, max-age=86400');
-  res.sendFile('public/icon.svg', { root: __dirname });
+  res.sendFile('public/favicon.svg', { root: __dirname });
 });
 
 // PHA-2658: entity pages are an explicit SPA route, not a static asset.
