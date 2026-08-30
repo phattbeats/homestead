@@ -1,3 +1,18 @@
+## v0.5.6 (2026-08-30) — Discoverable add-a-room affordance on the wall-only funnel
+
+**PHA-2822:** first outside tester (Brandon + Tyler on PHA-2804) landed on the
+wall-only `/porch.html` shell and had no way to find or enable any other
+module — the door to `/modules.html` (already built, already wired to
+`/api/me/modules/:key/enable` via PHA-2205) only existed inside the SPA's
+`#page-wall` mount, which a brand-new single-module user never reaches
+because `boot()` redirects straight to the standalone shell. Adds a quiet
+"+ Add a room" text pill to that shell (`public/porch.html`,
+`public/porch.css`, `public/components/feed.js`), opt-in via
+`cfg.addRoomPill`, placed less prominently than the compose FAB so posting
+stays the obvious first move. Once a 2nd module is enabled, `computeLayout()`
+routes into the SPA's existing tab/pill layout, so the standalone shell only
+ever needs to cover the single-module case.
+
 ## v0.5.5 (2026-08-30) — Brand system + BYOK modal fix + chore-module gate + wall notify wiring
 
 Rolls up everything landed on `main` since v0.5.4 for the real-usage feedback
