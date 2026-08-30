@@ -1,3 +1,35 @@
+## Unreleased — Homestead brand system lands (PHA-2777)
+
+Brandon's brand spec (`vault/PHATT-TECH/Projects/homestead-app/brand/brand-spec-v3.md`)
+locks the canonical doorway-with-handle as the product identity, with the
+carved-wood wordmark in Fraunces SemiBold 600 + Fraunces Italic 400 for
+the tagline. Apply pass lands:
+
+- **Canonical app icons**: olive/sage doorway with brass knob, hearth-lit
+  interior. Painterly PNG for the login hero (`/brand-hero.png`,
+  1254×1254 master); flat SVG/PNG variants for header, favicon, and
+  PWA manifest at 192/512. Maskable variant (full-bleed olive safe
+  area) at 512.
+- **Local fonts**: self-hosted Fraunces SemiBold 600 + Fraunces Italic 400
+  + Plus Jakarta Sans (400/800) under `/public/fonts/`, precached by `sw.js`
+  for offline PWA. One shared font include in `brand.css` covers
+  `index.html`, `porch.css`, `connectors.css`, and `consent.css`.
+- **Header lockup**: doorway + Fraunces "Homestead" wordmark across
+  `index.html`, the Porch standalone header (via `components/feed.js`),
+  `connectors.html`, and `consent.html`.
+- **Login lockup**: painterly doorway hero + Fraunces wordmark + Fraunces
+  Italic tagline ("Your home. Your data. Your apps.") on the parchment-warm
+  login card.
+- **README banner**: canonical `banner-canonical-readme.png` (2120×640)
+  replaces the prior hand-drawn banner.
+- **Muted token darken**: `--muted #8A8177` → `--muted #7a7269` (4.59:1
+  contrast on `--bg #FFFBF5`, up from 3.71:1) so muted labels and button
+  text pass WCAG AA.
+
+Guardrails honored: body text stays Plus Jakarta Sans (readable sans);
+the painterly mark only lives on login, splash, store, and README —
+no teaser imagery in feeds, lists, settings, or Porch cards.
+
 ## v0.4.5 (2026-08-29) — Media-comprehension package (PHA-2644)
 
 **The Porch needs agents that can see, not just text-match.** A

@@ -1,19 +1,70 @@
 /* Homestead brand foundation (PHA-2777).
- * Local fonts keep the app shell and standalone surfaces usable offline;
- * display serif is deliberately limited to the wordmark and short headings. */
+ *
+ * Display serif (Fraunces SemiBold 600) is used only for the wordmark and
+ * the login tagline (Fraunces Italic 400). Body and UI copy remain
+ * Plus Jakarta Sans for readability. Local fonts keep the app shell and
+ * standalone surfaces usable offline (precached by sw.js).
+ *
+ * Icon palette is sourced from the canonical Homestead brand spec
+ * (homestead/canonical/homestead-logo-canonical.png, locked 2026-08-28):
+ *   --brand-olive   #4b4624  doorway frame, sage ground (dominant)
+ *   --brand-sage    #6D7B59  legacy header lockup (kept for legacy surfaces)
+ *   --brand-paper   #f6e4c3  parchment ground (canonical warm)
+ *   --brand-hearth  #ad5c05  hearth glow (deeper amber, AA-passing on white)
+ *   --brand-brass   #d49a40  door knob, small accents
+ *
+ * App chrome stays clean and paper-forward — the painterly mark lives on
+ * login, splash, store, and README only. Inside feeds/lists/settings we use
+ * the flat mark (.brand-mark) which scales cleanly down to favicon size.
+ */
 @font-face{
   font-family:'Fraunces';font-style:normal;font-weight:600;font-display:swap;
   src:url('/fonts/fraunces-600-latin.woff2') format('woff2');
+}
+@font-face{
+  font-family:'Fraunces';font-style:italic;font-weight:400;font-display:swap;
+  src:url('/fonts/fraunces-italic-400-latin.woff2') format('woff2');
 }
 @font-face{
   font-family:'Plus Jakarta Sans';font-style:normal;font-weight:400 800;font-display:swap;
   src:url('/fonts/plus-jakarta-sans-latin.woff2') format('woff2');
 }
 
-:root{--brand-sage:#6D7B59;--brand-olive:#465039;--brand-paper:#FFFBF5;--brand-hearth:#C4703C}
+:root{
+  --brand-sage:#6D7B59;
+  --brand-olive:#4b4624;
+  --brand-paper:#FFFBF5;
+  --brand-paper-canonical:#f6e4c3;
+  --brand-hearth:#C4703C;
+  --brand-hearth-canonical:#ad5c05;
+  --brand-brass:#d49a40;
+  /* PHA-2777 acceptance: muted label token darkened from #8A8177 (3.71:1)
+   * to #7a7269 (4.59:1) so muted labels and button text pass WCAG AA. */
+  --muted:#7a7269;
+}
+
+/* Inline header lockup: doorway (flat, 32px) + wordmark (Fraunces SemiBold 600). */
 .brand-lockup{display:inline-flex;align-items:center;gap:10px;min-width:0;color:inherit;text-decoration:none}
 .brand-lockup img{display:block;width:32px;height:32px;flex:none}
 .brand-wordmark{font-family:'Fraunces',Georgia,serif;font-size:25px;font-weight:600;letter-spacing:-.035em;line-height:1;color:var(--ink,#2B2622)}
 .brand-wordmark--light{color:#FFF8EC}
-.brand-mark{display:block;width:56px;height:56px;margin:0 auto}
-.brand-tagline{font-size:14px;line-height:1.45;color:var(--muted,#8A8177)}
+
+/* Small flat mark — used wherever the brand icon sits inline (header, chip, etc.).
+ * Stays at or below the 64px flat ceiling per the v3 spec. */
+.brand-mark{display:block;width:40px;height:40px;flex:none}
+
+/* Login hero — the canonical painterly doorway with hearth-lit interior.
+ * Source: agents/sales/.tmp/canonical-icon-only.png (1254×1254 master).
+ * Locked at 96px floor so the painterly detail survives; the brand wordmark
+ * and tagline below ride in the parchment-warm login card. */
+.brand-hero{display:block;width:auto;height:96px;margin:0 auto 14px}
+
+/* Tagline is now Fraunces Italic 400 (v3 spec) — display serif, but italic
+ * cuts the visual weight so it doesn't compete with the wordmark above it. */
+.brand-tagline{
+  font-family:'Fraunces',Georgia,serif;
+  font-style:italic;font-weight:400;
+  font-size:14px;line-height:1.45;
+  color:var(--muted,#7a7269);
+  letter-spacing:.005em;
+}

@@ -1,6 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
-  <title id="title">Homestead</title>
-  <rect width="64" height="64" rx="16" fill="#6D7B59"/>
-  <path fill="#FFF8EC" d="M14 51h36v5H14zM18 48V29l14-13 14 13v19h-6V32l-8-7-8 7v16z"/>
-  <path fill="#D9CDAF" d="M17 28h30L32 14z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Homestead flat icon</title>
+  <desc id="desc">An olive rounded tile with an arched doorway and an open green door.</desc>
+  <rect width="512" height="512" rx="112" fill="#4b4624"/>
+  <path d="M126 400V245c0-88 58-147 130-147s130 59 130 147v155Z" fill="#f6e4c3"/>
+  <path d="M154 400V248c0-69 43-117 102-117s102 48 102 117v152Z" fill="#2f2f17"/>
+  <path d="M169 400V249c0-58 35-95 87-95v246Z" fill="#4d6d3c"/>
+  <path d="M256 154c59 0 87 37 87 95v151H256Z" fill="#ad5c05" opacity=".9"/>
+  <circle cx="235" cy="275" r="11" fill="#d49a40"/>
+  <path d="M169 400h174" stroke="#351901" stroke-width="14" stroke-linecap="round"/>
 </svg>

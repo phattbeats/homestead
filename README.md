@@ -1,6 +1,6 @@
 # Homestead
 
-![Homestead — Your home. Your data. Your apps.](docs/brand/homestead-banner.svg)
+![Homestead — Your home. Your data. Your apps.](docs/brand/homestead-banner.png)
 
 A shared-life app for self-hosted households. Tasks and chores with
 take-turns rotation, a calendar, and a launcher grid that opens your
