@@ -91,7 +91,7 @@ function main() {
     token,
     expires_at: expiresAt,
     reset_endpoint: '/api/public/invites/reset',
-    curl_example: `curl -sS -X POST http://10.0.0.100:3000/api/public/invites/reset -H 'content-type: application/json' -d '${JSON.stringify({ token, new_password: 'REPLACE_ME' })}'`,
+    curl_example: `curl -sS -X POST http://<homestead-host>:3000/api/public/invites/reset -H 'content-type: application/json' -d '${JSON.stringify({ token, new_password: 'REPLACE_ME' })}'`,
   }, null, 2));
 }
 
