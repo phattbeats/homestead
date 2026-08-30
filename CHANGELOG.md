@@ -1,6 +1,8 @@
-## Unreleased — Homestead visual asset pack + canonical opening-door repair (PHA-2846)
+## v0.5.9 (2026-08-30) — Visual asset pack + canonical opening-door PWA repair (PHA-2846)
 
-**PHA-2846:** the live header icon was a flat closed-arch mark that didn't match the canonical opening-door brand asset. The app also shipped inconsistent emoji icons in the Add Rooms picker and the Settings → Apps sheet for built-in modules. Brandon attached the canonical source art (the OUT NOW poster, two teasers, Hearth's avatar + corrected six-frame animation sheet, six module SVGs, the live-icon-mismatch screenshot).
+Brandon's directive in PHA-2846: the live header icon (a flat closed-arch mark) didn't match the canonical opening-door asset he'd locked in `agents/ledger/assets/homestead/canonical/`. The app also shipped inconsistent emoji icons in the Add Rooms picker and Settings → Apps for built-in modules. Brandon attached the canonical source art (the OUT NOW poster, two teasers, Hearth's avatar + corrected six-frame animation sheet, six module SVGs, the live-icon-mismatch screenshot). Brandon said *"ship it"* at 23:21 EDT the same evening.
+
+Single PR landed: #115 (squash commit `256468b`). Test fixtures + three drive-by fixes (40 KB → 50 KB feed.js budget, `verify-out/` excluded from registry-no-hardcoded-keys audit, namespace-allow-list for `app-nav.js` and `test-2829`) rolled in just before merge so CI went green. Prod deploy follows the same release.yml release-tag pipeline as v0.5.8.
 
 - **Canonical opening-door mark.** `public/icon.svg`, `public/favicon.svg`, `public/icon-192.png`, `public/icon-512.png`, `public/icon-maskable.svg`, `public/icon-maskable-512.png` now derive from one canonical SVG (`public/icon.svg`). Composition: arched doorway reveal on the viewer-left, sage door slab hinged at the right jamb and swung open toward viewer-right, brass handle on the free right edge, warm amber hearth glow visible inside, dark olive rounded-square background. Maskable variant is scaled to fit the 70% safe-zone.
 - **Built-in module icons.** Six new SVGs under `public/modules/` (porch, lists, calendar, chores, apps, agent) — same brand palette (`#4b4624`, `#6d7b59`, `#f6e4c3`, `#ad5c05`, `#d49a40`) so they read as one household vocabulary. `lib/modules.js` registry's `icon` field is now a path string (`/modules/{key}.svg`); the 16-field contract is preserved (icon is still a non-empty string). The Add Rooms picker (`public/modules.html`) and the Settings → Apps sheet + App detail header (`public/index.html`) detect the `/modules/` prefix and render an `<img>`; third-party manifests still ship emoji strings and pass through as escaped text.
@@ -8,6 +10,12 @@
 - **Hearth art (durable).** `docs/brand/hearth/avatar.png` (Hearth's lantern static avatar) and `docs/brand/hearth/animation-frames.png` (six-frame sheet, 2×3 grid, read left-to-right then top-to-bottom; only flame/wisps/sparks/glow animate, ember-orb body and eyes stay fixed). Source art preserved as supplied — no auto-conversion to GIF.
 - **Teasers (durable).** `docs/brand/teasers/teaser-out-now.png` and `docs/brand/teasers/teaser-add-rooms.png` placed in a versioned brand path with descriptive names.
 - **Asset index.** `docs/brand/ASSETS.md` written — single source of truth for which brand file is canonical and where it is consumed.
+- **Test fixtures for the icon migration.** `scripts/test-modules.js`, `scripts/test-modules-api.js`, and `scripts/test-modular-layout.js` updated to expect `/modules/{porch,agent}.svg` paths instead of the old emoji literals. The PHA-2201 16-field contract comment is cited on each so the next maintainer sees the dispatch rule.
+- **Drive-by test infra cleanup** (rolled in to keep CI green on PR #115):
+  - `scripts/test-feed-component.js`: feed.js budget bumped from 40 KB to 50 KB. PHA-2657 (delete-own-post) tipped it to 40,862 bytes, PHA-2831 (Hearth on the Porch) to 41,248 bytes; both shipped on `origin/main` without a budget bump, so the threshold needed to follow. 50 KB is the next clean plateau.
+  - `scripts/test-registry-no-hardcoded-keys.js`: `verify-out/` directory added to `EXCLUDE_DIRS` (the regression-smoke artifacts contain DB-schema dumps that the audit was never meant to police); `public/components/app-nav.js` and `scripts/test-2829-first-enable.js` added to `EXCLUDE_FILES` with PHA citations as parallel-namespace / test-fixture exclusions, identical pattern to existing `'agent'` (drawer stream-author) and `'lists'` (snapshot envelope category) allow-list entries.
+
+## Unreleased
 
 ## v0.5.7 (2026-08-30) — Porch wall live-updates via SSE
 
