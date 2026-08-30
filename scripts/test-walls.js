@@ -230,6 +230,32 @@ assert(!badSnapshotOrderBy, 'recentActivity() ORDER BY sorts by created_at only'
   const clamped = walls.postsForWall('household', brandon.id, null, 9999);
   assert(clamped.length <= walls.POSTS_MAX_LIMIT, 'limit is clamped to POSTS_MAX_LIMIT');
 
+  // ---- Test 5b (PHA-2657): canDeletePost gate mirrors deletePost() ----
+  console.log('\nTest 5b: canDeletePost gate (PHA-2657)');
+  // emily is a fellow household member (not author, not admin).
+  assert(!!emily, 'emily exists from seed');
+  assertEq(walls.assertMember('household', emily.id).ok, true, 'emily is a household-wall member');
+  const emilySees = walls.postsForWall('household', emily.id, null, 20).find((p) => p.id === p2.id);
+  assertEq(emilySees.canDelete, false, 'non-author, non-admin viewer sees canDelete=false');
+  const brandonSees = walls.postsForWall('household', brandon.id, null, 20).find((p) => p.id === p2.id);
+  assertEq(brandonSees.canDelete, true, 'author sees canDelete=true');
+  // Promote global admin to a wall-local admin explicitly. mirrors how
+  // walls.adminAddMember() stamps role='admin' for the membership gate.
+  db.prepare(`INSERT OR IGNORE INTO wall_memberships (wall_id, user_id, role)
+              SELECT id, ?, 'admin' FROM walls WHERE slug = 'household'`).run(admin.id);
+  const adminSees = walls.postsForWall('household', admin.id, null, 20).find((p) => p.id === p2.id);
+  assertEq(adminSees.canDelete, true, 'explicit wall admin sees canDelete=true');
+  // Negative: a non-member viewer never reaches postsForWall (404), so the
+  // single-rule canDeletePost(wall, post, callerId) invocation is fine to
+  // spot-check with stranger — should be false even though stranger can't
+  // list the wall.
+  const strangerSees = walls.canDeletePost(
+    walls.assertMember('household', brandon.id).wall,
+    db.prepare('SELECT * FROM wall_posts WHERE id = ?').get(p2.id),
+    stranger.id,
+  );
+  assertEq(strangerSees, false, 'non-member caller resolves to canDelete=false');
+
   // ---- Test 6: reaction toggle idempotence ----
   console.log('\nTest 6: reaction toggle idempotence');
   const r1 = walls.toggleReaction('household', p2.id, brandon.id, 'fire');

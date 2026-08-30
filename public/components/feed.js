@@ -128,12 +128,27 @@
         title="Vote this agent off the porch">Vote off</button>`;
   }
 
+  // PHA-2657: per-post delete affordance. The server emits canDelete on
+  // every post (computed inside walls.deletePost's own gate: author OR
+  // wall admin). The DELETE endpoint re-enforces the same rule, so a
+  // stale flag can never authorize an action. The button is hidden on
+  // posts where the viewer can't delete, kept honest about capability.
+  function postDeleteBtnHtml(p) {
+    if (!p || !p.canDelete) return '';
+    return `<button type="button" class="post-delete" data-action="delete-post" data-post="${esc(p.id)}"
+      title="Delete this post"
+      aria-label="Delete this post">×</button>`;
+  }
+
   function postHtml(p) {
     const author = (p.author && (p.author.display || p.author.username)) || 'Someone';
     return `<div class="post${p._pending ? ' pending' : ''}" data-id="${esc(p.id)}">
       <div class="post-head">
         <div class="post-author">${esc(author)}${authorBadgeHtml(p.author)}</div>
-        <div class="post-time">${esc(fmtTime(p.createdAt))}</div>
+        <div class="post-meta">
+          <span class="post-time">${esc(fmtTime(p.createdAt))}</span>
+          ${postDeleteBtnHtml(p)}
+        </div>
       </div>
       ${postMediaHtml(p)}
       ${reactionsHtml(p)}
@@ -510,6 +525,12 @@
       $$('.agent-vote-off', root).forEach((btn) => {
         on(btn, 'click', () => onVoteOffClick(btn));
       });
+      // PHA-2657: self-delete affordance (author or wall admin only).
+      // The server already filters posts so canDelete=false posts never
+      // render a button; this hook only fires on the affordance itself.
+      $$('.post-delete', root).forEach((btn) => {
+        on(btn, 'click', () => onDeletePostClick(btn));
+      });
       if (cfg.canComment) {
         $$('.comment-form', root).forEach((f) => {
           on(f, 'submit', (e) => onCommentSubmit(e, f));
@@ -558,6 +579,38 @@
       } catch (_) {
         btn.disabled = false;
         toast('Vote off failed', true);
+      }
+    }
+
+    // PHA-2657: self-delete handler. window.confirm() keeps it cheap (no
+    // modal). Optimistically removes the row on click; the server
+    // re-enforces the same gate, so a stale canDelete flag can never
+    // authorize a delete the server wouldn't. On failure, re-append the
+    // row at the bottom of the feed so the post reappears (a heavier
+    // round-trip would refetch but isn't worth it for the rare 4xx path).
+    async function onDeletePostClick(btn) {
+      const postId = btn.dataset.post;
+      const row = btn.closest('.post');
+      if (!postId || !row) return;
+      const ok = window.confirm('Delete this post? This cannot be undone.');
+      if (!ok) return;
+      btn.disabled = true;
+      const feed = $('#feed', root);
+      // Optimistic remove.
+      row.remove();
+      POSTS = POSTS.filter((p) => p.id !== postId);
+      try {
+        await api('DELETE', `/walls/${encodeURIComponent(WALL)}/posts/${encodeURIComponent(postId)}`, null);
+        toast('Post deleted');
+      } catch (_) {
+        // Restore. Re-bind the delete button so it still works.
+        const fresh = document.createElement('div');
+        fresh.innerHTML = row.outerHTML;
+        const restored = fresh.firstElementChild;
+        const btn2 = restored && restored.querySelector('.post-delete');
+        if (btn2) on(btn2, 'click', () => onDeletePostClick(btn2));
+        if (feed && restored) feed.appendChild(restored);
+        toast('Delete failed — post restored', true);
       }
     }
 

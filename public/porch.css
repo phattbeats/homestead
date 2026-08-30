@@ -77,6 +77,15 @@ textarea{resize:vertical;font-family:inherit}
 .agent-vote-off{font-weight:500;font-size:11px;color:var(--muted);background:none;border:1px solid var(--line);border-radius:8px;padding:2px 6px;cursor:pointer}
 .agent-vote-off:disabled{opacity:.6;cursor:default}
 .post-time{font-size:11px;color:var(--muted)}
+/* PHA-2657: per-post delete affordance (author or wall admin only).
+   Same line as post-time so it doesn't introduce a new row. The visible
+   glyph is a thin × — the title attribute carries the action label so
+   a non-sighted reader hears "delete this post" via aria-label. */
+.post-meta{display:flex;align-items:center;gap:8px}
+.post-delete{font-size:18px;line-height:1;color:var(--muted);width:24px;height:24px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;transition:background .2s,color .2s}
+.post-delete:hover,.post-delete:focus-visible{background:var(--accent-soft);color:var(--accent)}
+.post-delete:disabled{opacity:.5;cursor:default}
 .post-body{font-size:15px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
 .post-media img,.post-media video{width:100%;border-radius:14px;display:block;max-height:480px;object-fit:cover}
 .post-link{border:1px solid var(--line);border-radius:14px;padding:12px;display:block;text-decoration:none}
