@@ -114,11 +114,25 @@
     }).join('')}</div>`;
   }
 
+  // PHA-2648: honest-identity badge + one-click opt-out for Porch agents.
+  // isAgent is derived server-side from a live agent_tokens row (never a
+  // self-reported flag) — see lib/walls.js's userView(). Used for BOTH
+  // post authors and comment authors: an agent's actual Porch output is
+  // most often a comment/reaction on someone else's post (PHA-2645's
+  // participation contract), not a post of its own.
+  function authorBadgeHtml(author) {
+    if (!author || !author.isAgent) return '';
+    const username = esc(author.username || '');
+    return `<span class="agent-badge" title="This account posts as a Porch agent">🤖 Agent</span>
+      <button type="button" class="agent-vote-off" data-username="${username}"
+        title="Vote this agent off the porch">Vote off</button>`;
+  }
+
   function postHtml(p) {
     const author = (p.author && (p.author.display || p.author.username)) || 'Someone';
     return `<div class="post${p._pending ? ' pending' : ''}" data-id="${esc(p.id)}">
       <div class="post-head">
-        <div class="post-author">${esc(author)}</div>
+        <div class="post-author">${esc(author)}${authorBadgeHtml(p.author)}</div>
         <div class="post-time">${esc(fmtTime(p.createdAt))}</div>
       </div>
       ${postMediaHtml(p)}
@@ -397,6 +411,9 @@
       $$('.comments-toggle', root).forEach((el) => {
         on(el, 'click', () => onCommentsToggle(el));
       });
+      $$('.agent-vote-off', root).forEach((btn) => {
+        on(btn, 'click', () => onVoteOffClick(btn));
+      });
       if (cfg.canComment) {
         $$('.comment-form', root).forEach((f) => {
           on(f, 'submit', (e) => onCommentSubmit(e, f));
@@ -435,6 +452,19 @@
       }
     }
 
+    async function onVoteOffClick(btn) {
+      const username = btn.dataset.username;
+      btn.disabled = true;
+      try {
+        await api('POST', `/walls/${encodeURIComponent(WALL)}/agents/${encodeURIComponent(username)}/opt-out`, {});
+        btn.textContent = 'Voted off';
+        toast(`${username} won't post here anymore`);
+      } catch (_) {
+        btn.disabled = false;
+        toast('Vote off failed', true);
+      }
+    }
+
     function onCommentsToggle(el) {
       const postId = el.dataset.post;
       const panel = $(`.comments[data-post="${cssEsc(postId)}"]`, root);
@@ -462,8 +492,11 @@
       if (!comments.length) { list.innerHTML = '<div class="empty" style="padding:6px 0">No comments yet</div>'; return; }
       list.innerHTML = comments.map((c) => {
         const author = (c.author && (c.author.display || c.author.username)) || 'Someone';
-        return `<div class="comment"><b>${esc(author)}:</b> ${esc(c.body)}</div>`;
+        return `<div class="comment"><b>${esc(author)}:</b>${authorBadgeHtml(c.author)} ${esc(c.body)}</div>`;
       }).join('');
+      $$('.agent-vote-off', list).forEach((btn) => {
+        on(btn, 'click', () => onVoteOffClick(btn));
+      });
     }
 
     async function onCommentSubmit(e, form) {

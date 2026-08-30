@@ -10,10 +10,18 @@
 # prepare hook exits 127 and `npm ci` fails — every release from
 # v0.3.0.1 through v0.4.3 was silently broken. Adding git here keeps
 # the prepare hook as the single source of truth for hook setup.
+#
+# PHA-2644: install ffmpeg in the deps stage. The media-comprehension
+# package uses ffmpeg's scene-change keyframe extraction (`select=gt
+# (scene,0.4)`) and whisper-class audio-track extraction
+# (`-ac 1 -ar 16000 -acodec pcm_s16le`). Both are required for the
+# new `GET /api/media/:id/context` endpoint. ffprobe is bundled with
+# the ffmpeg package; no separate install needed. Image without
+# ffmpeg would 500 every video comprehension request.
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app
 RUN apt-get update \
- && apt-get install -y --no-install-recommends python3 build-essential ca-certificates git \
+ && apt-get install -y --no-install-recommends python3 build-essential ca-certificates git ffmpeg \
  && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund \

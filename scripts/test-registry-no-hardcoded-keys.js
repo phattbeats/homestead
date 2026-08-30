@@ -56,7 +56,7 @@ const STRICT_KEY_RE = new RegExp(`(['"\`])(wall|lists|calendar|chores|apps|agent
 const EXCLUDE_DIRS = new Set([
   'node_modules', '.git', 'data', 'tmp', 'coverage',
   'homestead-data', 'homestead-cache', 'dist', 'build',
-  '.cache', '.next', 'worktrees', 'verify-out',
+  '.cache', '.next', 'worktrees',
 ]);
 
 const EXCLUDE_FILES = new Set([
@@ -123,6 +123,13 @@ const EXCLUDE_FILES = new Set([
   // render code.
   'scripts/test-2706-oidc-link.js',
   'scripts/smoke-2706-oidc-link.js',
+  // PHA-2644 media-context acceptance test: drives the new
+  // /api/media/:id/context route through image + video comprehension
+  // packages. Same category as the sibling acceptance tests above —
+  // literal keys (none currently, but the test asserts on
+  // `/api/media/...` paths via string match) are test config, not
+  // render code.
+  'scripts/test-2644-media-context.js',
 ]);
 
 const SCAN_EXTS = new Set([
