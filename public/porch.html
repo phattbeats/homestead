@@ -40,6 +40,12 @@
           canPost: true,
           canReact: true,
           canComment: true,
+          // PHA-2727: this standalone shell is what a wall-only user lands
+          // on (no other modules enabled, no bottom bar, no profile access
+          // at all). The index.html #page-wall mount leaves these off since
+          // it already has its own fab/avatar/nav chrome.
+          primaryFab: true,
+          utilityChip: true,
         });
       }
     }
