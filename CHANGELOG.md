@@ -1,3 +1,19 @@
+## v0.5.8 (2026-08-30) — Hearth on the Porch + comprehension pipeline + bottom nav + identity UI + 90-min sweep default
+
+**PHA-2828 / PHA-2829 / PHA-2830 / PHA-2831 (Hearth stack, PRs #106/#108/#109/#110):** the built-in server-side agent Hearth lands. `agents/hearth/SOUL.md` + `IDENTITY.md` + `GLOSSARY` rename, the first-enable flow + per-user seed, the server-side Hearth runtime (drawer view), the per-character row + register weights + sweep integration. The full PHA-2827 chain (A/B/C/D) ships together so a brand-new install has Hearth talking back from the first sweep tick.
+
+**PHA-2844 (PR #113):** wires `lib/porch/comprehension.js` (vision-capable LLM description of attached frames, text-only derivation for prose-only posts, `pastReactionRefs` read from `recordBanterMemory`) → `lib/agent-runtime.js#draftPorchCandidate` (per-register LLM drafts sourced from Hearth's SOUL.md voice) → `server.js#startPorchSweep`'s `onDecision` (real `walls.createComment` on `'post'`/`'riff'`, `sweep.recordAction()` for budget tracking). Replaces the log-only stub at `lib/porch/sweep.js:284` that has been flagging since PHA-2827.D landed. `scripts/test-2827d-porch-integration.js` is now end-to-end (comprehension → candidate → decide → `post_comment` row) for image posts and text-only posts, with zero hand-injected candidates.
+
+**PHA-2646 (PR #104):** default porch sweep interval bumped to 90 minutes (was 15) per Brandon's tuning on the live sweep.
+
+**PHA-2647 (PR #90):** Porch agent identity UI — badges on agent comments, vote-off affordance for wall participants, agent opt-in settings on the wall page.
+
+**PHA-2657 (PR #102):** delete-own-post affordance exposed in the wall feed UI.
+
+**PHA-2821 / PHA-2823:** bottom-nav overlap with the porch compose FAB / pill / toast fixed; persistent bottom nav added to the standalone Homestead pages so a brand-new user lands with a real frame.
+
+**Trigger:** Brandon 22:28 EDT — *"full review. if good, merge."* + *"and I want to see it live along with other pending changes."* — explicitly authorized this issue's scope to ship live. CI builds the image on `v0.5.8` tag push; prod restart follows.
+
 ## v0.5.7 (2026-08-30) — Porch wall live-updates via SSE
 
 **PHA-2821:** first real two-human usage caught the wall not behaving like a
