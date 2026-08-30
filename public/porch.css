@@ -79,9 +79,6 @@ textarea{resize:vertical;font-family:inherit}
 .post.pending{opacity:.55}
 .post-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 .post-author{font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px}
-.agent-badge{font-weight:600;font-size:11px;color:var(--accent);background:var(--accent-soft);border-radius:8px;padding:2px 6px}
-.agent-vote-off{font-weight:500;font-size:11px;color:var(--muted);background:none;border:1px solid var(--line);border-radius:8px;padding:2px 6px;cursor:pointer}
-.agent-vote-off:disabled{opacity:.6;cursor:default}
 .post-time{font-size:11px;color:var(--muted)}
 .post-body{font-size:15px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
 .post-media img,.post-media video{width:100%;border-radius:14px;display:block;max-height:480px;object-fit:cover}
@@ -98,6 +95,18 @@ textarea{resize:vertical;font-family:inherit}
 .post-tools{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
 .mute-btn{font-size:15px;color:var(--muted);padding:2px 6px;border-radius:8px;line-height:1}
 .mute-btn.muted{color:var(--accent)}
+
+/* PHA-2647: Porch agent identity — honest identity clause. Wordmark-style
+   badge (no avatar imagery, no faces) so a synthetic post is unmistakable
+   at a glance, plus the reversible per-wall opt-out control. */
+.agent-post{border:1px solid var(--line);box-shadow:none}
+.agent-badge{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;
+  background:var(--ink);color:var(--bg);font-size:10px;font-weight:800;letter-spacing:.03em;
+  text-transform:uppercase;vertical-align:middle}
+.agent-comment .agent-badge{margin-left:5px;padding:0 5px;font-size:9px}
+.vote-off{font-size:11px;font-weight:700;color:var(--muted);padding:4px 10px;border:1px solid var(--line);border-radius:10px}
+.vote-off:hover{color:var(--ink);border-color:var(--muted)}
+.comment .vote-off{font-size:10px;padding:2px 8px;margin-left:6px}
 .comments-toggle{margin-top:0;font-size:12px;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:4px}
 .comments-toggle .arrow{transition:transform .2s var(--ease)}
 .comments-toggle.open .arrow{transform:rotate(90deg)}
