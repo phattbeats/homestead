@@ -2,7 +2,7 @@
    Tokens ported verbatim from public/index.html's <style> :root block
    for visual consistency, same as public/porch.css. */
 :root{
-  --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#8A8177;
+  --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#7a7269;
   --line:rgba(43,38,34,.07);
   --accent:#C4703C; --accent-soft:#F8E9DE;
   --yes:#4C7A4F; --yes-soft:#E9F2E6;

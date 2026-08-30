@@ -6,15 +6,15 @@
 <title>Homestead</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#FFFBF5">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/brand.css">
 <!-- PHA-2200.5 / PHA-2206: shared wall feed styles. Same file the
      standalone /porch.html loads, so the in-place mount inside
      #page-wall renders identically to /porch.html. -->
 <link rel="stylesheet" href="/porch.css">
 <style>
 :root{
-  --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#8A8177;
+  --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#7a7269;
   --line:rgba(43,38,34,.07);
   --u-all:#9eb48a;
   --accent:#C4703C; --accent-soft:#F8E9DE;
@@ -31,8 +31,7 @@ input,select,textarea{font:inherit;color:inherit}
 .login-card{width:100%;max-width:380px;background:var(--surface);border-radius:28px;padding:8px;
   box-shadow:0 8px 40px rgba(196,112,60,.08),0 2px 8px rgba(0,0,0,.03)}
 .login-inner{border:1px solid var(--line);border-radius:22px;padding:40px 32px;text-align:center}
-.logo{font-size:44px;line-height:1}
-h1{font-weight:800;font-size:26px;letter-spacing:-.02em;margin:14px 0 4px}
+.logo{line-height:1}
 .sub{color:var(--muted);font-size:14px;margin-bottom:28px}
 .field{width:100%;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--bg);
   margin-bottom:12px;outline:none;transition:border-color .3s var(--ease)}
@@ -54,6 +53,7 @@ h1{font-weight:800;font-size:26px;letter-spacing:-.02em;margin:14px 0 4px}
 /* ---------- app shell ---------- */
 #app{display:none;min-height:100dvh;padding-bottom:96px}
 header{padding:calc(env(safe-area-inset-top) + 22px) 22px 6px;display:flex;justify-content:space-between;align-items:center}
+.header-lockup{display:flex;align-items:center;gap:10px;min-width:0}.header-lockup .brand-lockup{gap:8px}.header-lockup .brand-lockup img.brand-icon{width:30px;height:30px}.header-lockup .brand-wordmark{font-size:22px}.header-lockup .greet{min-width:0}
 .greet{font-weight:800;font-size:24px;letter-spacing:-.02em}
 .greet small{display:block;font-size:13px;color:var(--muted);font-weight:500;letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px}
 .avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;
@@ -457,9 +457,8 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 
 <div id="login">
   <div class="login-card"><div class="login-inner">
-    <div class="logo">🏡</div>
-    <h1>Homestead</h1>
-    <div class="sub">The household, in one place</div>
+    <div class="logo"><img class="brand-hero" src="/brand-hero.png" alt="Homestead"></div>
+    <div class="sub brand-tagline">Your home. Your data. Your apps.</div>
     <div class="chips" id="chipRow"></div>
     <input class="field" id="username" type="text" placeholder="Username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
     <input class="field" id="pw" type="password" placeholder="Password" autocomplete="current-password">
@@ -470,7 +469,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 
 <div id="app">
   <header>
-    <div class="greet"><small id="dateLine"></small><span id="greet"></span></div>
+    <div class="header-lockup"><a class="brand-lockup" href="/" aria-label="Homestead home"><img src="/icon.svg" alt="" class="brand-icon"><img src="/wordmark.svg" alt="Homestead" class="brand-wordmark"></a><div class="greet"><small id="dateLine"></small><span id="greet"></span></div></div>
     <div style="display:flex;align-items:center;gap:10px">
       <button class="avatar" id="avatarBtn"></button>
       <!-- PHA-2498 (UX batch #2): drawer FAB docked into the header
@@ -624,7 +623,7 @@ const api=async(m,u,b)=>{const r=await fetch(u,{method:m,headers:{'Content-Type'
 
 /* ---- state ---- */
 let ME=null, USERS={};
-let ENABLED_MODULE_KEYS=new Set(); // PHA-2811: populated by applyLayout(), used to gate the FAB picker
+let ENABLED_ROOMS=new Set(); // PHA-2811: populated by applyLayout(), used to gate the FAB picker
 let TASKS=[],EVENTS=[],SVCS=[];
 let MERGED=[]; // PHA-1867: native + cached provider events for the current month
 let calY,calM,selDate=today();
@@ -1518,7 +1517,7 @@ $('#fab').onclick=()=>{
   if(curPage==='svc')return openSvcSheet();
   if(curPage==='cal')return openEventSheet(null,selDate);
   if(curPage==='home')return openPicker();
-  if(curPage==='tasks'&&!ENABLED_MODULE_KEYS.has('chores'))return goToModuleSettings();
+  if(curPage==='tasks'&&!ENABLED_ROOMS.has('tasks'))return goToModuleSettings();
   openTaskSheet();
 };
 function goToModuleSettings(){
@@ -1528,7 +1527,7 @@ function openPicker(){
   // PHA-2811: a chore added while `chores` is off writes a row that
   // never renders anywhere (no nav tab, no home task list) — so the
   // Task option is hidden here instead of opening a dead-end sheet.
-  const taskBtn=ENABLED_MODULE_KEYS.has('chores')
+  const taskBtn=ENABLED_ROOMS.has('tasks')
     ? `<button class="btn" onclick="closeSheet();openTaskSheet()">✓ Task</button>`
     : `<button class="btn btn-secondary" onclick="closeSheet();goToModuleSettings()">✓ Task (enable Chores)</button>`;
   openSheet(`<h2>Add something</h2>

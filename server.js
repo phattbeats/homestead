@@ -340,6 +340,24 @@ function requireWallReadScope(req, res, next) {
   return res.status(403).json({ error: 'insufficient_scope', required: `read:walls:${scopeSlug}` });
 }
 
+// requireModuleEnabled(key): the session user must have this module
+// turned on (per user_modules) before the route may write data into
+// it. PHA-2811: POST /api/tasks had no such gate, so a chore added
+// without the `chores` module enabled wrote a row that never rendered
+// anywhere — no nav tab, no home-page task list, nothing. Scopes
+// (requireScope) only gate third-party app tokens; first-party
+// session users sail through those with `scopes === null`, so a
+// module-enabled check is a separate, additional gate.
+function requireModuleEnabled(key) {
+  return function (req, res, next) {
+    const me = userModel.getMe(db, req.session.user.username);
+    if (!me) return res.status(401).json({ error: 'not authenticated' });
+    const enabledKeys = userModel.getEnabledModules(db, me.id).map(e => e.key);
+    if (enabledKeys.includes(key)) return next();
+    return res.status(403).json({ error: 'module_not_enabled', module: key });
+  };
+}
+
 // ---- VAPID keypair (PHA-1619) ----
 // Generated once on first startup, persisted to DATA_DIR/vapid.json.
 // The public key is exposed via /api/push/vapid-public-key so the service
@@ -2075,7 +2093,7 @@ app.get('/api/groups', auth, (req, res) => {
 app.get('/api/tasks', auth, (req, res) => {
   res.json(db.prepare('SELECT * FROM tasks ORDER BY done, due_date IS NULL, due_date, id DESC').all());
 });
-app.post('/api/tasks', auth, (req, res) => {
+app.post('/api/tasks', auth, requireModuleEnabled('chores'), (req, res) => {
   const { title, notes = '', assignee = 'all', alt_assignee = null, due_date = null, recur = '', rotate = 0 } = req.body || {};
   if (!title) return res.status(400).json({ error: 'title required' });
   if (!userModel.validateAssignee(db, assignee)) return res.status(400).json({ error: 'unknown assignee' });
@@ -2090,7 +2108,7 @@ app.post('/api/tasks', auth, (req, res) => {
   eventsDispatch.dispatchEventForAssignee(db, app.locals.eventsStreakMap, assignee, 'task_created', { task: created }).catch(() => {});
   res.json(created);
 });
-app.put('/api/tasks/:id', auth, (req, res) => {
+app.put('/api/tasks/:id', auth, requireModuleEnabled('chores'), (req, res) => {
   const t = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (!t) return res.status(404).json({ error: 'not found' });
   const b = { ...t, ...req.body };
@@ -3286,7 +3304,7 @@ app.get(/^\/invite\/([A-Fa-f0-9]{16,64})$/, (req, res) => {
 app.get('/favicon.ico', (req, res) => {
   res.set('Content-Type', 'image/svg+xml');
   res.set('Cache-Control', 'public, max-age=86400');
-  res.sendFile('public/icon.svg', { root: __dirname });
+  res.sendFile('public/favicon.svg', { root: __dirname });
 });
 
 // PHA-2658: entity pages are an explicit SPA route, not a static asset.
