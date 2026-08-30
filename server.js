@@ -61,6 +61,7 @@ const invites = require('./lib/invites');
 const wallMembers = require('./lib/wall-members');
 const porchSweep = require('./lib/porch/sweep');
 const porchContract = require('./lib/porch/participation-contract');
+const porchComprehension = require('./lib/porch/comprehension');
 const oidcLink = require('./lib/oidc-link');
 const mailbox = require('./lib/porch/mailbox');
 
@@ -4049,31 +4050,86 @@ function startHealthChecker() {
   });
 }
 
-// ---- Porch sweep scheduler boot (PHA-2646) ----
+// ---- Porch sweep scheduler boot (PHA-2646 / PHA-2844) ----
 // Same independent-setInterval pattern as startHealthChecker above.
-// onDecision is left at lib/porch/sweep.js's default (log-only) stub.
-// The participation contract (PHA-2645, lib/porch/participation-contract.js)
-// has landed, and PHA-2827.D wired it to read real register weights off
-// the `characters` table (porchContract.resolveCharacter) — Hearth's
-// built-in account is now in listAgentUserIds() and gets scheduled
-// decisions like any other agent. But nothing yet produces the
-// candidate comment text per register decide() gates — that needs the
-// media-comprehension package + a per-register LLM draft (still
-// PHA-2636 for third-party agents; for Hearth specifically,
-// lib/agent-runtime.js's dispatchHearth from PHA-2827.C is the building
-// block, not yet wired here). Once that exists, onDecision here
-// becomes: resolve the character, build {character, comprehension,
-// candidates} for the decision, call porchContract.decide(db, ...),
-// and on a 'post'/'riff' action actually create the reaction/comment +
-// call porchSweep.recordAction(). Until then this loop only ever
-// decides WHEN an agent (including Hearth) should consider a post,
-// never whether it reacts — see scripts/test-2827d-porch-integration.js
-// for the same pipeline exercised end-to-end with an injected candidate.
+//
+// onDecision closes the loop PHA-2827.D left open: sweep.js decides
+// WHEN an agent (Hearth or any installed character) should consider a
+// post; from here we resolve who they are (porchContract.resolveCharacter),
+// build what they'd see (porchComprehension.buildComprehension), draft
+// what they might say per allowed register (agentRuntime.draftPorchCandidate),
+// and hand all of it to porchContract.decide() — the anti-lame gate
+// that decides whether any of it actually goes out. A 'post'/'riff'
+// verdict creates a real comment through lib/walls.js (same path a
+// human comment takes) and calls porchSweep.recordAction() so the
+// daily budget/cooldown ledger stays honest; 'silent' does nothing.
+//
+// An agent with no `characters` row (resolveCharacter returns null —
+// an installed agent nobody has wired a character for yet) falls back
+// to the pre-PHA-2844 log-only behavior rather than erroring: sweep
+// proposing a decision for an agent doesn't guarantee that agent has
+// anything to say yet.
+async function porchOnDecision(decision, log) {
+  const character = porchContract.resolveCharacter(db, decision.agentUserId);
+  if (!character) {
+    log(`decision skipped, no character row yet: wall=${decision.wallId} post=${decision.postId} agent=${decision.agentUserId}`);
+    return;
+  }
+
+  const post = db.prepare('SELECT * FROM wall_posts WHERE id = ?').get(decision.postId);
+  if (!post) {
+    log(`decision skipped, post gone: wall=${decision.wallId} post=${decision.postId} agent=${decision.agentUserId}`);
+    return;
+  }
+
+  const comprehension = await porchComprehension.buildComprehension(db, {
+    post,
+    agentUserId: decision.agentUserId,
+  });
+
+  const allowed = porchContract.allowedRegisters(character, character.isForeignAgent);
+  const drafts = await Promise.all(allowed.map((register) => agentRuntime.draftPorchCandidate({
+    comprehension,
+    register,
+    postText: post.text_body || '',
+  })));
+  const candidates = drafts
+    .filter((d) => d && d.ok && d.text)
+    .map((d) => ({ register: d.register, text: d.text }));
+
+  const action = porchContract.decide(db, {
+    wallId: decision.wallId,
+    postId: decision.postId,
+    agentUserId: decision.agentUserId,
+    character,
+    comprehension,
+    candidates,
+  });
+
+  if (action.action === 'silent') {
+    log(`silent (${action.reason}): wall=${decision.wallId} post=${decision.postId} agent=${decision.agentUserId}`);
+    return;
+  }
+
+  const comment = walls.createComment(decision.postId, decision.agentUserId, action.text);
+  wallEvents.publish(comment.wallSlug, 'comment', comment);
+  porchSweep.recordAction(db, {
+    wallId: decision.wallId,
+    agentUserId: decision.agentUserId,
+    postId: decision.postId,
+    authorUserId: decision.authorUserId,
+    actionKind: 'comment',
+  });
+  log(`${action.action} (${action.register}): wall=${decision.wallId} post=${decision.postId} agent=${decision.agentUserId} comment=${comment.id}`);
+}
+
 let porchSweepHandle = null;
 function startPorchSweep() {
   if (porchSweepHandle) return;
+  const log = (...args) => console.log('[porch-sweep]', ...args);
   porchSweepHandle = porchSweep.start(db, {
-    log: (...args) => console.log('[porch-sweep]', ...args),
+    log,
+    onDecision: (decision) => porchOnDecision(decision, log),
   });
 }
 if (require.main === module) {
