@@ -1,4 +1,14 @@
-## Unreleased — Homestead brand system lands (PHA-2777)
+## v0.5.5 (2026-08-30) — Brand system + BYOK modal fix + chore-module gate + wall notify wiring
+
+Rolls up everything landed on `main` since v0.5.4 for the real-usage feedback
+loop on PHA-2804: the brand system apply pass below, plus **PHA-2804: fix
+BYOK token modal stuck after Stored** (the modal no longer hangs after a
+successful token save), **PHA-2811: gate chore creation on the chores
+module being enabled** (fixes the orphaned "help me make homestad" chore
+Tyler couldn't close), and **PHA-2656: wire the wall notify-level dropdown**
+to `GET/PUT /api/walls/:slug/notifications`.
+
+## Homestead brand system lands (PHA-2777)
 
 Brandon's canonical README (`vault/PHATT-TECH/Projects/homestead-app/canonical/homestead-logo-canonical.png`,
 locked 2026-08-28) makes the carved-wood lettering in the lockup the wordmark itself —
