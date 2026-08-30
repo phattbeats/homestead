@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Homestead maskable icon">
+  <rect width="512" height="512" fill="#4b4624"/>
+  <g transform="translate(64 64) scale(.75)">
+    <path d="M126 400V245c0-88 58-147 130-147s130 59 130 147v155Z" fill="#f6e4c3"/>
+    <path d="M154 400V248c0-69 43-117 102-117s102 48 102 117v152Z" fill="#2f2f17"/>
+    <path d="M169 400V249c0-58 35-95 87-95v246Z" fill="#4d6d3c"/>
+    <path d="M256 154c59 0 87 37 87 95v151H256Z" fill="#ad5c05" opacity=".9"/>
+    <circle cx="235" cy="275" r="11" fill="#d49a40"/>
+  </g>
+</svg>

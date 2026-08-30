@@ -114,11 +114,25 @@
     }).join('')}</div>`;
   }
 
+  // PHA-2648: honest-identity badge + one-click opt-out for Porch agents.
+  // isAgent is derived server-side from a live agent_tokens row (never a
+  // self-reported flag) — see lib/walls.js's userView(). Used for BOTH
+  // post authors and comment authors: an agent's actual Porch output is
+  // most often a comment/reaction on someone else's post (PHA-2645's
+  // participation contract), not a post of its own.
+  function authorBadgeHtml(author) {
+    if (!author || !author.isAgent) return '';
+    const username = esc(author.username || '');
+    return `<span class="agent-badge" title="This account posts as a Porch agent">🤖 Agent</span>
+      <button type="button" class="agent-vote-off" data-username="${username}"
+        title="Vote this agent off the porch">Vote off</button>`;
+  }
+
   function postHtml(p) {
     const author = (p.author && (p.author.display || p.author.username)) || 'Someone';
     return `<div class="post${p._pending ? ' pending' : ''}" data-id="${esc(p.id)}">
       <div class="post-head">
-        <div class="post-author">${esc(author)}</div>
+        <div class="post-author">${esc(author)}${authorBadgeHtml(p.author)}</div>
         <div class="post-time">${esc(fmtTime(p.createdAt))}</div>
       </div>
       ${postMediaHtml(p)}
@@ -261,19 +275,44 @@
       <option value="none">Notify: None</option>
     </select>`;
 
+      // PHA-2727 comp A: on the wall-only screen (no other modules enabled,
+      // no bottom bar to dock into) the single available action becomes a
+      // centered floating "+" button, and profile/settings — which had no
+      // entry point at all on this standalone shell — move into a "⋯"
+      // utility chip in the header. Both are opt-in via cfg so the
+      // meadow/feed-tabs placement (mounted inside index.html, which already
+      // has its own fab/avatar/nav chrome) is unaffected.
+      const utilChipHtml = cfg.utilityChip ? `<button type="button" id="utilChip" class="util-chip" aria-label="Profile and settings">⋯</button>` : '';
+      const composerWrapOpen = cfg.primaryFab ? '' : ' on';
+
       root.innerHTML = `
   <header>
-    <div class="greet"><small id="feedLabel">The Porch</small><span id="wallName">Wall</span></div>
+    <div class="header-lockup"><a class="brand-lockup" href="/" aria-label="Homestead home"><img src="/icon.svg" alt="" class="brand-icon"><img src="/wordmark.svg" alt="Homestead" class="brand-wordmark"></a><div class="greet"><small id="feedLabel">The Porch</small><span id="wallName">Wall</span></div></div>
     ${pickerHtml}
+    ${utilChipHtml}
   </header>
 
   <main id="main">
-    ${composerHtml}
+    <div id="composerWrap" class="composer-wrap-toggle${composerWrapOpen}">${composerHtml}</div>
     <div id="feed"></div>
     <div class="older-wrap">
       <button type="button" class="btn btn-secondary" id="olderBtn" hidden>Older</button>
     </div>
-  </main>`;
+  </main>
+  ${cfg.primaryFab ? `<button type="button" id="composeFab" class="compose-fab" aria-label="New post">+</button>` : ''}
+  ${cfg.utilityChip ? `
+  <div id="utilSheet" class="util-overlay">
+    <div class="util-sheet">
+      <h2 id="utilName">You</h2>
+      <button type="button" class="link util-close" id="utilClose" style="position:absolute;top:16px;right:18px">✕</button>
+      <h3>Change your password</h3>
+      <input class="field" type="password" id="utilCurPw" placeholder="Current password" autocomplete="current-password">
+      <input class="field" type="password" id="utilNewPw" placeholder="New password" autocomplete="new-password">
+      <button type="button" class="btn" id="utilPwSave">Update password</button>
+      <div class="err" id="utilPwErr"></div>
+      <button type="button" class="link" style="margin-top:16px;width:100%;text-align:center" id="utilLogout">Log out</button>
+    </div>
+  </div>` : ''}`;
     }
 
     // ---- boot ----
@@ -323,10 +362,83 @@
       }
       const cur = WALLS.find((w) => w.slug === WALL) || WALLS[0];
       $('#wallName', root).textContent = (cur && (cur.name || cur.slug)) || WALL;
+      wireNotifyLevel();
+      await refreshNotifyLevel();
       await loadPosts(true);
 
       if (cfg.canPost) wireComposer();
       wireOlder();
+      if (cfg.primaryFab) wireComposeFab();
+      if (cfg.utilityChip) wireUtilChip();
+    }
+
+    // PHA-2727: centered FAB toggles the composer card open/closed instead
+    // of it always occupying the top of the feed. Closes again after a
+    // successful post so the wall reads as content-first between posts.
+    function wireComposeFab() {
+      const fab = $('#composeFab', root);
+      const wrap = $('#composerWrap', root);
+      if (!fab || !wrap) return;
+      on(fab, 'click', () => {
+        const opening = !wrap.classList.contains('on');
+        wrap.classList.toggle('on', opening);
+        fab.classList.toggle('open', opening);
+        if (opening) {
+          wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          const textArea = $('#textBody', root);
+          if (textArea) textArea.focus();
+        }
+      });
+    }
+
+    function closeComposeFab() {
+      const wrap = $('#composerWrap', root);
+      const fab = $('#composeFab', root);
+      if (!cfg.primaryFab || !wrap) return;
+      wrap.classList.remove('on');
+      if (fab) fab.classList.remove('open');
+    }
+
+    // PHA-2727: the standalone porch shell had no profile/settings entry
+    // point at all (that chrome lives only in index.html's header). The
+    // "⋯" chip surfaces the minimal set every user needs — password change,
+    // logout — without pulling in the admin-only settings sheet.
+    function wireUtilChip() {
+      const chip = $('#utilChip', root);
+      const sheet = $('#utilSheet', root);
+      if (!chip || !sheet) return;
+      on(chip, 'click', () => {
+        const nameEl = $('#utilName', root);
+        if (nameEl) nameEl.textContent = (ME && (ME.display || ME.username)) || 'You';
+        sheet.classList.add('on');
+      });
+      const close = () => sheet.classList.remove('on');
+      const closeBtn = $('#utilClose', root);
+      if (closeBtn) on(closeBtn, 'click', close);
+      on(sheet, 'click', (e) => { if (e.target === sheet) close(); });
+      const saveBtn = $('#utilPwSave', root);
+      if (saveBtn) {
+        on(saveBtn, 'click', async () => {
+          const errEl = $('#utilPwErr', root);
+          if (errEl) errEl.textContent = '';
+          try {
+            await api('POST', '/password', {
+              current: $('#utilCurPw', root).value,
+              next: $('#utilNewPw', root).value,
+            });
+            close();
+          } catch (e) {
+            if (errEl) errEl.textContent = (e.body && e.body.error) || 'Failed';
+          }
+        });
+      }
+      const logoutBtn = $('#utilLogout', root);
+      if (logoutBtn) {
+        on(logoutBtn, 'click', async () => {
+          await api('POST', '/logout');
+          window.location.reload();
+        });
+      }
     }
 
     function renderWallPicker() {
@@ -343,6 +455,44 @@
         const w = WALLS.find((x) => x.slug === WALL);
         $('#wallName', root).textContent = (w && w.name) || WALL;
         await loadPosts(true);
+        await refreshNotifyLevel();
+      });
+    }
+
+    // ---- per-wall notify level (PHA-2656: dropdown was decorative — no
+    // load/save wired to the wall_notification_prefs table behind
+    // GET/PUT /api/walls/:slug/notifications, added in PHA-2218) ----
+
+    async function refreshNotifyLevel() {
+      const sel = $('#notifyLevel', root);
+      if (!sel || !WALL) return;
+      try {
+        const res = await api('GET', `/walls/${encodeURIComponent(WALL)}/notifications`);
+        const level = (res && res.level) || 'all';
+        sel.value = level;
+        sel.dataset.prev = level;
+      } catch (_) {
+        // Non-fatal: leave the select at its current value so the user
+        // can still try to change it.
+      }
+    }
+
+    function wireNotifyLevel() {
+      const sel = $('#notifyLevel', root);
+      if (!sel) return;
+      on(sel, 'change', async () => {
+        const level = sel.value;
+        const prev = sel.dataset.prev || 'all';
+        sel.disabled = true;
+        try {
+          await api('PUT', `/walls/${encodeURIComponent(WALL)}/notifications`, { level });
+          sel.dataset.prev = level;
+        } catch (_) {
+          sel.value = prev;
+          toast('Could not save notification setting', true);
+        } finally {
+          sel.disabled = false;
+        }
       });
     }
 
@@ -397,6 +547,9 @@
       $$('.comments-toggle', root).forEach((el) => {
         on(el, 'click', () => onCommentsToggle(el));
       });
+      $$('.agent-vote-off', root).forEach((btn) => {
+        on(btn, 'click', () => onVoteOffClick(btn));
+      });
       if (cfg.canComment) {
         $$('.comment-form', root).forEach((f) => {
           on(f, 'submit', (e) => onCommentSubmit(e, f));
@@ -435,6 +588,19 @@
       }
     }
 
+    async function onVoteOffClick(btn) {
+      const username = btn.dataset.username;
+      btn.disabled = true;
+      try {
+        await api('POST', `/walls/${encodeURIComponent(WALL)}/agents/${encodeURIComponent(username)}/opt-out`, {});
+        btn.textContent = 'Voted off';
+        toast(`${username} won't post here anymore`);
+      } catch (_) {
+        btn.disabled = false;
+        toast('Vote off failed', true);
+      }
+    }
+
     function onCommentsToggle(el) {
       const postId = el.dataset.post;
       const panel = $(`.comments[data-post="${cssEsc(postId)}"]`, root);
@@ -462,8 +628,11 @@
       if (!comments.length) { list.innerHTML = '<div class="empty" style="padding:6px 0">No comments yet</div>'; return; }
       list.innerHTML = comments.map((c) => {
         const author = (c.author && (c.author.display || c.author.username)) || 'Someone';
-        return `<div class="comment"><b>${esc(author)}:</b> ${esc(c.body)}</div>`;
+        return `<div class="comment"><b>${esc(author)}:</b>${authorBadgeHtml(c.author)} ${esc(c.body)}</div>`;
       }).join('');
+      $$('.agent-vote-off', list).forEach((btn) => {
+        on(btn, 'click', () => onVoteOffClick(btn));
+      });
     }
 
     async function onCommentSubmit(e, form) {
@@ -583,6 +752,7 @@
         await createPost({ kind, media_id: media.id });
         if (status) status.textContent = '';
         PENDING_MEDIA = null;
+        closeComposeFab();
       } catch (e) {
         if (status) {
           if (e.status === 413) {
@@ -608,6 +778,7 @@
         textArea.value = '';
         const el = $('#textCount', root);
         if (el) el.textContent = '0 / 2000';
+        closeComposeFab();
       } finally {
         btn.disabled = false;
       }
@@ -648,6 +819,7 @@
         const box = $('#linkPreview', root);
         if (box) box.innerHTML = '';
         linkPreviewData = null;
+        closeComposeFab();
       } finally {
         btn.disabled = false;
       }

@@ -6,8 +6,8 @@
 <title>The Porch — Homestead</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#FFFBF5">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/brand.css">
 <!-- PHA-2200.5 / PHA-2206: shared wall feed styles. Same file is also
      used by index.html's #page-wall mount so both placements render
      identically. -->
@@ -40,6 +40,12 @@
           canPost: true,
           canReact: true,
           canComment: true,
+          // PHA-2727: this standalone shell is what a wall-only user lands
+          // on (no other modules enabled, no bottom bar, no profile access
+          // at all). The index.html #page-wall mount leaves these off since
+          // it already has its own fab/avatar/nav chrome.
+          primaryFab: true,
+          utilityChip: true,
         });
       }
     }
