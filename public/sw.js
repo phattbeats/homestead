@@ -13,43 +13,56 @@
 // inside /index.html — both placements need it to render the wall.
 // Without precaching, a returning PWA user with intermittent
 // connectivity would see an empty Porch. Cache-first for these URLs.
+//
+// PHA-2846: cache bumped to homestead-v5 to ship the rebuilt
+// opening-door canonical SVG / PNG set (icon.svg, favicon.svg,
+// icon-192.png, icon-512.png, icon-maskable.svg, icon-maskable-512.png)
+// plus the six built-in module SVG marks under /modules/. The old
+// homestead-v4 cache is dropped on activate so no stale predecessor
+// is reachable after deployment.
 const PRECACHE_URLS = [
   '/components/feed.js',
   '/porch.css',
   '/brand.css',
   '/fonts/fraunces-italic-400-latin.woff2',
   '/fonts/plus-jakarta-sans-latin.woff2',
+  // Canonical opening-door mark (PHA-2846)
   '/icon.svg',
+  '/favicon.svg',
   '/icon-192.png',
   '/icon-512.png',
+  '/icon-maskable.svg',
   '/icon-maskable-512.png',
+  // Six built-in module SVG marks (PHA-2846)
+  '/modules/porch.svg',
+  '/modules/lists.svg',
+  '/modules/calendar.svg',
+  '/modules/chores.svg',
+  '/modules/apps.svg',
+  '/modules/agent.svg',
+  // Brand hero / wordmark (unchanged from v4)
   '/brand-hero.png',
   '/wordmark.svg',
 ];
 
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
-    const cache = await caches.open('homestead-v4');
+    const cache = await caches.open('homestead-v5');
     // Best-effort precache: a 404 here doesn't fail the install — the
     // service worker still activates and network-first falls through.
     try { await cache.addAll(PRECACHE_URLS); } catch (_) {}
     await self.skipWaiting();
-  })();
+  })());
 });
 
 self.addEventListener('activate', e => {
   e.waitUntil((async () => {
-    // Drop old caches on activation.
+    // Drop old caches on activation. PHA-2846: homestead-v4 is now
+    // stale (it points at the old closed-arch icon SVGs); we want a
+    // clean cache drop so a returning PWA user doesn't keep seeing
+    // the old mark offline.
     const names = await caches.keys();
-    await Promise.all(names.filter(n => n !== 'homestead-v4').map(n => caches.delete(n)));
-  })();
-});
-
-self.addEventListener('activate', e => {
-  e.waitUntil((async () => {
-    // Drop old caches on activation.
-    const names = await caches.keys();
-    await Promise.all(names.filter(n => n !== 'homestead-v4').map(n => caches.delete(n)));
+    await Promise.all(names.filter(n => n !== 'homestead-v5').map(n => caches.delete(n)));
     await self.clients.claim();
   })());
 });
@@ -60,7 +73,7 @@ self.addEventListener('fetch', e => {
   if (url.origin !== self.location.origin) return; // ignore cross-origin
   if (PRECACHE_URLS.indexOf(url.pathname) === -1) return;
   e.respondWith((async () => {
-    const cache = await caches.open('homestead-v4');
+    const cache = await caches.open('homestead-v5');
     const hit = await cache.match(url.pathname);
     if (hit) return hit;
     try {
