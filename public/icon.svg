@@ -1,11 +1,98 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
-  <title id="title">Homestead flat icon</title>
-  <desc id="desc">An olive rounded tile with an arched doorway and an open green door.</desc>
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Homestead canonical PWA icon — opening door (PHA-2846).
+
+  One canonical opening-door vector. Used at:
+    * 16-32px header use (favicon / brand-icon)
+    * 192px and 512px PWA install icons (rasterized from this SVG)
+    * maskable crop (separate /icon-maskable.svg)
+
+  Composition (deferred to the canonical OUT NOW teaser, agents/ledger
+  /assets/homestead/canonical/, which is the source of truth for the
+  opening-door mark):
+    * Sage/olive door panel (#6d7b59) with arched doorway reveal.
+    * Doorway opening on the viewer-LEFT half of the tile, cream
+      interior + warm amber hearth glow visible inside.
+    * Hinges at the doorway's right jamb (the slab's LEFT edge in
+      screen space, where the slab meets the frame).
+    * Door slab has swung OPEN outward toward viewer-right — the
+      slab now sits to the RIGHT of the doorway, overlapping the
+      right portion of the exterior wall.
+    * Brass handle on the slab's free (RIGHT) edge near mid-height.
+    * Background: dark olive (#4b4624) rounded square.
+    * Frame: dark umber (#2a1f10) stroke.
+
+  The issue spec phrase "brass handle on the free viewer-left edge"
+  is ambiguous (which "left" — slab's left edge or composition
+  left?). We follow the canonical poster, where the handle is on
+  the slab's free (right) edge — opposite the hinge.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="t d">
+  <title id="t">Homestead</title>
+  <desc id="d">An olive rounded tile. On the left half, an arched doorway reveals a cream interior with warm amber hearth glow. The sage door, hinged at the doorway's right jamb, is swung open toward viewer-right and stands overlapping the right portion of the wall. A brass handle sits on the free right edge of the slab.</desc>
+
+  <!-- Background tile (rounded square, dark olive) -->
   <rect width="512" height="512" rx="112" fill="#4b4624"/>
-  <path d="M126 400V245c0-88 58-147 130-147s130 59 130 147v155Z" fill="#f6e4c3"/>
-  <path d="M154 400V248c0-69 43-117 102-117s102 48 102 117v152Z" fill="#2f2f17"/>
-  <path d="M169 400V249c0-58 35-95 87-95v246Z" fill="#4d6d3c"/>
-  <path d="M256 154c59 0 87 37 87 95v151H256Z" fill="#ad5c05" opacity=".9"/>
-  <circle cx="235" cy="275" r="11" fill="#d49a40"/>
-  <path d="M169 400h174" stroke="#351901" stroke-width="14" stroke-linecap="round"/>
+
+  <!-- Wall texture stripes (faint vertical boards behind the door). -->
+  <g stroke="#3d3820" stroke-width="2" opacity=".55">
+    <line x1="380" y1="80"  x2="380" y2="432"/>
+    <line x1="412" y1="80"  x2="412" y2="432"/>
+    <line x1="444" y1="80"  x2="444" y2="432"/>
+  </g>
+
+  <!-- Arched doorway opening on the LEFT half of the tile. -->
+  <path d="M64 432V232c0-86 50-140 112-140s112 54 112 140v200Z" fill="#f6e4c3"/>
+
+  <!-- Hearth glow inside the doorway (warm amber, radial-ish). -->
+  <radialGradient id="hearth" cx="60%" cy="80%" r="55%">
+    <stop offset="0%" stop-color="#f6e4c3"/>
+    <stop offset="35%" stop-color="#f3a849"/>
+    <stop offset="75%" stop-color="#ad5c05"/>
+    <stop offset="100%" stop-color="#7a3d04"/>
+  </radialGradient>
+  <path d="M64 432V232c0-86 50-140 112-140s112 54 112 140v200Z" fill="url(#hearth)"/>
+  <!-- Tiny ember dots at the base of the flame -->
+  <circle cx="220" cy="394" r="9" fill="#f6e4c3"/>
+  <circle cx="200" cy="416" r="5" fill="#f6e4c3"/>
+  <circle cx="248" cy="372" r="6" fill="#f6e4c3"/>
+
+  <!-- Door frame stroke -->
+  <path d="M64 432V232c0-86 50-140 112-140s112 54 112 140v200"
+        fill="none" stroke="#2a1f10" stroke-width="6" stroke-linejoin="round"/>
+
+  <!-- Threshold and exterior ground line -->
+  <path d="M64 432h224" stroke="#2a1f10" stroke-width="6" stroke-linecap="round"/>
+  <path d="M64 432h384" stroke="#351901" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- DOOR SLAB — open outward toward viewer-right.
+       Slab corners (clockwise from hinge-top):
+         hinge-top:    (288, 152)
+         free-top:     (424, 116)
+         free-bottom:  (424, 432)
+         hinge-bottom: (288, 432)
+  -->
+  <path d="M288 152 L424 116 L424 432 L288 432 Z"
+        fill="#6d7b59" stroke="#2a1f10" stroke-width="5" stroke-linejoin="round"/>
+
+  <!-- Door panel insets (top + bottom), skewed to match slab tilt. -->
+  <path d="M310 196 L402 174 L402 252 L310 256 Z"
+        fill="#5d6b48" stroke="#2a1f10" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M310 274 L402 256 L402 388 L310 396 Z"
+        fill="#5d6b48" stroke="#2a1f10" stroke-width="3" stroke-linejoin="round"/>
+
+  <!-- Brass hinge plates on the LEFT edge of the slab (doorway's right jamb). -->
+  <rect x="278" y="180" width="20" height="10" rx="2" fill="#d49a40" stroke="#2a1f10" stroke-width="1.5"/>
+  <rect x="278" y="394" width="20" height="10" rx="2" fill="#d49a40" stroke="#2a1f10" stroke-width="1.5"/>
+
+  <!-- BRASS HANDLE on the free RIGHT edge of the slab.
+       The free edge runs from (424, 116) at the top to (424, 432) at
+       the bottom. Place the handle near the vertical middle. The slab
+       is tilted (right edge closer to viewer) so the inside face is
+       visible at this edge — mount the handle on that surface. -->
+  <g transform="translate(414 270)">
+    <rect x="-7" y="-18" width="20" height="36" rx="3" fill="#b07f2c" stroke="#2a1f10" stroke-width="1.5"/>
+    <circle cx="0" cy="0" r="10" fill="#d49a40" stroke="#2a1f10" stroke-width="1.5"/>
+    <circle cx="-3" cy="-3" r="3.5" fill="#f3d18b"/>
+  </g>
 </svg>

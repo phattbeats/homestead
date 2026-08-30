@@ -394,7 +394,13 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 .tok-list{display:flex;flex-direction:column;gap:8px}
 .tok-row{display:flex;gap:12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--surface);align-items:center}
 .tok-mark{width:36px;height:36px;border-radius:50%;background:var(--accent-soft);color:var(--accent);flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700}
+  display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;
+  /* PHA-2846: when .tok-mark contains an <img>, fill the disc.
+     Built-in modules ship an /modules/{key}.svg icon; the SPA
+     renders it here for the Apps sheet rows + App detail header.
+     Emoji glyphs ignore these rules and render as text. */
+  overflow:hidden}
+.tok-mark img{display:block;width:28px;height:28px;object-fit:contain}
 .tok-info{flex:1;min-width:0;min-width:0}
 .tok-label{font-weight:700;font-size:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .tok-prefix{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:11px;
@@ -2492,6 +2498,19 @@ function openAgentEndpointSheet(defaultKind, afterCreate){
         PHA-2230) inside this sheet, then consent -> install. The
         newly-minted app token is shown exactly once via the existing
         copy-once reveal (openTokenRevealSheet, PHA-1617.3 pattern). */
+// PHA-2846: shared icon renderer for the Apps sheet + App detail
+// header. Built-in modules ship a path-style icon ("/modules/{key}.svg");
+// third-party manifests ship an emoji string. We render <img> for the
+// former, an escaped emoji span for the latter. The registry's icon
+// field stays a string (16-field contract preserved).
+function appIconHtml(icon) {
+  const fallback = '📦';
+  if (typeof icon === 'string' && icon.startsWith('/modules/')) {
+    return `<img src="${esc(icon)}" alt="" aria-hidden="true">`;
+  }
+  return esc(icon || fallback);
+}
+
 async function openAppsSheet(){
   const apps = await api('GET','/api/apps');
   openAppsSheetWith(apps);
@@ -2500,7 +2519,7 @@ async function openAppsSheet(){
 function openAppsSheetWith(apps){
   const rows = apps.map(a=>`
     <div class="tok-row app-row" data-key="${esc(a.key)}">
-      <div class="tok-mark" aria-hidden="true">${esc(a.icon||'📦')}</div>
+      <div class="tok-mark" aria-hidden="true">${appIconHtml(a.icon)}</div>
       <div class="tok-info">
         <div class="tok-label">${esc(a.name)}${a.builtin?' <span class="badge">built-in</span>':''}</div>
         <div class="tok-meta">v${esc(a.version||'?')} · ${esc(a.author||'unknown')}</div>
@@ -2541,7 +2560,7 @@ function openAppDetailSheetWith(app){
     ? `<p style="font-size:12px;color:var(--muted)">Built-in modules aren't tracked in the app activity log — calls go through your own session, not an app-scoped token.</p>`
     : `<div id="app-activity"><p class="empty" style="padding:14px 0">Loading activity…</p></div>`;
 
-  openSheet(`<h2>${esc(app.icon||'📦')} ${esc(app.name)}${app.builtin?' <span class="badge">built-in</span>':''}</h2>
+  openSheet(`<h2>${appIconHtml(app.icon)} ${esc(app.name)}${app.builtin?' <span class="badge">built-in</span>':''}</h2>
     <p style="font-size:13px;color:var(--muted);margin:-10px 0 14px">v${esc(app.version||'?')} · by ${esc(app.author||'unknown')}${app.description?' — '+esc(app.description):''}</p>
     <h3>What this app can do</h3>
     <ul class="scope-list" style="list-style:none;margin-bottom:14px">${scopesHtml}</ul>

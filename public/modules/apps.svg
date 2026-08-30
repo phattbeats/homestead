@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Apps</title>
+  <path d="M11 20 32 9l21 11v31H11z" fill="#6d7b59" stroke="#4b4624" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M18 27h28v19H18z" fill="#f6e4c3" stroke="#4b4624" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M32 27v19M18 36.5h28" stroke="#4b4624" stroke-width="2.5"/>
+  <path d="M23 31h5v5h-5zM36 31h5v5h-5zM23 40h5v3h-5zM36 40h5v3h-5z" fill="#ad5c05"/>
+  <circle cx="49" cy="50" r="5" fill="#d49a40" stroke="#4b4624" stroke-width="2.5"/>
+</svg>

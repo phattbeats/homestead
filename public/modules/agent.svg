@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Hearth</title>
+  <path d="M20 53V31c0-9 5-16 12-16s12 7 12 16v22" fill="#6d7b59" stroke="#4b4624" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M15 21h34M19 53h26" stroke="#d49a40" stroke-width="4" stroke-linecap="round"/>
+  <path d="M25 17V11M39 17V11" stroke="#d49a40" stroke-width="4" stroke-linecap="round"/>
+  <path d="M31 49c-7-4-8-11-4-16 1-1 2-3 3-6 5 3 10 8 7 14 0 5-2 8-6 8z" fill="#ad5c05" stroke="#4b4624" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M31 47c-3-2-4-6-2-9 1-1 2-3 2-5 3 2 5 5 4 9 0 3-2 5-4 5z" fill="#f6e4c3"/>
+  <circle cx="29" cy="42" r="1.5" fill="#4b4624"/>
+  <circle cx="34" cy="42" r="1.5" fill="#4b4624"/>
+</svg>
