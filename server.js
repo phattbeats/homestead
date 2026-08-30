@@ -53,6 +53,7 @@ const drawerDispatch = require('./lib/drawer-dispatch');
 const eventsDispatch = require('./lib/events-dispatch');
 const media = require('./lib/media');
 const walls = require('./lib/walls');
+const wallEvents = require('./lib/wall-events');
 const lists = require('./lib/lists');
 const notifications = require('./lib/notifications');
 const analytics = require('./lib/analytics');
@@ -2253,8 +2254,51 @@ app.post('/api/walls/:slug/posts', auth, requireScope('write:walls:post'), (req,
   const me = userModel.getMe(db, req.session.user.username);
   if (!me) return res.status(401).json({ error: 'unknown_user' });
   try {
-    res.json(walls.createPost(req.params.slug, me.id, req.body || {}));
+    const post = walls.createPost(req.params.slug, me.id, req.body || {});
+    wallEvents.publish(req.params.slug, 'post', post);
+    res.json(post);
   } catch (e) { wallsErr(res, e); }
+});
+// PHA-2821: long-lived SSE stream so a wall live-updates for every member
+// who has it open — reuses the SSE wire format PHA-1899 established for
+// the drawer rather than standing up a second realtime transport. Unlike
+// the drawer's one-shot request/reply stream, this connection stays open
+// for the tab's lifetime; events are pushed in from wallEvents.publish()
+// at the write sites (post/comment create) instead of being generated
+// inline here.
+app.get('/api/walls/:slug/events', auth, requireWallReadScope, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const slug = req.params.slug;
+  try { walls.assertMember(slug, me.id); } catch (e) { return wallsErr(res, e); }
+
+  res.status(200);
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders && res.flushHeaders();
+  // Tell the browser's native EventSource reconnect backoff, and send an
+  // immediate comment so proxies flush headers before the first real event.
+  res.write('retry: 3000\n');
+  res.write(': connected\n\n');
+
+  const unsubscribe = wallEvents.subscribe(slug, ({ event, data }) => {
+    if (res.writableEnded) return;
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  });
+  // Keepalive comment ping so idle proxies/load balancers don't time the
+  // connection out during quiet walls.
+  const heartbeat = setInterval(() => {
+    if (res.writableEnded) return;
+    res.write(': ping\n\n');
+  }, 25000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+  });
 });
 app.delete('/api/walls/:slug/posts/:postId', auth, (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
@@ -2288,7 +2332,9 @@ app.post('/api/walls/posts/:postId/comments', auth, (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
   if (!me) return res.status(401).json({ error: 'unknown_user' });
   try {
-    res.json(walls.createComment(req.params.postId, me.id, req.body && req.body.body));
+    const comment = walls.createComment(req.params.postId, me.id, req.body && req.body.body);
+    wallEvents.publish(comment.wallSlug, 'comment', comment);
+    res.json(comment);
   } catch (e) { wallsErr(res, e); }
 });
 
