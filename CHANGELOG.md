@@ -1,3 +1,44 @@
+## v0.5.8 (Unreleased) — branded invite landing (PHA-2835) + redeem() in-tx recheck (PHA-2766)
+
+### Branded invite landing (PHA-2835)
+
+The /invite/:code landing page used to render an unbranded cream surface
+with stacked white cards and the raw admin note leaking through (e.g.
+"PHA-2664 beta wave (25-use porch invite, reissued after PHA-2728
+wipe)"). This is the first thing a new member sees — it needs to feel
+like Homestead before they create an account.
+
+- **`public/invite.html`** — redesigned using the PHA-2777 brand system:
+  brand-hero painterly lockup + Fraunces Italic tagline at top, a
+  centered "You're invited." headline, a sage-tinted wall card with the
+  inviter + wall slug + remaining-spots line, then a single primary CTA
+  (hearth-orange "I'm new — create my account") and a sage-outline
+  secondary CTA ("Already have a Homestead account?"). Both choices
+  expand an inline form on tap. No more "Show form" toggle, no more
+  stacked white cards. Plus Jakarta Sans body + Fraunces Italic tagline
+  (same fonts the rest of the app uses).
+- **`lib/invites.js`** — new `scrubPublicNote(rawNote)` server-side
+  scrubber strips operational metadata (PHA-####, beta wave, reissued,
+  wiped, admin/owner reset, internal ops, reset event) before the public
+  peek at `GET /api/public/invites/:code` exposes the note. Notes that
+  trip the 40% operational rule return null rather than risk leaking
+  fragments. Human-facing copy ("for the Tailor kid — your cousins")
+  passes through untouched.
+- **`public/invite.html` `sanitizeNote()`** — defense-in-depth pass on
+  the client that mirrors the server scrub. Even a note that somehow
+  bypasses the server gate won't render operational copy in the
+  browser. Belt-and-suspenders.
+- **`server.js`** — `GET /api/public/invites/:code` now pipes
+  `inv.note` through `invites.scrubPublicNote` before returning.
+- **`scripts/test-2835-invite-note-scrub.js`** — new 11-assertion
+  acceptance test (10 direct lib cases + 1 HTTP peek integration
+  against a child-process server). Wired into `npm test` directly
+  after `test-2711-invite-signup`.
+- **`scripts/smoke-2583-invite-bounce.js`** — unchanged; the redesign
+  keeps the page chrome + content the smoke checks for (title contains
+  "invite", `#content` text contains "wall"/"loading"/"invite", body is
+  not raw JSON).
+
 ## v0.5.7 (2026-08-30) — Porch wall live-updates via SSE
 
 **PHA-2821:** first real two-human usage caught the wall not behaving like a
