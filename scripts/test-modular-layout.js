@@ -191,7 +191,9 @@ const GET = (urlPath) => fetch('http://127.0.0.1:3192' + urlPath, { headers: HEA
   const agentTile = layout.tabs.find(t => t.key === 'agent');
   assert(agentTile, 'agent tile present');
   assertEq(agentTile.route, null, 'agent (drawer mode) has route null — opens FAB, not route');
-  assertEq(agentTile.icon, '💬', 'agent tile icon');
+  // PHA-2846: built-in icons are SVG paths under /modules/ (see
+  // public/modules.html + public/index.html for the dispatch rule).
+  assertEq(agentTile.icon, '/modules/agent.svg', 'agent tile icon');
   assertEq(agentTile.label, 'Agent', 'agent tile label');
   assertEq(layout.agentDrawer, true, 'agentDrawer flag is true');
   // Disable agent → tile disappears, agentDrawer false.

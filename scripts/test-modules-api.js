@@ -99,7 +99,12 @@ const NOAUTH = (urlPath) => fetch('http://127.0.0.1:3191' + urlPath);
     assertEq(layout.agentDrawer, true, 'agentDrawer === true (agent is enabled)');
     assertEq(layout.tabs.length, 6, 'tabs.length === 6');
     assertEq(layout.tabs[0].key, 'wall', 'tabs[0].key === "wall"');
-    assertEq(layout.tabs[0].icon, '📸', 'tabs[0].icon === "📸"');
+    // PHA-2846: built-in module icons are SVG paths under /modules/ rather
+    // than emoji literals. Third-party manifests still use emoji strings.
+    // Dispatch in the SPA renderer: /modules/ → <img>, anything else →
+    // escaped emoji glyph. See public/modules.html and openAppsSheetWith()
+    // in public/index.html.
+    assertEq(layout.tabs[0].icon, '/modules/porch.svg', 'tabs[0].icon === "/modules/porch.svg"');
     assertEq(layout.tabs[0].label, 'Porch', 'tabs[0].label === "Porch"');
     assertEq(layout.tabs[0].route, '/porch.html', 'tabs[0].route === "/porch.html"');
     assertEq(layout.tabs[5].key, 'agent', 'tabs[5].key === "agent"');
