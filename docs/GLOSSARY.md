@@ -239,12 +239,26 @@ each one is either a tile in the home grid or a tab in the top strip.
   enough to just rebuild. "Bring It Home" names the *option set*,
   not a mandatory upgrade path.
 
-- **Hearth** *(planned)* — the planned read-API surface for
+- **Hearth** — the built-in agent that ships with Homestead. The
+  default character that comes alive when a household enables
+  the Agent module, with a personality persisted in the repo at
+  `agents/hearth/SOUL.md` and `agents/hearth/IDENTITY.md`, and
+  mirrored to a per-user row at first-enable. Hearth is a
+  drawer-mode agent (PHA-1617.6) and a registered porch
+  character (PHA-2645 / PHA-2646). The avatar is the
+  forest-green enamel oil lantern in
+  `brand/hearth-agent-homestead-icon.png`. Spec:
+  PHA-2827 / PHA-2828. *(Renamed from "Hearth (planned) — the
+  analytics read API" by PHA-2828; the read API took the name
+  "Analytics API" instead.)*
+
+- **Analytics API** *(planned)* — the read surface behind PAT for
   Homestead analytics. The write path is `lib/analytics.js`
-  (closed-enum `KINDS`); the read API behind PAT is referenced
-  in PHA-2210 follow-ups but has not shipped. When the read API
-  lands, this entry becomes canonical and `Hearth` becomes the
-  user-facing surface name.
+  (closed-enum `KINDS`); the read API is referenced in
+  PHA-2210 follow-ups but has not shipped. When the read API
+  lands, this entry becomes canonical. *(Renamed from the
+  planned "Hearth" surface name by PHA-2828 — Brandon's call
+  was that "Hearth" stays the name of the agent.)*
 
 - **The socket** — the meta-agent socket (PHA-1617). The
   authenticated API surface that connected agents and CLIs use
