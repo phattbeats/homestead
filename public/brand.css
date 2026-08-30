@@ -1,12 +1,23 @@
 /* Homestead brand foundation (PHA-2777).
  *
- * Display serif (Fraunces SemiBold 600) is used only for the wordmark and
- * the login tagline (Fraunces Italic 400). Body and UI copy remain
- * Plus Jakarta Sans for readability. Local fonts keep the app shell and
- * standalone surfaces usable offline (precached by sw.js).
+ * The canonical wordmark is the carved-wood vector traced from
+ * `homestead/canonical/homestead-logo-canonical.png` (Brandon's lock 2026-08-28).
+ * Source of truth: `agents/ledger/assets/homestead/canonical/`. Per the canonical
+ * README, the lockup answers the typeface question — the carved-wood lettering
+ * IS the wordmark, vectorized. We render it as `/wordmark.svg` (single color
+ * #4e2d0f on transparent) inside `.brand-wordmark` and never substitute a
+ * typeset alternative.
  *
- * Icon palette is sourced from the canonical Homestead brand spec
- * (homestead/canonical/homestead-logo-canonical.png, locked 2026-08-28):
+ * The brand-spec-v3 specified Fraunces SemiBold 600 as a fallback for places
+ * the vector wouldn't render, but the second-pass correction (Brandon's
+ * "STILL NOT THE RIGHT ASSETS" comment on PHA-2777) replaced that hedge with
+ * the canonical SVG. Fraunces is kept only for the login tagline (Fraunces
+ * Italic 400) — the tagline was always typeset, never part of the lockup art.
+ *
+ * Body and UI copy remain Plus Jakarta Sans for readability. Local fonts keep
+ * the app shell and standalone surfaces usable offline (precached by sw.js).
+ *
+ * Icon palette is sourced from the canonical Homestead brand README:
  *   --brand-olive   #4b4624  doorway frame, sage ground (dominant)
  *   --brand-sage    #6D7B59  legacy header lockup (kept for legacy surfaces)
  *   --brand-paper   #f6e4c3  parchment ground (canonical warm)
@@ -17,10 +28,6 @@
  * login, splash, store, and README only. Inside feeds/lists/settings we use
  * the flat mark (.brand-mark) which scales cleanly down to favicon size.
  */
-@font-face{
-  font-family:'Fraunces';font-style:normal;font-weight:600;font-display:swap;
-  src:url('/fonts/fraunces-600-latin.woff2') format('woff2');
-}
 @font-face{
   font-family:'Fraunces';font-style:italic;font-weight:400;font-display:swap;
   src:url('/fonts/fraunces-italic-400-latin.woff2') format('woff2');
@@ -41,26 +48,40 @@
   /* PHA-2777 acceptance: muted label token darkened from #8A8177 (3.71:1)
    * to #7a7269 (4.59:1) so muted labels and button text pass WCAG AA. */
   --muted:#7a7269;
+  /* The canonical wordmark color (carved wood). Use currentColor in the SVG
+   * so the inline reference inherits the ink token. */
+  --ink:#2B2622;
 }
 
-/* Inline header lockup: doorway (flat, 32px) + wordmark (Fraunces SemiBold 600). */
+/* Inline header lockup: doorway (flat, 32px) + canonical wordmark SVG.
+ * .brand-wordmark is now an <img> tag pointing at /wordmark.svg (the
+ * canonical carved-wood vector traced from the lockup). Width is
+ * intrinsic to the SVG's 1206:514 viewBox; height is auto. */
 .brand-lockup{display:inline-flex;align-items:center;gap:10px;min-width:0;color:inherit;text-decoration:none}
-.brand-lockup img{display:block;width:32px;height:32px;flex:none}
-.brand-wordmark{font-family:'Fraunces',Georgia,serif;font-size:25px;font-weight:600;letter-spacing:-.035em;line-height:1;color:var(--ink,#2B2622)}
-.brand-wordmark--light{color:#FFF8EC}
+.brand-lockup img.brand-icon{display:block;width:32px;height:32px;flex:none}
+.brand-wordmark{display:block;width:auto;height:22px;flex:none;color:inherit}
+.brand-wordmark--light{filter:invert(1) sepia(1) saturate(0) hue-rotate(0deg) brightness(2.6)}
+@media (min-width:460px){
+  .header-lockup .brand-wordmark{height:22px}
+}
 
 /* Small flat mark — used wherever the brand icon sits inline (header, chip, etc.).
  * Stays at or below the 64px flat ceiling per the v3 spec. */
 .brand-mark{display:block;width:40px;height:40px;flex:none}
 
-/* Login hero — the canonical painterly doorway with hearth-lit interior.
- * Source: agents/sales/.tmp/canonical-icon-only.png (1254×1254 master).
- * Locked at 96px floor so the painterly detail survives; the brand wordmark
- * and tagline below ride in the parchment-warm login card. */
+/* Login hero — the canonical login lockup (icon + wordmark, transparent ground).
+ * Source: login-lockup-canonical.png from agents/ledger/assets/homestead/canonical/
+ * (the file Brandon attached as `b807e275-…`). Aspect 1774:887 (≈2:1, wider than
+ * the previous standalone painterly). Rendered at 96px tall to keep the
+ * full lockup legible on mobile while not overwhelming the login card. */
 .brand-hero{display:block;width:auto;height:96px;margin:0 auto 14px}
+@media (min-width:600px){
+  .brand-hero{height:144px}
+}
 
-/* Tagline is now Fraunces Italic 400 (v3 spec) — display serif, but italic
- * cuts the visual weight so it doesn't compete with the wordmark above it. */
+/* Tagline is Fraunces Italic 400 — typeset copy, not part of the canonical
+ * artwork. Italic cuts the visual weight so it doesn't compete with the
+ * wordmark above it. */
 .brand-tagline{
   font-family:'Fraunces',Georgia,serif;
   font-style:italic;font-weight:400;
