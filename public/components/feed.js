@@ -275,19 +275,44 @@
       <option value="none">Notify: None</option>
     </select>`;
 
+      // PHA-2727 comp A: on the wall-only screen (no other modules enabled,
+      // no bottom bar to dock into) the single available action becomes a
+      // centered floating "+" button, and profile/settings — which had no
+      // entry point at all on this standalone shell — move into a "⋯"
+      // utility chip in the header. Both are opt-in via cfg so the
+      // meadow/feed-tabs placement (mounted inside index.html, which already
+      // has its own fab/avatar/nav chrome) is unaffected.
+      const utilChipHtml = cfg.utilityChip ? `<button type="button" id="utilChip" class="util-chip" aria-label="Profile and settings">⋯</button>` : '';
+      const composerWrapOpen = cfg.primaryFab ? '' : ' on';
+
       root.innerHTML = `
   <header>
     <div class="greet"><small id="feedLabel">The Porch</small><span id="wallName">Wall</span></div>
     ${pickerHtml}
+    ${utilChipHtml}
   </header>
 
   <main id="main">
-    ${composerHtml}
+    <div id="composerWrap" class="composer-wrap-toggle${composerWrapOpen}">${composerHtml}</div>
     <div id="feed"></div>
     <div class="older-wrap">
       <button type="button" class="btn btn-secondary" id="olderBtn" hidden>Older</button>
     </div>
-  </main>`;
+  </main>
+  ${cfg.primaryFab ? `<button type="button" id="composeFab" class="compose-fab" aria-label="New post">+</button>` : ''}
+  ${cfg.utilityChip ? `
+  <div id="utilSheet" class="util-overlay">
+    <div class="util-sheet">
+      <h2 id="utilName">You</h2>
+      <button type="button" class="link util-close" id="utilClose" style="position:absolute;top:16px;right:18px">✕</button>
+      <h3>Change your password</h3>
+      <input class="field" type="password" id="utilCurPw" placeholder="Current password" autocomplete="current-password">
+      <input class="field" type="password" id="utilNewPw" placeholder="New password" autocomplete="new-password">
+      <button type="button" class="btn" id="utilPwSave">Update password</button>
+      <div class="err" id="utilPwErr"></div>
+      <button type="button" class="link" style="margin-top:16px;width:100%;text-align:center" id="utilLogout">Log out</button>
+    </div>
+  </div>` : ''}`;
     }
 
     // ---- boot ----
@@ -341,6 +366,77 @@
 
       if (cfg.canPost) wireComposer();
       wireOlder();
+      if (cfg.primaryFab) wireComposeFab();
+      if (cfg.utilityChip) wireUtilChip();
+    }
+
+    // PHA-2727: centered FAB toggles the composer card open/closed instead
+    // of it always occupying the top of the feed. Closes again after a
+    // successful post so the wall reads as content-first between posts.
+    function wireComposeFab() {
+      const fab = $('#composeFab', root);
+      const wrap = $('#composerWrap', root);
+      if (!fab || !wrap) return;
+      on(fab, 'click', () => {
+        const opening = !wrap.classList.contains('on');
+        wrap.classList.toggle('on', opening);
+        fab.classList.toggle('open', opening);
+        if (opening) {
+          wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          const textArea = $('#textBody', root);
+          if (textArea) textArea.focus();
+        }
+      });
+    }
+
+    function closeComposeFab() {
+      const wrap = $('#composerWrap', root);
+      const fab = $('#composeFab', root);
+      if (!cfg.primaryFab || !wrap) return;
+      wrap.classList.remove('on');
+      if (fab) fab.classList.remove('open');
+    }
+
+    // PHA-2727: the standalone porch shell had no profile/settings entry
+    // point at all (that chrome lives only in index.html's header). The
+    // "⋯" chip surfaces the minimal set every user needs — password change,
+    // logout — without pulling in the admin-only settings sheet.
+    function wireUtilChip() {
+      const chip = $('#utilChip', root);
+      const sheet = $('#utilSheet', root);
+      if (!chip || !sheet) return;
+      on(chip, 'click', () => {
+        const nameEl = $('#utilName', root);
+        if (nameEl) nameEl.textContent = (ME && (ME.display || ME.username)) || 'You';
+        sheet.classList.add('on');
+      });
+      const close = () => sheet.classList.remove('on');
+      const closeBtn = $('#utilClose', root);
+      if (closeBtn) on(closeBtn, 'click', close);
+      on(sheet, 'click', (e) => { if (e.target === sheet) close(); });
+      const saveBtn = $('#utilPwSave', root);
+      if (saveBtn) {
+        on(saveBtn, 'click', async () => {
+          const errEl = $('#utilPwErr', root);
+          if (errEl) errEl.textContent = '';
+          try {
+            await api('POST', '/password', {
+              current: $('#utilCurPw', root).value,
+              next: $('#utilNewPw', root).value,
+            });
+            close();
+          } catch (e) {
+            if (errEl) errEl.textContent = (e.body && e.body.error) || 'Failed';
+          }
+        });
+      }
+      const logoutBtn = $('#utilLogout', root);
+      if (logoutBtn) {
+        on(logoutBtn, 'click', async () => {
+          await api('POST', '/logout');
+          window.location.reload();
+        });
+      }
     }
 
     function renderWallPicker() {
@@ -616,6 +712,7 @@
         await createPost({ kind, media_id: media.id });
         if (status) status.textContent = '';
         PENDING_MEDIA = null;
+        closeComposeFab();
       } catch (e) {
         if (status) {
           if (e.status === 413) {
@@ -641,6 +738,7 @@
         textArea.value = '';
         const el = $('#textCount', root);
         if (el) el.textContent = '0 / 2000';
+        closeComposeFab();
       } finally {
         btn.disabled = false;
       }
@@ -681,6 +779,7 @@
         const box = $('#linkPreview', root);
         if (box) box.innerHTML = '';
         linkPreviewData = null;
+        closeComposeFab();
       } finally {
         btn.disabled = false;
       }
