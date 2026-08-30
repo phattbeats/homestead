@@ -1,7 +1,7 @@
 /* Homestead — The Porch Wall (PHA-2151). Tokens ported verbatim from
    public/index.html's <style> :root block for visual consistency. */
 :root{
-  --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#8A8177;
+  --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#7a7269;
   --line:rgba(43,38,34,.07);
   --u-all:#9eb48a;
   --accent:#C4703C; --accent-soft:#F8E9DE;
@@ -17,6 +17,12 @@ a{color:inherit}
 #app{max-width:640px;margin:0 auto;padding-bottom:40px}
 
 header{padding:calc(env(safe-area-inset-top) + 22px) 18px 6px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.header-lockup{display:flex;align-items:center;gap:10px;min-width:0}.header-lockup .brand-lockup{gap:8px}.header-lockup .brand-lockup img.brand-icon{width:28px;height:28px}.header-lockup .brand-lockup img.brand-wordmark{height:21px;width:auto}.header-lockup .greet{min-width:0}
+/* The standalone/in-place Porch header also carries a wall title and picker.
+   At phone widths the doorway remains the canonical lockup; the wordmark SVG
+   (.brand-wordmark) is hidden below 460px to avoid a competing two-line heading
+   over the composer — the doorway icon (canonical flat SVG) stays visible. */
+@media (max-width:460px){.header-lockup{gap:8px}.header-lockup .brand-wordmark{display:none}}
 header .back{font-size:22px;font-weight:800;text-decoration:none;width:32px;flex-shrink:0}
 .greet{font-weight:800;font-size:20px;letter-spacing:-.02em;flex:1;min-width:0}
 .greet small{display:block;font-size:11px;color:var(--muted);font-weight:500;letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px}
@@ -110,3 +116,35 @@ textarea{resize:vertical;font-family:inherit}
   background:var(--ink);color:#fff;padding:12px 18px;border-radius:14px;font-size:13px;font-weight:600;
   opacity:0;pointer-events:none;transition:opacity .25s var(--ease),transform .25s var(--ease);z-index:50;max-width:90vw;text-align:center}
 #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ---- PHA-2727: wall-only mobile layout (comp A — compact floating FAB) ----
+   No bottom bar exists on this standalone shell, so the composer is
+   collapsed by default and the single available action (post to the
+   wall) becomes a centered, unmissable FAB. Profile/settings — which had
+   no entry point at all here — move into a "⋯" utility chip in the
+   header, kept visually secondary since it's a utility, not a
+   destination. */
+.composer-wrap-toggle{display:none}
+.composer-wrap-toggle.on{display:block}
+
+.compose-fab{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 26px);transform:translateX(-50%);
+  width:64px;height:64px;border-radius:50%;background:var(--accent);color:#fff;font-size:32px;font-weight:400;
+  line-height:1;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 10px 30px rgba(196,112,60,.35);transition:transform .35s var(--ease);z-index:40}
+.compose-fab:active{transform:translateX(-50%) scale(.92)}
+.compose-fab.open{transform:translateX(-50%) rotate(45deg)}
+.compose-fab.open:active{transform:translateX(-50%) rotate(45deg) scale(.92)}
+
+.util-chip{width:34px;height:34px;border-radius:50%;background:var(--surface);border:1px solid var(--line);
+  color:var(--muted);font-size:16px;font-weight:700;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.util-chip:active{transform:scale(.92)}
+
+.util-overlay{position:fixed;inset:0;background:rgba(43,38,34,.4);display:none;align-items:flex-end;
+  justify-content:center;z-index:50;backdrop-filter:blur(4px)}
+.util-overlay.on{display:flex}
+.util-sheet{position:relative;background:var(--bg);border-radius:26px 26px 0 0;width:100%;max-width:640px;
+  padding:26px 22px calc(env(safe-area-inset-bottom) + 26px);max-height:90dvh;overflow-y:auto}
+.util-sheet h2{font-size:19px;font-weight:800;letter-spacing:-.01em;margin-bottom:18px}
+.util-sheet h3{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:18px 0 8px}
+.util-sheet .field{margin-bottom:10px}
+.util-sheet .err{color:#b3453a;font-size:13px;margin-top:6px}

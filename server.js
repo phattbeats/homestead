@@ -61,6 +61,7 @@ const wallMembers = require('./lib/wall-members');
 const porchSweep = require('./lib/porch/sweep');
 const porchContract = require('./lib/porch/participation-contract');
 const oidcLink = require('./lib/oidc-link');
+const mailbox = require('./lib/porch/mailbox');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -114,6 +115,10 @@ porchSweep.migrate(db);
 // dedupe/callbacks + per-wall opt-out). Same FK dependencies as
 // porchSweep above, so it runs right after.
 porchContract.migrate(db);
+// PHA-2426: agent-to-agent mailbox. FKs to installed_apps(key) (created
+// by agentTokens.migrate), users(id), and wall_posts(id), so it runs
+// after both agentTokens.migrate and walls.migrate.
+mailbox.migrate(db);
 analytics.migrate(db);
 // PHA-2207 (PHA-2200.6): invite codes. FKs to walls(slug), so it
 // runs after walls.migrate().
@@ -344,6 +349,24 @@ function requireWallReadScope(req, res, next) {
   const scopeSlug = req.params.slug.replace(/-/g, '_');
   if (scopes.includes('read:walls') || scopes.includes(`read:walls:${scopeSlug}`)) return next();
   return res.status(403).json({ error: 'insufficient_scope', required: `read:walls:${scopeSlug}` });
+}
+
+// requireModuleEnabled(key): the session user must have this module
+// turned on (per user_modules) before the route may write data into
+// it. PHA-2811: POST /api/tasks had no such gate, so a chore added
+// without the `chores` module enabled wrote a row that never rendered
+// anywhere — no nav tab, no home-page task list, nothing. Scopes
+// (requireScope) only gate third-party app tokens; first-party
+// session users sail through those with `scopes === null`, so a
+// module-enabled check is a separate, additional gate.
+function requireModuleEnabled(key) {
+  return function (req, res, next) {
+    const me = userModel.getMe(db, req.session.user.username);
+    if (!me) return res.status(401).json({ error: 'not authenticated' });
+    const enabledKeys = userModel.getEnabledModules(db, me.id).map(e => e.key);
+    if (enabledKeys.includes(key)) return next();
+    return res.status(403).json({ error: 'module_not_enabled', module: key });
+  };
 }
 
 // ---- VAPID keypair (PHA-1619) ----
@@ -2269,6 +2292,76 @@ app.post('/api/walls/posts/:postId/comments', auth, (req, res) => {
   } catch (e) { wallsErr(res, e); }
 });
 
+// ---- agent-to-agent mailbox (PHA-2426) ----
+// A "foreign harness" here is nothing more than an installed third-party
+// app (PHA-2201) whose token carries read:mailbox/write:mailbox — there
+// is no separate external-agent registry. `mailboxCallerContext` is the
+// one place that decides whose thread-scope a request gets: an
+// app-scoped token only ever sees its OWN app's threads (`ctx.appId`);
+// a full-access caller (household session, or this household's own
+// user-level PAT) sees every thread, matching the household-wide
+// visibility the Porch mirror post already gives this data (PHA-2426
+// rule 3 — there is no hidden layer to additionally restrict).
+function mailboxCallerContext(req) {
+  const scopes = tokenScopes(req);
+  if (scopes === null) return { appScoped: false };
+  const detail = req.session.user.authProviderDetail;
+  const tokenRow = detail && db.prepare('SELECT * FROM agent_tokens WHERE id = ?').get(detail.tokenId);
+  if (!tokenRow || !tokenRow.app_id) return { appScoped: false };
+  const app = db.prepare('SELECT * FROM installed_apps WHERE key = ?').get(tokenRow.app_id);
+  return { appScoped: true, appId: tokenRow.app_id, appName: (app && app.name) || tokenRow.app_id };
+}
+function mailboxErr(res, e) {
+  if (e && e.status) return res.status(e.status).json({ error: e.code || 'error' });
+  return res.status(500).json({ error: 'internal_error', detail: e && e.message });
+}
+function mailboxHttpError(status, code) {
+  return Object.assign(new Error(code), { status, code });
+}
+app.get('/api/mailbox/threads', auth, requireScope('read:mailbox'), (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const ctx = mailboxCallerContext(req);
+  const filter = ctx.appScoped ? { appId: ctx.appId } : { localUserId: me.id };
+  res.json({ threads: mailbox.listThreads(db, filter) });
+});
+app.get('/api/mailbox/threads/:threadId/messages', auth, requireScope('read:mailbox'), (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const thread = mailbox.getThread(db, req.params.threadId);
+  if (!thread) return res.status(404).json({ error: 'not_found' });
+  const ctx = mailboxCallerContext(req);
+  if (ctx.appScoped && thread.app_id !== ctx.appId) return res.status(404).json({ error: 'not_found' });
+  try {
+    const messages = mailbox.listMessages(db, thread.id, { sinceId: req.query.since, limit: req.query.limit });
+    mailbox.markRead(db, messages.map((m) => m.id), ctx.appScoped ? `app:${ctx.appId}` : `user:${me.id}`);
+    res.json({ threadId: thread.id, messages });
+  } catch (e) { mailboxErr(res, e); }
+});
+// POST /api/mailbox/messages: an app-scoped (foreign) caller always
+// posts `inbound` into its own app's thread; a full-access (local)
+// caller posts `outbound` and must name which installed app the reply
+// is for (`appId`) — and must actually own that app's install (be the
+// household member who granted it access), so one member can't reply
+// into another member's foreign-agent relationship.
+app.post('/api/mailbox/messages', auth, requireScope('write:mailbox'), (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const ctx = mailboxCallerContext(req);
+  const { threadKey, topic, body, appId, wallSlug } = req.body || {};
+  try {
+    const params = ctx.appScoped
+      ? { appId: ctx.appId, localUserId: me.id, threadKey, topic, direction: 'inbound', fromIdentity: ctx.appName, body, wallSlug }
+      : (() => {
+          if (!appId) throw mailboxHttpError(400, 'app_id_required');
+          const owns = db.prepare('SELECT 1 FROM agent_tokens WHERE app_id = ? AND user_id = ? AND revoked_at IS NULL').get(appId, me.id);
+          if (!owns) throw mailboxHttpError(403, 'not_app_owner');
+          return { appId, localUserId: me.id, threadKey, topic, direction: 'outbound', fromIdentity: `local:${me.username}`, body, wallSlug };
+        })();
+    res.json(mailbox.postMessage(db, params));
+  } catch (e) { mailboxErr(res, e); }
+});
+
 // ---- Porch agent opt-out ("vote this agent off the porch", PHA-2645/2648) ----
 // Any wall member can toggle it — same "one-click, self-service" spirit as
 // a reaction, not an admin-gated moderation action. lib/porch/participation-
@@ -2490,7 +2583,7 @@ app.get('/api/groups', auth, (req, res) => {
 app.get('/api/tasks', auth, (req, res) => {
   res.json(db.prepare('SELECT * FROM tasks ORDER BY done, due_date IS NULL, due_date, id DESC').all());
 });
-app.post('/api/tasks', auth, (req, res) => {
+app.post('/api/tasks', auth, requireModuleEnabled('chores'), (req, res) => {
   const { title, notes = '', assignee = 'all', alt_assignee = null, due_date = null, recur = '', rotate = 0 } = req.body || {};
   if (!title) return res.status(400).json({ error: 'title required' });
   if (!userModel.validateAssignee(db, assignee)) return res.status(400).json({ error: 'unknown assignee' });
@@ -2505,7 +2598,7 @@ app.post('/api/tasks', auth, (req, res) => {
   eventsDispatch.dispatchEventForAssignee(db, app.locals.eventsStreakMap, assignee, 'task_created', { task: created }).catch(() => {});
   res.json(created);
 });
-app.put('/api/tasks/:id', auth, (req, res) => {
+app.put('/api/tasks/:id', auth, requireModuleEnabled('chores'), (req, res) => {
   const t = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (!t) return res.status(404).json({ error: 'not found' });
   const b = { ...t, ...req.body };
@@ -3701,7 +3794,7 @@ app.get(/^\/invite\/([A-Fa-f0-9]{16,64})$/, (req, res) => {
 app.get('/favicon.ico', (req, res) => {
   res.set('Content-Type', 'image/svg+xml');
   res.set('Cache-Control', 'public, max-age=86400');
-  res.sendFile('public/icon.svg', { root: __dirname });
+  res.sendFile('public/favicon.svg', { root: __dirname });
 });
 
 // PHA-2658: entity pages are an explicit SPA route, not a static asset.

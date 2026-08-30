@@ -201,6 +201,44 @@ each one is either a tile in the home grid or a tab in the top strip.
 
 ## Agent and connector surfaces
 
+- **Bring It Home** *(PHA-2819)* — the canonical name for the
+  three-tier pipeline by which a self-hosted service already
+  running in the household (Plex, Kavita, Sonarr, a Popcorn-Vote-
+  style side app, anything) gets adopted into Homestead instead of
+  staying a separate bookmark. Every service climbs the same three
+  rungs, and a service is allowed to stop at any rung — climbing
+  further is optional, not mandatory:
+
+  1. **Full-screen linkage** — the service opens inside Homestead's
+     own chrome instead of a new tab. Shipped: the `apps` launcher
+     (the Den) renders each tile's target in an in-SPA
+     `open_mode: "frame"` iframe shell at `/apps.html`. Zero
+     integration work per service beyond a tile entry — the
+     fastest rung and the default landing spot for "bring your
+     services in."
+  2. **Direct API connection** — Homestead talks to the service's
+     API on the user's behalf instead of just framing its UI.
+     Shipped: **Connector Forge** (PHA-2444 / PHA-2446, below) — a
+     connector spec declares GET-only probes and field mappings,
+     runs as a per-user `ConnectorInstallation`, and surfaces as a
+     first-class `connector:<spec_id>` room in the Meadow grid.
+     This is the "juicy" rung — no iframe, actual data flowing into
+     Homestead's own layout.
+  3. **Rebuilt as an app** — the service's functionality is
+     reimplemented natively as a Homestead module (in-app,
+     `apps.html` tile registry) or, for larger scope, as its own
+     Docker/Unraid-deployed service that plugs into the same module
+     registry contract. Shipped example: Popcorn Vote (PHA-2201 /
+     PHA-2052) — the first third-party app built against the
+     manifest/consent/scoped-token contract rather than run as an
+     external service. This rung is the most work and is scoped
+     per-service, not attempted for everything.
+
+  The pipeline is additive, not sequential-gated: a service can
+  ship at rung 1 forever, or jump straight to rung 3 if it's small
+  enough to just rebuild. "Bring It Home" names the *option set*,
+  not a mandatory upgrade path.
+
 - **Hearth** *(planned)* — the planned read-API surface for
   Homestead analytics. The write path is `lib/analytics.js`
   (closed-enum `KINDS`); the read API behind PAT is referenced

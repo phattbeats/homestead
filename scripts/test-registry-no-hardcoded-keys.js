@@ -130,6 +130,11 @@ const EXCLUDE_FILES = new Set([
   // `/api/media/...` paths via string match) are test config, not
   // render code.
   'scripts/test-2644-media-context.js',
+  // PHA-2811 task-module-gate regression test: asserts the `chores`
+  // module toggle blocks POST/PUT /api/tasks. Same category as the
+  // sibling acceptance tests above — literal keys are test config
+  // driving /api/me/modules/:key/enable|disable, not render code.
+  'scripts/test-2811-task-module-gate.js',
 ]);
 
 const SCAN_EXTS = new Set([
@@ -210,6 +215,12 @@ const ALLOWED_LEGITIMATE = [
   // element allow-list above; the table name is a SQL identifier,
   // not a render-time module-key branch).
   { file: 'lib/snapshot.js', literal: "'lists'" },
+  // PHA-2811: 'chores' as the argument to ENABLED_MODULE_KEYS.has(...)
+  // in public/index.html's FAB picker — this IS reading from the
+  // registry-derived Set populated by applyLayout(); the literal only
+  // selects which key's membership to test, same pattern as
+  // lib/app-install.js's allow-listed setUserModule('apps', ...) calls.
+  { file: 'public/index.html', literal: "'chores'" },
 ];
 
 function isAllowedLegitimate(file, match) {
