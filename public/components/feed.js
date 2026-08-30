@@ -128,12 +128,19 @@
         title="Vote this agent off the porch">Vote off</button>`;
   }
 
-  function postHtml(p) {
+  function postHtml(p, meUsername) {
     const author = (p.author && (p.author.display || p.author.username)) || 'Someone';
+    const isMine = !!(meUsername && p.author && p.author.username === meUsername);
+    const deleteHtml = isMine
+      ? `<button type="button" class="post-delete" data-post="${esc(p.id)}" title="Delete post" aria-label="Delete post">🗑</button>`
+      : '';
     return `<div class="post${p._pending ? ' pending' : ''}" data-id="${esc(p.id)}">
       <div class="post-head">
         <div class="post-author">${esc(author)}${authorBadgeHtml(p.author)}</div>
-        <div class="post-time">${esc(fmtTime(p.createdAt))}</div>
+        <div class="post-head-right">
+          <div class="post-time">${esc(fmtTime(p.createdAt))}</div>
+          ${deleteHtml}
+        </div>
       </div>
       ${postMediaHtml(p)}
       ${reactionsHtml(p)}
@@ -532,7 +539,7 @@
         feed.innerHTML = '<div class="empty">No posts yet. Be the first!</div>';
         return;
       }
-      feed.innerHTML = POSTS.map(postHtml).join('');
+      feed.innerHTML = POSTS.map((p) => postHtml(p, ME && ME.username)).join('');
       wireFeedEvents();
     }
 
@@ -549,6 +556,9 @@
       });
       $$('.agent-vote-off', root).forEach((btn) => {
         on(btn, 'click', () => onVoteOffClick(btn));
+      });
+      $$('.post-delete', root).forEach((btn) => {
+        on(btn, 'click', () => onDeleteClick(btn));
       });
       if (cfg.canComment) {
         $$('.comment-form', root).forEach((f) => {
@@ -598,6 +608,21 @@
       } catch (_) {
         btn.disabled = false;
         toast('Vote off failed', true);
+      }
+    }
+
+    async function onDeleteClick(btn) {
+      const postId = btn.dataset.post;
+      if (!confirm('Delete this post? This cannot be undone.')) return;
+      btn.disabled = true;
+      try {
+        await api('DELETE', `/walls/${encodeURIComponent(WALL)}/posts/${encodeURIComponent(postId)}`);
+        POSTS = POSTS.filter((p) => p.id !== postId);
+        renderFeed();
+        toast('Post deleted');
+      } catch (_) {
+        btn.disabled = false;
+        toast('Delete failed', true);
       }
     }
 
