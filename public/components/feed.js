@@ -284,6 +284,13 @@
       // has its own fab/avatar/nav chrome) is unaffected.
       const utilChipHtml = cfg.utilityChip ? `<button type="button" id="utilChip" class="util-chip" aria-label="Profile and settings">⋯</button>` : '';
       const composerWrapOpen = cfg.primaryFab ? '' : ' on';
+      // PHA-2822: the standalone wall-only shell is a starting room, not
+      // the whole house — but until now nothing on it said so. A quiet
+      // pill (not a pill row, not a tab strip) is the one door out.
+      // Only rendered when the caller passes addRoomPill (porch.html);
+      // the index.html #page-wall mount already has its own "+ Add
+      // rooms" pill wired to the same /modules.html sheet.
+      const addRoomPillHtml = cfg.addRoomPill ? `<a href="/modules.html" id="addRoomPill" class="add-room-pill">+ Add a room</a>` : '';
 
       root.innerHTML = `
   <header>
@@ -300,6 +307,7 @@
     </div>
   </main>
   ${cfg.primaryFab ? `<button type="button" id="composeFab" class="compose-fab" aria-label="New post">+</button>` : ''}
+  ${addRoomPillHtml}
   ${cfg.utilityChip ? `
   <div id="utilSheet" class="util-overlay">
     <div class="util-sheet">
