@@ -1,3 +1,17 @@
+## v0.5.7 (2026-08-30) — Porch wall live-updates via SSE
+
+**PHA-2821:** first real two-human usage caught the wall not behaving like a
+shared room — Tyler posted, Brandon's open session showed nothing until a
+manual reload. Adds `GET /api/walls/:slug/events`, a long-lived SSE stream
+keyed per wall (`lib/wall-events.js`), reusing the wire format PHA-1899
+established for the drawer rather than a second realtime mechanism.
+`walls.createPost`/`walls.createComment` publish after a successful write;
+`feed.js` opens a native `EventSource` per mounted wall, prepends new posts,
+updates comment counts, closes the connection on hidden tabs, and falls back
+to reload-on-focus once reconnection looks dead. Reactions are explicitly
+out of scope for the live path (see issue for why). Typing indicators,
+presence, and read receipts remain out of scope entirely.
+
 ## v0.5.6 (2026-08-30) — Discoverable add-a-room affordance on the wall-only funnel
 
 **PHA-2822:** first outside tester (Brandon + Tyler on PHA-2804) landed on the
