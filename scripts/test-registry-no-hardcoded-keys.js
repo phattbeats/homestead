@@ -192,6 +192,12 @@ const ALLOWED_LEGITIMATE = [
   // element allow-list above; the table name is a SQL identifier,
   // not a render-time module-key branch).
   { file: 'lib/snapshot.js', literal: "'lists'" },
+  // PHA-2811: 'chores' as the argument to ENABLED_MODULE_KEYS.has(...)
+  // in public/index.html's FAB picker — this IS reading from the
+  // registry-derived Set populated by applyLayout(); the literal only
+  // selects which key's membership to test, same pattern as
+  // lib/app-install.js's allow-listed setUserModule('apps', ...) calls.
+  { file: 'public/index.html', literal: "'chores'" },
 ];
 
 function isAllowedLegitimate(file, match) {
