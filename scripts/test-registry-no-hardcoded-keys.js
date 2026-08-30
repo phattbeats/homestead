@@ -135,6 +135,12 @@ const EXCLUDE_FILES = new Set([
   // sibling acceptance tests above — literal keys are test config
   // driving /api/me/modules/:key/enable|disable, not render code.
   'scripts/test-2811-task-module-gate.js',
+  // PHA-2829 Hearth first-enable regression test: drives
+  // userModel.enableModule(db, ..., 'agent') and asserts on the
+  // resulting analytics_events rows. Same category as the sibling
+  // acceptance tests above — literal keys are test config driving
+  // the module-enable API, not render code.
+  'scripts/test-2829-first-enable.js',
 ]);
 
 const SCAN_EXTS = new Set([
@@ -221,6 +227,16 @@ const ALLOWED_LEGITIMATE = [
   // selects which key's membership to test, same pattern as
   // lib/app-install.js's allow-listed setUserModule('apps', ...) calls.
   { file: 'public/index.html', literal: "'chores'" },
+  // PHA-2843: 'wall' as the nav-item id in app-nav.js's LINKS table
+  // (`{ key: 'wall', href: '/', ... }`). The bottom nav bar is a
+  // standalone script with no access to the CommonJS registry module;
+  // `key` here is only ever compared against the `data-active`
+  // attribute the standalone HTML pages set ('porch'/'modules'/
+  // 'invites'/'connectors' — none of which is 'wall'), so it's a nav
+  // link identifier, not a render-time branch against the module
+  // registry. Same category as the drawer stream-author allow-list
+  // above.
+  { file: 'public/components/app-nav.js', literal: "'wall'" },
 ];
 
 function isAllowedLegitimate(file, match) {
