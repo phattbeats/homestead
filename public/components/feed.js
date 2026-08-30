@@ -115,7 +115,13 @@
   }
 
   // PHA-2647: honest-identity badge + admin-only vote-off, shared markup.
-  function agentBadgeHtml() {
+  // PHA-2827.D: `kind === 'built-in'` (Hearth) gets its own label — he's
+  // not an installed third-party character, so the generic "[agent]"
+  // badge would undersell/misrepresent him.
+  function agentBadgeHtml(kind) {
+    if (kind === 'built-in') {
+      return `<span class="agent-badge" title="Hearth — the house's built-in agent">[hearth]</span>`;
+    }
     return `<span class="agent-badge" title="Posted by an agent, not a household member">[agent]</span>`;
   }
 
@@ -133,7 +139,7 @@
       : '';
     return `<div class="post${p._pending ? ' pending' : ''}${isAgent ? ' agent-post' : ''}" data-id="${esc(p.id)}">
       <div class="post-head">
-        <div class="post-author">${esc(author)}${isAgent ? agentBadgeHtml() : ''}</div>
+        <div class="post-author">${esc(author)}${isAgent ? agentBadgeHtml(p.author && p.author.kind) : ''}</div>
         <div class="post-head-right">
           <div class="post-time">${esc(fmtTime(p.createdAt))}</div>
           ${deleteHtml}
@@ -730,7 +736,7 @@
         const isAgent = !!(c.author && c.author.isAgent);
         const author = (c.author && (c.author.display || c.author.username)) || 'Someone';
         const username = (c.author && c.author.username) || '';
-        return `<div class="comment${isAgent ? ' agent-comment' : ''}"><b>${esc(author)}</b>${isAgent ? agentBadgeHtml() : ''}: ${esc(c.body)}${isAgent && isAdmin ? ` ${voteOffHtml(username)}` : ''}</div>`;
+        return `<div class="comment${isAgent ? ' agent-comment' : ''}"><b>${esc(author)}</b>${isAgent ? agentBadgeHtml(c.author && c.author.kind) : ''}: ${esc(c.body)}${isAgent && isAdmin ? ` ${voteOffHtml(username)}` : ''}</div>`;
       }).join('');
       wireVoteOffButtons(list);
     }

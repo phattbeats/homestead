@@ -134,6 +134,15 @@ analytics.migrate(db);
 // module enable — not at boot — so a fresh install doesn't create a
 // character row until the user actually wants Hearth.
 hearthCharacters.migrate(db);
+// PHA-2831 (PHA-2827.D): Hearth is a Porch citizen, not just a drawer
+// companion — ensure his built-in system account exists (or already
+// does) and is backfilled into every wall's membership, so
+// lib/porch/sweep.js's listAgentUserIds() and lib/walls.js's identity
+// UI (badge + vote-off) see him alongside any user-installed agent
+// characters. Idempotent; runs after walls.migrate() so there's
+// something to back-fill, and self-heals walls created since the last
+// boot on every restart.
+hearthCharacters.ensureBuiltinAgentUser(db);
 // PHA-2207 (PHA-2200.6): invite codes. FKs to walls(slug), so it
 // runs after walls.migrate().
 invites.migrate(db);
@@ -4044,14 +4053,22 @@ function startHealthChecker() {
 // Same independent-setInterval pattern as startHealthChecker above.
 // onDecision is left at lib/porch/sweep.js's default (log-only) stub.
 // The participation contract (PHA-2645, lib/porch/participation-contract.js)
-// has landed, but nothing yet produces the candidate comment text per
-// register it gates — that needs the media-comprehension package + a
-// per-register LLM draft (still PHA-2636). Once that exists, onDecision
-// here becomes: build {character, comprehension, candidates} for the
-// decision, call porchContract.decide(db, ...), and on a 'post'/'riff'
-// action actually create the reaction/comment + call
-// porchSweep.recordAction(). Until then this loop only ever decides
-// WHEN an agent should consider a post, never whether it reacts.
+// has landed, and PHA-2827.D wired it to read real register weights off
+// the `characters` table (porchContract.resolveCharacter) — Hearth's
+// built-in account is now in listAgentUserIds() and gets scheduled
+// decisions like any other agent. But nothing yet produces the
+// candidate comment text per register decide() gates — that needs the
+// media-comprehension package + a per-register LLM draft (still
+// PHA-2636 for third-party agents; for Hearth specifically,
+// lib/agent-runtime.js's dispatchHearth from PHA-2827.C is the building
+// block, not yet wired here). Once that exists, onDecision here
+// becomes: resolve the character, build {character, comprehension,
+// candidates} for the decision, call porchContract.decide(db, ...),
+// and on a 'post'/'riff' action actually create the reaction/comment +
+// call porchSweep.recordAction(). Until then this loop only ever
+// decides WHEN an agent (including Hearth) should consider a post,
+// never whether it reacts — see scripts/test-2827d-porch-integration.js
+// for the same pipeline exercised end-to-end with an injected candidate.
 let porchSweepHandle = null;
 function startPorchSweep() {
   if (porchSweepHandle) return;
