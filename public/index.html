@@ -624,6 +624,7 @@ const api=async(m,u,b)=>{const r=await fetch(u,{method:m,headers:{'Content-Type'
 
 /* ---- state ---- */
 let ME=null, USERS={};
+let ENABLED_MODULE_KEYS=new Set(); // PHA-2811: populated by applyLayout(), used to gate the FAB picker
 let TASKS=[],EVENTS=[],SVCS=[];
 let MERGED=[]; // PHA-1867: native + cached provider events for the current month
 let calY,calM,selDate=today();
@@ -799,6 +800,10 @@ function applyLayout(layout) {
   for (const t of (Array.isArray(layout.tabs) ? layout.tabs : [])) {
     if (t && typeof t.room === 'string') enabledRooms.add(t.room);
   }
+  // PHA-2811: FAB picker reads this to hide the Task option when the
+  // 'tasks' room (the chores module) isn't enabled — same room-based
+  // derivation as the nav gating below, no module-key literal needed.
+  ENABLED_ROOMS = enabledRooms;
   // PHA-2585: the Home tab/page (`data-p="home"`) is the always-on
   // landing (today's events + today's tasks) and is NOT a module
   // room — it must remain enabled regardless of which modules the
@@ -1513,11 +1518,21 @@ $('#fab').onclick=()=>{
   if(curPage==='svc')return openSvcSheet();
   if(curPage==='cal')return openEventSheet(null,selDate);
   if(curPage==='home')return openPicker();
+  if(curPage==='tasks'&&!ENABLED_MODULE_KEYS.has('chores'))return goToModuleSettings();
   openTaskSheet();
 };
+function goToModuleSettings(){
+  location.href='/modules.html';
+}
 function openPicker(){
+  // PHA-2811: a chore added while `chores` is off writes a row that
+  // never renders anywhere (no nav tab, no home task list) — so the
+  // Task option is hidden here instead of opening a dead-end sheet.
+  const taskBtn=ENABLED_MODULE_KEYS.has('chores')
+    ? `<button class="btn" onclick="closeSheet();openTaskSheet()">✓ Task</button>`
+    : `<button class="btn btn-secondary" onclick="closeSheet();goToModuleSettings()">✓ Task (enable Chores)</button>`;
   openSheet(`<h2>Add something</h2>
-  <div class="row"><button class="btn" onclick="closeSheet();openTaskSheet()">✓ Task</button>
+  <div class="row">${taskBtn}
   <button class="btn btn-secondary" onclick="closeSheet();openEventSheet()">📅 Event</button></div>`);
 }
 function openTaskSheet(id){
@@ -1621,6 +1636,7 @@ $('#avatarBtn').onclick=()=>{
   openSheet(`<h2>${esc(ME.display)}</h2>
     <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-calendar-sources">📅 Calendar sources</button>
     <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-connected-agents">🔌 Connected agents</button>
+    <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-agent-endpoints">🛰️ Agent endpoints</button>
     <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-apps">📦 Apps</button>
     ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-settings">⚙️ Settings · manage household</button>`:''}
     ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-walls">🧱 Walls · manage walls</button>`:''}
@@ -1643,6 +1659,7 @@ $('#avatarBtn').onclick=()=>{
   }
   $('#f-calendar-sources').onclick=()=>openCalendarSourcesSheet();
   $('#f-connected-agents').onclick=()=>openConnectedAgentsSheet();
+  $('#f-agent-endpoints').onclick=()=>openAgentEndpointsListSheet();
   $('#f-apps').onclick=()=>openAppsSheet();
   renderInstallChip();
   pushRenderButton('#f-push');
@@ -2310,6 +2327,98 @@ function platformTokenLabel(){
     if (/cros/.test(ua)) return 'Chromebook';
   } catch {}
   return '';
+}
+
+/* ---- Agent endpoints (PHA-2813) ----
+   No SPA form existed for POST /api/agent-endpoints (create() has lived
+   in lib/agent-endpoints.js since PHA-1617.4) — users had to curl it
+   manually. Two sheets, mirroring the connected-agents pattern:
+     1. openAgentEndpointsListSheet() — list of the user's endpoints
+        (label, kind, URL, secret prefix chip, remove button).
+     2. openAgentEndpointSheet(defaultKind, afterCreate) — the create
+        form, then the copy-once secret reveal (openTokenRevealSheet is
+        reused — same dark monospace / Copy / ack-gated close UX applies
+        to HMAC secrets as it does to PATs). */
+async function openAgentEndpointsListSheet(){
+  const eps = await api('GET', '/api/agent-endpoints');
+  openAgentEndpointsListSheetWith(eps);
+}
+
+function openAgentEndpointsListSheetWith(eps){
+  const rows = eps.map(e => `<div class="tok-row" data-id="${esc(e.id)}">
+      <div class="tok-mark" aria-hidden="true">${e.kind==='events'?'📡':'💬'}</div>
+      <div class="tok-info">
+        <div class="tok-label">${esc(e.harness_label)} <span class="pill" style="background:${e.enabled?'#7c9a72':'var(--muted)'}">${esc(e.kind)}</span></div>
+        <div class="tok-meta">${esc(e.url)}</div>
+        <div class="tok-meta"><span class="tok-prefix">${esc(e.secret_prefix||'')}</span></div>
+      </div>
+      <div class="tok-actions">
+        <button class="link danger" data-act="remove">Remove</button>
+      </div>
+    </div>`).join('');
+
+  openSheet(`<h2>Agent endpoints</h2>
+    <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">Harnesses (OpenClaw, scripts, anything MCP-speaking) that Homestead can talk to. <code>drawer</code> endpoints answer drawer questions; <code>events</code> endpoints receive webhook POSTs.</p>
+    <div class="tok-list">${rows || '<div class="empty" style="padding:24px 4px">No endpoints yet &mdash; add one to wire up your harness.</div>'}</div>
+    <button class="btn" id="ep-add" style="margin-top:14px">+ Add endpoint</button>
+    <button class="link" style="margin-top:14px;width:100%;text-align:center" onclick="closeSheet()">Done</button>`);
+
+  document.querySelectorAll('.tok-row').forEach(row => {
+    const id = row.dataset.id;
+    const removeBtn = row.querySelector('[data-act="remove"]');
+    if (removeBtn) removeBtn.onclick = async () => {
+      const ep = eps.find(x => String(x.id) === id);
+      if (!ep) return;
+      if (!confirm(`Remove "${ep.harness_label}"?\n\nAny harness using this endpoint's secret will lose access immediately.`)) return;
+      try {
+        await api('DELETE', `/api/agent-endpoints/${id}`);
+        await openAgentEndpointsListSheet();
+      } catch (e) {
+        alert((e && e.error) || 'Remove failed');
+      }
+    };
+  });
+
+  $('#ep-add').onclick = () => openAgentEndpointSheet('drawer', async () => {
+    await openAgentEndpointsListSheet();
+    if (DRAWER && DRAWER.loaded) await loadDrawerEndpoints();
+  });
+}
+
+function openAgentEndpointSheet(defaultKind, afterCreate){
+  const kind = (defaultKind === 'events') ? 'events' : 'drawer';
+  openSheet(`<h2>Add agent endpoint</h2>
+    <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">Point Homestead at your own harness. A <code>drawer</code> endpoint answers questions typed into this drawer; an <code>events</code> endpoint receives webhook POSTs for things happening in Homestead. An HMAC secret is generated for you &mdash; shown <b>once</b> on the next screen.</p>
+    <label>Label</label>
+    <input class="field" id="ep-label" placeholder="e.g. Laptop OpenClaw" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="128">
+    <label>Kind</label>
+    <select class="field" id="ep-kind">
+      <option value="drawer" ${kind==='drawer'?'selected':''}>drawer &mdash; answers drawer questions</option>
+      <option value="events" ${kind==='events'?'selected':''}>events &mdash; receives event webhooks</option>
+    </select>
+    <label>URL</label>
+    <input class="field" id="ep-url" placeholder="http://phattvip.lan:PORT/hook" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="2048">
+    <button class="btn" id="ep-create" style="margin-top:14px">Create endpoint</button>
+    <button class="link" style="margin-top:14px;width:100%;text-align:center" onclick="closeSheet()">Cancel</button>
+    <div class="err" id="ep-err"></div>`);
+
+  $('#ep-create').onclick = async () => {
+    const harness_label = ($('#ep-label').value || '').trim();
+    if (!harness_label) { $('#ep-err').textContent = 'Label is required'; return; }
+    const kindVal = $('#ep-kind').value;
+    const url = ($('#ep-url').value || '').trim();
+    if (!url) { $('#ep-err').textContent = 'URL is required'; return; }
+    try {
+      const created = await api('POST', '/api/agent-endpoints', { harness_label, kind: kindVal, url });
+      const prefix = (created.secret_prefix || '').replace(/…$/, '');
+      openTokenRevealSheet({ label: created.harness_label, token_prefix: prefix, token_plaintext: created.secret_plaintext }, async () => {
+        if (afterCreate) await afterCreate();
+        else closeSheet();
+      });
+    } catch (e) {
+      $('#ep-err').textContent = (e && e.error) || 'Failed to create endpoint';
+    }
+  };
 }
 
 /* ---- Settings → Apps (PHA-2201.4 / PHA-2232) ----
@@ -3269,9 +3378,14 @@ function renderDrawerEmpty() {
     slot.innerHTML = `<div class="drawer-empty">
       <div class="ico">💬</div>
       <div>No drawer endpoint configured yet.</div>
-      <div class="hint">Add one via <code>POST /api/agent-endpoints</code> with <code>kind: "drawer"</code> to point this drawer at your harness.</div>
+      <div class="hint">Point this drawer at your own harness (OpenClaw, scripts, anything MCP-speaking).</div>
+      <button class="btn" id="drawerAddEndpoint" style="margin-top:12px">+ Add endpoint</button>
     </div>`;
     $('#drawerForm').style.display = 'none';
+    const addBtn = $('#drawerAddEndpoint');
+    if (addBtn) addBtn.onclick = () => openAgentEndpointSheet('drawer', async () => {
+      await loadDrawerEndpoints();
+    });
   } else {
     slot.innerHTML = `<div class="drawer-empty">
       <div class="ico">👋</div>
