@@ -1,3 +1,32 @@
+## v0.5.8 (Unreleased) — redeem() in-tx capacity recheck
+
+**PHA-2766:** PHA-2723 audit item 4 found `redeem()` lacked the in-transaction
+`SELECT uses_count, max_uses` recheck that `signupViaInvite` already had. The
+existing test was a peek-then-loop simulation (better-sqlite3's process-wide
+lock serializes any single-process test, so the test couldn't actually exercise
+the race). Without the recheck, two parallel HTTP requests against a 25-use
+invite with one seat left (`uses_count == 24`) could both pass `peek()`, both
+INSERT a canary row, and both `UPDATE uses_count = uses_count + 1` — exceeding
+the promised 25-use budget. Fix:
+
+- **`lib/invites.js`** — `redeem()` now mirrors `signupViaInvite`'s pattern:
+  inside the `db.transaction`, run `SELECT uses_count, max_uses FROM invites
+  WHERE id = ?` and throw `410 invite_already_redeemed` if `uses_count >=
+  max_uses`. Single-use (max_uses=1) is unchanged in observable behavior —
+  `peek()` already 410s before reaching the tx.
+- **`scripts/test-2766-redeem-multilock.js`** — new acceptance test, wired
+  into `npm test` directly after `test-2711-invite-signup`. Three direct
+  lib-cases (happy path + cap-boundary + peek-then-loop stop) and **one
+  HTTP race case** that fires two parallel `POST /api/invites/:code/redeem`
+  requests against a 25-use invite with one seat left; asserts exactly one
+  returns 200 ok and the other returns 410 `invite_already_redeemed`. Wired
+  in `npm test` so the new case runs in CI.
+- **`package.json`** — version bump `0.5.7 → 0.5.8`; `scripts/test-2766-redeem-multilock.js`
+  inserted into the `npm test` chain.
+
+Closes the audit gap before the Ghost announcement ships (PHA-2661's
+production verifier was blocked on this).
+
 ## v0.5.7 (2026-08-30) — Porch wall live-updates via SSE
 
 **PHA-2821:** first real two-human usage caught the wall not behaving like a
