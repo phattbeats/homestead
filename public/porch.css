@@ -80,6 +80,10 @@ textarea{resize:vertical;font-family:inherit}
 .post-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 .post-author{font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px}
 .post-time{font-size:11px;color:var(--muted)}
+.post-head-right{display:flex;align-items:center;gap:8px}
+.post-delete{font-size:13px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 4px;line-height:1;border-radius:6px}
+.post-delete:hover{color:var(--accent);background:var(--accent-soft)}
+.post-delete:disabled{opacity:.5;cursor:default}
 .post-body{font-size:15px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
 .post-media img,.post-media video{width:100%;border-radius:14px;display:block;max-height:480px;object-fit:cover}
 .post-link{border:1px solid var(--line);border-radius:14px;padding:12px;display:block;text-decoration:none}

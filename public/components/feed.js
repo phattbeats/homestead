@@ -123,14 +123,21 @@
     return `<button type="button" class="vote-off" data-username="${esc(username)}">Vote off the porch</button>`;
   }
 
-  function postHtml(p, isAdmin) {
+  function postHtml(p, isAdmin, meUsername) {
     const isAgent = !!(p.author && p.author.isAgent);
     const author = (p.author && (p.author.display || p.author.username)) || 'Someone';
     const username = (p.author && p.author.username) || '';
+    const isMine = !!(meUsername && p.author && p.author.username === meUsername);
+    const deleteHtml = isMine
+      ? `<button type="button" class="post-delete" data-post="${esc(p.id)}" title="Delete post" aria-label="Delete post">🗑</button>`
+      : '';
     return `<div class="post${p._pending ? ' pending' : ''}${isAgent ? ' agent-post' : ''}" data-id="${esc(p.id)}">
       <div class="post-head">
         <div class="post-author">${esc(author)}${isAgent ? agentBadgeHtml() : ''}</div>
-        <div class="post-time">${esc(fmtTime(p.createdAt))}</div>
+        <div class="post-head-right">
+          <div class="post-time">${esc(fmtTime(p.createdAt))}</div>
+          ${deleteHtml}
+        </div>
       </div>
       ${postMediaHtml(p)}
       ${reactionsHtml(p)}
@@ -598,7 +605,7 @@
         return;
       }
       const isAdmin = !!(ME && ME.isAdmin);
-      feed.innerHTML = POSTS.map((p) => postHtml(p, isAdmin)).join('');
+      feed.innerHTML = POSTS.map((p) => postHtml(p, isAdmin, ME && ME.username)).join('');
       wireFeedEvents();
     }
 
@@ -612,6 +619,9 @@
       }
       $$('.comments-toggle', root).forEach((el) => {
         on(el, 'click', () => onCommentsToggle(el));
+      });
+      $$('.post-delete', root).forEach((btn) => {
+        on(btn, 'click', () => onDeleteClick(btn));
       });
       if (cfg.canComment) {
         $$('.comment-form', root).forEach((f) => {
@@ -672,6 +682,21 @@
         post.myReactions = Array.from(mine);
         renderFeed();
         toast('Reaction failed', true);
+      }
+    }
+
+    async function onDeleteClick(btn) {
+      const postId = btn.dataset.post;
+      if (!confirm('Delete this post? This cannot be undone.')) return;
+      btn.disabled = true;
+      try {
+        await api('DELETE', `/walls/${encodeURIComponent(WALL)}/posts/${encodeURIComponent(postId)}`);
+        POSTS = POSTS.filter((p) => p.id !== postId);
+        renderFeed();
+        toast('Post deleted');
+      } catch (_) {
+        btn.disabled = false;
+        toast('Delete failed', true);
       }
     }
 
