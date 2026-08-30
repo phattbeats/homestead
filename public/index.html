@@ -2283,8 +2283,16 @@ function openTokenRevealSheet(token, onAcknowledge){
 
   $('#tok-done').onclick = async () => {
     acknowledged = true;
-    if (onAcknowledge) await onAcknowledge();
-    else closeSheet();
+    // The token was already issued server-side by this point, so the
+    // secret-reveal modal must always dismiss here even if the
+    // best-effort list refresh below throws (e.g. a flaky GET) —
+    // otherwise the user is stuck on a modal that already did its job.
+    closeSheet();
+    try {
+      if (onAcknowledge) await onAcknowledge();
+    } catch (e) {
+      alert((e && e.error) || 'Saved, but the list failed to refresh — reopen this screen to see it.');
+    }
   };
 }
 
