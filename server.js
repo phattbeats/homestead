@@ -935,6 +935,11 @@ app.get('/api/invites/:code/redemptions', auth, requireAdmin, (req, res) => {
 // /invite/:code page can render "what is Homestead / who invited you /
 // which wall" before any signup/signin choice is made. 410 on
 // expired/exhausted/revoked; 404 on unknown.
+//
+// PHA-2835: invite `note` is admin freeform — pass it through
+// `invites.scrubPublicNote` so operational metadata (PHA-####, beta
+// wave, reissue, wipe) never reaches a fresh invitee. The browser
+// applies a second-pass scrub as defense in depth.
 app.get('/api/public/invites/:code', (req, res) => {
   try {
     const inv = invites.peek(db, req.params.code);
@@ -943,7 +948,7 @@ app.get('/api/public/invites/:code', (req, res) => {
       id: inv.id,
       wall_slug: inv.wall_slug,
       wall_name: inv.wall_name,
-      note: inv.note || null,
+      note: invites.scrubPublicNote(inv.note),
       inviter: inv.created_by_username ? {
         username: inv.created_by_username,
         display: inv.created_by_display || inv.created_by_username,
