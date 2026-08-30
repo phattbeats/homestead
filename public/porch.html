@@ -46,6 +46,11 @@
           // it already has its own fab/avatar/nav chrome.
           primaryFab: true,
           utilityChip: true,
+          // PHA-2822: this standalone shell is the wall-only funnel's
+          // landing room — the only place a new user can discover that
+          // other rooms exist. Opt-in so the index.html #page-wall mount
+          // (which already has its own "+ Add rooms" pill) is unaffected.
+          addRoomPill: true,
         });
       }
     }
