@@ -107,6 +107,11 @@ const EXCLUDE_FILES = new Set([
   // `/api/media/...` paths via string match) are test config, not
   // render code.
   'scripts/test-2644-media-context.js',
+  // PHA-2811 task-module-gate regression test: asserts the `chores`
+  // module toggle blocks POST/PUT /api/tasks. Same category as the
+  // sibling acceptance tests above — literal keys are test config
+  // driving /api/me/modules/:key/enable|disable, not render code.
+  'scripts/test-2811-task-module-gate.js',
 ]);
 
 const SCAN_EXTS = new Set([

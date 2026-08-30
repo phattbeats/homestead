@@ -624,6 +624,7 @@ const api=async(m,u,b)=>{const r=await fetch(u,{method:m,headers:{'Content-Type'
 
 /* ---- state ---- */
 let ME=null, USERS={};
+let ENABLED_ROOMS=new Set(); // PHA-2811: populated by applyLayout(), used to gate the FAB picker
 let TASKS=[],EVENTS=[],SVCS=[];
 let MERGED=[]; // PHA-1867: native + cached provider events for the current month
 let calY,calM,selDate=today();
@@ -1513,11 +1514,21 @@ $('#fab').onclick=()=>{
   if(curPage==='svc')return openSvcSheet();
   if(curPage==='cal')return openEventSheet(null,selDate);
   if(curPage==='home')return openPicker();
+  if(curPage==='tasks'&&!ENABLED_ROOMS.has('tasks'))return goToModuleSettings();
   openTaskSheet();
 };
+function goToModuleSettings(){
+  location.href='/modules.html';
+}
 function openPicker(){
+  // PHA-2811: a chore added while `chores` is off writes a row that
+  // never renders anywhere (no nav tab, no home task list) — so the
+  // Task option is hidden here instead of opening a dead-end sheet.
+  const taskBtn=ENABLED_ROOMS.has('tasks')
+    ? `<button class="btn" onclick="closeSheet();openTaskSheet()">✓ Task</button>`
+    : `<button class="btn btn-secondary" onclick="closeSheet();goToModuleSettings()">✓ Task (enable Chores)</button>`;
   openSheet(`<h2>Add something</h2>
-  <div class="row"><button class="btn" onclick="closeSheet();openTaskSheet()">✓ Task</button>
+  <div class="row">${taskBtn}
   <button class="btn btn-secondary" onclick="closeSheet();openEventSheet()">📅 Event</button></div>`);
 }
 function openTaskSheet(id){
