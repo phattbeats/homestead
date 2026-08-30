@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Homestead doorway maskable icon</title>
+  <rect width="512" height="512" fill="#465039"/>
+  <circle cx="256" cy="256" r="190" fill="#6D7B59"/>
+  <path fill="#F8F1DF" d="M148 374h216v28H148z"/>
+  <path fill="#465039" d="M169 372V240l87-83 87 83v132h-41V258l-46-44-46 44v114z"/>
+  <path fill="#FFF8EC" d="M222 372V270l34-32 34 32v102z"/>
+  <circle cx="276" cy="320" r="8" fill="#6D7B59"/>
+  <path d="M174 232h164L256 154z" fill="#D9CDAF"/>
+</svg>

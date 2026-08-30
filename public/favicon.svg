@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Homestead</title>
+  <rect width="64" height="64" rx="16" fill="#6D7B59"/>
+  <path fill="#FFF8EC" d="M14 51h36v5H14zM18 48V29l14-13 14 13v19h-6V32l-8-7-8 7v16z"/>
+  <path fill="#D9CDAF" d="M17 28h30L32 14z"/>
+</svg>

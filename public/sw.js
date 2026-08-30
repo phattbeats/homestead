@@ -16,11 +16,18 @@
 const PRECACHE_URLS = [
   '/components/feed.js',
   '/porch.css',
+  '/brand.css',
+  '/fonts/fraunces-600-latin.woff2',
+  '/fonts/plus-jakarta-sans-latin.woff2',
+  '/icon.svg',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-maskable-512.png',
 ];
 
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
-    const cache = await caches.open('homestead-v1');
+    const cache = await caches.open('homestead-v2');
     // Best-effort precache: a 404 here doesn't fail the install — the
     // service worker still activates and network-first falls through.
     try { await cache.addAll(PRECACHE_URLS); } catch (_) {}
@@ -32,7 +39,7 @@ self.addEventListener('activate', e => {
   e.waitUntil((async () => {
     // Drop old caches on activation.
     const names = await caches.keys();
-    await Promise.all(names.filter(n => n !== 'homestead-v1').map(n => caches.delete(n)));
+    await Promise.all(names.filter(n => n !== 'homestead-v2').map(n => caches.delete(n)));
     await self.clients.claim();
   })());
 });
@@ -43,7 +50,7 @@ self.addEventListener('fetch', e => {
   if (url.origin !== self.location.origin) return; // ignore cross-origin
   if (PRECACHE_URLS.indexOf(url.pathname) === -1) return;
   e.respondWith((async () => {
-    const cache = await caches.open('homestead-v1');
+    const cache = await caches.open('homestead-v2');
     const hit = await cache.match(url.pathname);
     if (hit) return hit;
     try {

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" role="img" aria-labelledby="title desc">
+  <title id="title">Homestead</title><desc id="desc">Your home. Your data. Your apps.</desc>
+  <rect width="1280" height="320" fill="#242A21"/>
+  <path fill="#6D7B59" d="M921 248V130l92-87 92 87v118h-42V148l-50-47-50 47v100z"/>
+  <path fill="#FFF8EC" d="M977 248v-83l36-34 36 34v83z"/>
+  <circle cx="1035" cy="207" r="9" fill="#6D7B59"/>
+  <path fill="#D9CDAF" d="M928 122h170l-85-81z"/>
+  <text x="118" y="144" fill="#FFF8EC" font-family="Fraunces, Georgia, serif" font-size="76" font-weight="600">Homestead</text>
+  <text x="122" y="205" fill="#D9CDAF" font-family="system-ui, sans-serif" font-size="28">Your home. Your data. Your apps.</text>
+</svg>

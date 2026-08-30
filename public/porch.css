@@ -17,6 +17,11 @@ a{color:inherit}
 #app{max-width:640px;margin:0 auto;padding-bottom:40px}
 
 header{padding:calc(env(safe-area-inset-top) + 22px) 18px 6px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.header-lockup{display:flex;align-items:center;gap:10px;min-width:0}.header-lockup .brand-lockup{gap:8px}.header-lockup .brand-lockup img{width:28px;height:28px}.header-lockup .brand-wordmark{font-size:21px}.header-lockup .greet{min-width:0}
+/* The standalone/in-place Porch header also carries a wall title and picker.
+   At phone widths the doorway remains the canonical lockup; hiding only the
+   wordmark avoids a competing two-line heading over the composer. */
+@media (max-width:460px){.header-lockup{gap:8px}.header-lockup .brand-wordmark{display:none}}
 header .back{font-size:22px;font-weight:800;text-decoration:none;width:32px;flex-shrink:0}
 .greet{font-weight:800;font-size:20px;letter-spacing:-.02em;flex:1;min-width:0}
 .greet small{display:block;font-size:11px;color:var(--muted);font-weight:500;letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px}

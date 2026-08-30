@@ -277,7 +277,7 @@
 
       root.innerHTML = `
   <header>
-    <div class="greet"><small id="feedLabel">The Porch</small><span id="wallName">Wall</span></div>
+    <div class="header-lockup"><a class="brand-lockup" href="/" aria-label="Homestead home"><img src="/icon.svg" alt=""><span class="brand-wordmark">Homestead</span></a><div class="greet"><small id="feedLabel">The Porch</small><span id="wallName">Wall</span></div></div>
     ${pickerHtml}
   </header>
 

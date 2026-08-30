@@ -1,1 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="24" fill="#C4703C"/><text x="50" y="66" font-size="52" text-anchor="middle">🏡</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Homestead doorway</title>
+  <rect width="512" height="512" rx="126" fill="#6D7B59"/>
+  <path fill="#F8F1DF" d="M112 406h288v38H112z"/>
+  <path fill="#465039" d="M140 402V231l116-111 116 111v171h-54V253l-62-60-62 60v149z"/>
+  <path fill="#FFF8EC" d="M211 402V267l45-43 45 43v135z"/>
+  <circle cx="282" cy="333" r="11" fill="#6D7B59"/>
+  <path d="M146 220h220L256 114z" fill="#D9CDAF"/>
+</svg>

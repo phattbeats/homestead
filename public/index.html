@@ -6,8 +6,8 @@
 <title>Homestead</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#FFFBF5">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/brand.css">
 <!-- PHA-2200.5 / PHA-2206: shared wall feed styles. Same file the
      standalone /porch.html loads, so the in-place mount inside
      #page-wall renders identically to /porch.html. -->
@@ -31,8 +31,8 @@ input,select,textarea{font:inherit;color:inherit}
 .login-card{width:100%;max-width:380px;background:var(--surface);border-radius:28px;padding:8px;
   box-shadow:0 8px 40px rgba(196,112,60,.08),0 2px 8px rgba(0,0,0,.03)}
 .login-inner{border:1px solid var(--line);border-radius:22px;padding:40px 32px;text-align:center}
-.logo{font-size:44px;line-height:1}
-h1{font-weight:800;font-size:26px;letter-spacing:-.02em;margin:14px 0 4px}
+.logo{line-height:1}
+.login-wordmark{font-family:'Fraunces',Georgia,serif;font-weight:600;font-size:34px;letter-spacing:-.04em;margin:16px 0 6px}
 .sub{color:var(--muted);font-size:14px;margin-bottom:28px}
 .field{width:100%;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--bg);
   margin-bottom:12px;outline:none;transition:border-color .3s var(--ease)}
@@ -54,6 +54,7 @@ h1{font-weight:800;font-size:26px;letter-spacing:-.02em;margin:14px 0 4px}
 /* ---------- app shell ---------- */
 #app{display:none;min-height:100dvh;padding-bottom:96px}
 header{padding:calc(env(safe-area-inset-top) + 22px) 22px 6px;display:flex;justify-content:space-between;align-items:center}
+.header-lockup{display:flex;align-items:center;gap:10px;min-width:0}.header-lockup .brand-lockup{gap:8px}.header-lockup .brand-lockup img{width:30px;height:30px}.header-lockup .brand-wordmark{font-size:22px}.header-lockup .greet{min-width:0}
 .greet{font-weight:800;font-size:24px;letter-spacing:-.02em}
 .greet small{display:block;font-size:13px;color:var(--muted);font-weight:500;letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px}
 .avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;
@@ -457,9 +458,9 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 
 <div id="login">
   <div class="login-card"><div class="login-inner">
-    <div class="logo">🏡</div>
-    <h1>Homestead</h1>
-    <div class="sub">The household, in one place</div>
+    <div class="logo"><img class="brand-mark" src="/icon.svg" alt=""></div>
+    <h1 class="login-wordmark">Homestead</h1>
+    <div class="sub brand-tagline">Your home. Your data. Your apps.</div>
     <div class="chips" id="chipRow"></div>
     <input class="field" id="username" type="text" placeholder="Username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
     <input class="field" id="pw" type="password" placeholder="Password" autocomplete="current-password">
@@ -470,7 +471,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 
 <div id="app">
   <header>
-    <div class="greet"><small id="dateLine"></small><span id="greet"></span></div>
+    <div class="header-lockup"><a class="brand-lockup" href="/" aria-label="Homestead home"><img src="/icon.svg" alt=""><span class="brand-wordmark">Homestead</span></a><div class="greet"><small id="dateLine"></small><span id="greet"></span></div></div>
     <div style="display:flex;align-items:center;gap:10px">
       <button class="avatar" id="avatarBtn"></button>
       <!-- PHA-2498 (UX batch #2): drawer FAB docked into the header
