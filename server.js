@@ -64,6 +64,8 @@ const porchContract = require('./lib/porch/participation-contract');
 const oidcLink = require('./lib/oidc-link');
 const mailbox = require('./lib/porch/mailbox');
 
+const hearthCharacters = require('./lib/hearth-characters');
+
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const db = new Database(path.join(DATA_DIR, 'life.db'));
@@ -121,6 +123,12 @@ porchContract.migrate(db);
 // after both agentTokens.migrate and walls.migrate.
 mailbox.migrate(db);
 analytics.migrate(db);
+// PHA-2829: Hearth character table + per-user seed from agents/hearth/SOUL.md.
+// FKs to users(id), so it runs after userModel.migrate (same pattern as
+// the other primitives above). The seed fires lazily on first agent
+// module enable — not at boot — so a fresh install doesn't create a
+// character row until the user actually wants Hearth.
+hearthCharacters.migrate(db);
 // PHA-2207 (PHA-2200.6): invite codes. FKs to walls(slug), so it
 // runs after walls.migrate().
 invites.migrate(db);
@@ -730,6 +738,30 @@ app.post('/api/me/modules/:key/enable', auth, (req, res) => {
   const withRequirements = !!(req.body && req.body.withRequirements === true);
   try {
     const result = userModel.enableModule(db, u.id, key, { withRequirements });
+
+    // PHA-2829: when the agent module is first enabled for a user, seed
+    // the default Hearth character row from agents/hearth/SOUL.md +
+    // agents/hearth/IDENTITY.md. Idempotent — re-enabling the agent
+    // module does NOT clobber per-user edits (the seed function
+    // short-circuits if a row already exists). Fires the
+    // `module_first_enable` analytics event on the transition from
+    // "no character row" → "seeded row"; subsequent enables emit
+    // `module_enabled`. Uses the character row's absence as the
+    // first-enable signal so we don't need a separate ledger.
+    if (key === 'agent' && result.enabled) {
+      const hadHearthBefore = !!hearthCharacters.getCharacter(
+        db, u.id, hearthCharacters.CHARACTER_KEY_HEARTH);
+      hearthCharacters.seedDefaultHearthCharacter(db, u.id);
+      const isFirstEnable = !hadHearthBefore;
+      analytics.logEvent(db, {
+        kind: isFirstEnable ? 'module_first_enable' : 'module_enabled',
+        userId: u.id,
+        subjectType: 'module',
+        subjectId: key,
+        meta: { character: 'hearth' },
+      });
+    }
+
     res.json({
       enabled: result.enabled,
       also_enabled: result.also_enabled,
@@ -2003,6 +2035,34 @@ app.delete('/api/users/:username/agent-endpoints/:id', auth, requireAdmin, (req,
   const removed = agentEndpoints.remove(db, req.params.id, { ownerUserId: target.id });
   if (!removed) return res.status(404).json({ error: 'not found' });
   res.json({ ok: true });
+});
+
+// ---- PHA-2829: Hearth first-open intro path ----
+// When a user opens the drawer for the first time after enabling the
+// Agent module, the server returns the seeded Hearth intro text
+// directly from the characters row (no external POST, no LLM call).
+// The SPA calls this on drawer open if it doesn't yet have a
+// `drawer_intro_seen` flag in localStorage.
+//
+// Idempotent — calling it twice returns the same text. Returns 404
+// if the user has no character row (i.e., hasn't enabled the Agent
+// module or has a custom character not named `hearth`). The SPA
+// uses a 404 here to know to fall back to whatever it was going to
+// do before Hearth existed.
+app.get('/api/drawer/intro', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const character = hearthCharacters.getDefaultCharacter(db, me.id);
+  if (!character || character.character_key !== hearthCharacters.CHARACTER_KEY_HEARTH) {
+    return res.status(404).json({ error: 'no_default_character' });
+  }
+  res.json({
+    character: character.character_key,
+    intro_text: character.intro_text,
+    soul_source_sha: character.soul_source_sha,
+    identity_source_sha: character.identity_source_sha,
+    is_default: !!character.is_default,
+  });
 });
 
 // ---- PHA-1617.6: drawer backend — outbound POST + SSE consumer + retry/circuit breaker ----
