@@ -65,6 +65,11 @@ const oidcLink = require('./lib/oidc-link');
 const mailbox = require('./lib/porch/mailbox');
 
 const hearthCharacters = require('./lib/hearth-characters');
+// PHA-2827.C: server-side Hearth runtime. Short-circuits the external
+// drawer POST when the user's character is `hearth` and a model key is
+// configured. See lib/agent-runtime.js for the provider adapter + SOUL.md
+// system prompt loader.
+const agentRuntime = require('./lib/agent-runtime');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -2111,19 +2116,46 @@ app.post('/api/drawer', auth, async (req, res) => {
   // persistent record of recent dispatch health.
   const streakMap = (req.app && req.app.locals && req.app.locals.drawerStreakMap) || null;
 
+  // PHA-2827.C: log drawer_call_started BEFORE the dispatch so the
+  // analytics timeline matches the existing closed-enum contract
+  // (started → completed|failed). Subject is the endpoint row; the
+  // completed/failed event records whether the call took the server-
+  // runtime (Hearth) path or the external-POST path.
+  analytics.logEvent(db, {
+    userId: me.id,
+    kind: 'drawer_call_started',
+    subjectType: 'agent_endpoint',
+    subjectId: endpointId,
+    meta: {
+      conversation_id: conversationId,
+      hearth: false,
+    },
+  });
+
   const result = await drawerDispatch.dispatchDrawer(db, me, {
     message,
     endpointId,
     conversationId,
+    // byokKey: PHA-2827.C ships with server-staged env as the default
+    // (HEARTH_*_KEY). A future per-user BYOK column on `agent_endpoints`
+    // would feed through here; out of scope for C (tracked separately).
+    byokKey: '',
   });
+
   analytics.logEvent(db, {
     userId: me.id,
     kind: result.ok ? 'drawer_call_completed' : 'drawer_call_failed',
     subjectType: 'agent_endpoint',
     subjectId: endpointId,
     durationSeconds: Math.round((result.durationMs || 0) / 1000),
-    meta: { status_code: result.lastStatus || null, request_id: result.requestId || null,
-      conversation_id: conversationId, error: result.lastError || null },
+    meta: {
+      status_code: result.lastStatus || null,
+      request_id: result.requestId || null,
+      conversation_id: conversationId,
+      error: result.lastError || null,
+      hearth: !!result.hearth,
+      route: result.hearth ? 'server_runtime' : 'external_post',
+    },
   });
 
   // Update the streak after dispatch.
@@ -2157,6 +2189,34 @@ app.post('/api/drawer', auth, async (req, res) => {
 
   if (result.status === 'endpoint_not_found') {
     return res.status(404).json({ error: 'endpoint_not_found' });
+  }
+  // PHA-2827.C: Hearth short-circuit fallbacks.
+  if (result.status === 'hearth_no_key') {
+    // No BYOK or server-staged key configured for the default Hearth
+    // character. Render the in-drawer prompt that points the user at the
+    // settings page (issue acceptance: negative case 3). 200 because the
+    // drawer UI is still alive; the message body explains.
+    return res.json({
+      request_id: result.requestId,
+      conversation_id: result.conversationId,
+      text: "Hearth needs a model key before I can answer. Add one in Settings → Agent, or ask your server admin to set HEARTH_LITELLM_KEY (or HEARTH_ANTHROPIC_PROXY_KEY / HEARTH_OPENAI_KEY).",
+      actions: [{ kind: 'open_settings', label: 'Open Settings', url: '/settings/agent' }],
+      duration_ms: 0,
+      hearth_no_key: true,
+    });
+  }
+  if (result.status === 'hearth_provider_error') {
+    // The provider rejected the call. Surface a graceful message and
+    // don't auto-trip the circuit breaker on the user's external
+    // endpoint (we never tried it).
+    return res.status(502).json({
+      error: 'hearth_provider_error',
+      message: 'Hearth reached its model provider but the call failed; try again or check provider status.',
+      last_status: result.lastStatus || null,
+      last_error: result.lastError || null,
+      request_id: result.requestId,
+      conversation_id: result.conversationId,
+    });
   }
   if (result.status === 'endpoint_offline') {
     return res.status(502).json({
