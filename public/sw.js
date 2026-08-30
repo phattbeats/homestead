@@ -34,15 +34,7 @@ self.addEventListener('install', e => {
     // service worker still activates and network-first falls through.
     try { await cache.addAll(PRECACHE_URLS); } catch (_) {}
     await self.skipWaiting();
-  })();
-});
-
-self.addEventListener('activate', e => {
-  e.waitUntil((async () => {
-    // Drop old caches on activation.
-    const names = await caches.keys();
-    await Promise.all(names.filter(n => n !== 'homestead-v4').map(n => caches.delete(n)));
-  })();
+  })());
 });
 
 self.addEventListener('activate', e => {
