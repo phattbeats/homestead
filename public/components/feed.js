@@ -176,6 +176,12 @@
                                // unmount can cancel an early-boot fetch.
     const disposers = [];      // [{el, evt, fn, opts}] for addEventListener cleanup.
 
+    // ---- live updates (PHA-2821): one EventSource per mounted wall.
+    let sse = null;
+    let sseErrorStreak = 0;
+    let sseGaveUp = false;
+    const SSE_GIVE_UP_THRESHOLD = 4;
+
     // Scope-bound helpers.
     const $  = (s, el) => (el || root).querySelector(s);
     const $$ = (s, el) => Array.from((el || root).querySelectorAll(s));
@@ -370,6 +376,58 @@
       wireOlder();
       if (cfg.primaryFab) wireComposeFab();
       if (cfg.utilityChip) wireUtilChip();
+
+      connectLive();
+      on(document, 'visibilitychange', onVisibilityChange);
+    }
+
+    // Reactions omitted: broadcasting needs a per-viewer myReactions diff.
+    function connectLive() {
+      closeLive();
+      if (typeof EventSource === 'undefined' || !WALL || document.hidden) return;
+      sseGaveUp = false;
+      sse = new EventSource(url(`/walls/${encodeURIComponent(WALL)}/events`));
+      sse.addEventListener('post', (e) => {
+        sseErrorStreak = 0;
+        let post;
+        try { post = JSON.parse(e.data); } catch (_) { return; }
+        if (!post || POSTS.some((p) => p.id === post.id)) return;
+        POSTS.unshift(post);
+        renderFeed();
+      });
+      sse.addEventListener('comment', (e) => {
+        sseErrorStreak = 0;
+        let comment;
+        try { comment = JSON.parse(e.data); } catch (_) { return; }
+        if (!comment || !comment.postId) return;
+        const post = POSTS.find((p) => p.id === comment.postId);
+        if (!post) return;
+        post.commentCount = (post.commentCount || 0) + 1;
+        const toggle = $(`.comments-toggle[data-post="${cssEsc(post.id)}"]`, root);
+        if (toggle) toggle.innerHTML = `<span class="arrow">›</span> Comments (${post.commentCount})`;
+        const panel = $(`.comments[data-post="${cssEsc(post.id)}"]`, root);
+        if (panel && panel.classList.contains('on')) loadComments(post.id, panel);
+      });
+      sse.onerror = () => {
+        sseErrorStreak += 1;
+        if (sseErrorStreak >= SSE_GIVE_UP_THRESHOLD && !sseGaveUp) {
+          sseGaveUp = true;
+          closeLive();
+        }
+      };
+    }
+
+    function closeLive() {
+      if (sse) { try { sse.close(); } catch (_) {} sse = null; }
+    }
+
+    function onVisibilityChange() {
+      if (document.hidden) {
+        closeLive();
+        return;
+      }
+      if (sseGaveUp) loadPosts(true);
+      connectLive();
     }
 
     // PHA-2727: centered FAB toggles the composer card open/closed instead
@@ -456,6 +514,7 @@
         $('#wallName', root).textContent = (w && w.name) || WALL;
         await loadPosts(true);
         await refreshNotifyLevel();
+        connectLive();
       });
     }
 
@@ -846,8 +905,13 @@
       renderFeed();
       try {
         const created = await api('POST', `/walls/${encodeURIComponent(WALL)}/posts`, body);
+        // The live-update SSE event for this same post can land before
+        // this response does, already inserting `created.id` — drop that
+        // copy so replacing the optimistic placeholder doesn't double it.
+        POSTS = POSTS.filter((p) => p.id !== created.id);
         const idx = POSTS.findIndex((p) => p.id === tempId);
         if (idx !== -1) POSTS[idx] = created;
+        else POSTS.unshift(created);
         renderFeed();
         return created;
       } catch (e) {
@@ -861,6 +925,7 @@
     // ---- disposal ----
 
     function dispose() {
+      closeLive();
       if (aborter) {
         try { aborter.abort(); } catch (_) {}
       }
@@ -879,7 +944,7 @@
       dispose,
       root,
       boot,
-      setWall(slug) { WALL = slug; return loadPosts(true); },
+      setWall(slug) { WALL = slug; connectLive(); return loadPosts(true); },
     };
   }
 
