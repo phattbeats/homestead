@@ -14,12 +14,16 @@
 // Without precaching, a returning PWA user with intermittent
 // connectivity would see an empty Porch. Cache-first for these URLs.
 //
-// PHA-2846: cache bumped to homestead-v5 to ship the rebuilt
-// opening-door canonical SVG / PNG set (icon.svg, favicon.svg,
-// icon-192.png, icon-512.png, icon-maskable.svg, icon-maskable-512.png)
-// plus the six built-in module SVG marks under /modules/. The old
-// homestead-v4 cache is dropped on activate so no stale predecessor
-// is reachable after deployment.
+// PHA-2846 / v0.5.10: cache bumped to homestead-v6 to ship the
+// bottom-nav icon migration (the six emoji tabs now reference the
+// matching built-in module SVGs) plus the new /favicon-32.png
+// alternate-icon fallback for browsers that ask /favicon.ico before
+// /favicon.svg. The old homestead-v5 cache is dropped on activate so
+// the emoji tab labels don't persist offline for a returning PWA
+// user. PHA-2846 v0.5.9 shipped the v5 cache for the original
+// opening-door repair; v0.5.10 layers the bottom-nav onto the same
+// canonical asset set without re-shipping the icons themselves (they
+// are already in v5). New asset: /favicon-32.png (32x32 PNG).
 const PRECACHE_URLS = [
   '/components/feed.js',
   '/porch.css',
@@ -29,6 +33,7 @@ const PRECACHE_URLS = [
   // Canonical opening-door mark (PHA-2846)
   '/icon.svg',
   '/favicon.svg',
+  '/favicon-32.png',
   '/icon-192.png',
   '/icon-512.png',
   '/icon-maskable.svg',
@@ -47,7 +52,7 @@ const PRECACHE_URLS = [
 
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
-    const cache = await caches.open('homestead-v5');
+    const cache = await caches.open('homestead-v6');
     // Best-effort precache: a 404 here doesn't fail the install — the
     // service worker still activates and network-first falls through.
     try { await cache.addAll(PRECACHE_URLS); } catch (_) {}
@@ -57,12 +62,12 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil((async () => {
-    // Drop old caches on activation. PHA-2846: homestead-v4 is now
-    // stale (it points at the old closed-arch icon SVGs); we want a
-    // clean cache drop so a returning PWA user doesn't keep seeing
-    // the old mark offline.
+    // Drop old caches on activation. PHA-2846 / v0.5.10: homestead-v5
+    // is now stale (its /sw.js reference predates the bottom-nav
+    // migration; the emoji tab bar would persist offline). v4 (the
+    // closed-arch icons) is two-generations stale.
     const names = await caches.keys();
-    await Promise.all(names.filter(n => n !== 'homestead-v5').map(n => caches.delete(n)));
+    await Promise.all(names.filter(n => n !== 'homestead-v6').map(n => caches.delete(n)));
     await self.clients.claim();
   })());
 });
@@ -73,7 +78,7 @@ self.addEventListener('fetch', e => {
   if (url.origin !== self.location.origin) return; // ignore cross-origin
   if (PRECACHE_URLS.indexOf(url.pathname) === -1) return;
   e.respondWith((async () => {
-    const cache = await caches.open('homestead-v5');
+    const cache = await caches.open('homestead-v6');
     const hit = await cache.match(url.pathname);
     if (hit) return hit;
     try {

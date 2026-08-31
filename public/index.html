@@ -7,6 +7,10 @@
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#FFFBF5">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<!-- PHA-2846 / v0.5.10: apple-touch-icon falls back to the canonical 512px install icon so iOS Safari / shared-sheet home-screen installs show the same opening-door mark instead of a generic thumbnail. SVG opens aren't supported by Safari's home-screen install path, hence the .png. -->
+<link rel="apple-touch-icon" href="/icon-512.png">
+<!-- Same canonical mark, also as a 32x32 PNG, in case any browser fetches /favicon.ico before /favicon.svg. -->
+<link rel="alternate icon" href="/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="stylesheet" href="/brand.css">
 <!-- PHA-2200.5 / PHA-2206: shared wall feed styles. Same file the
      standalone /porch.html loads, so the in-place mount inside
@@ -177,7 +181,8 @@ nav{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:space-ar
 nav button,nav a{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:600;
   color:var(--muted);padding:4px 14px;border-radius:14px;transition:color .3s var(--ease);text-decoration:none}
 nav button.on{color:var(--accent)}
-nav .ico{font-size:20px}
+nav .ico{font-size:20px;display:inline-flex;align-items:center;justify-content:center;line-height:1;width:24px;height:24px}
+nav .ico img{display:block;width:22px;height:22px;object-fit:contain}
 
 /* ---- PHA-2205 (PHA-2200.4): layout-aware nav + Add rooms pill ---- */
 /* feed-only layout: hide the bottom nav entirely; the Add-rooms pill
@@ -562,11 +567,28 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
          matches each button against the layout payload's `room` field.
          The `home` button is always on (no module backing it — it's
          the always-visible "today + tasks + events" landing page). -->
-    <button data-p="home" class="on"><span class="ico">🏠</span>Home</button>
-    <button data-p="tasks"><span class="ico">✓</span>Tasks</button>
-    <button data-p="r-lists"><span class="ico">📝</span>Lists</button>
-    <button data-p="r-calendar"><span class="ico">📅</span>Calendar</button>
-    <button data-p="svc"><span class="ico">🛰️</span>Apps</button>
+    <!-- PHA-2846 / v0.5.10: bottom-nav icon migration to the canonical
+         brand SVG set. Previous emoji literals (🏠 ✓ 📝 📅 🛰️ 📸)
+         were a documented exception to PHA-2209's audit because the
+         nav predated PHA-2777 (canonical brand system). Each tab now
+         references the matching built-in module's SVG:
+           * Home (always-on landing, no module backing) -> /icon.svg
+             (the canonical opening-door mark — the same one /favicon.svg
+             serves).
+           * Tasks / Lists / Calendar / Apps -> /modules/{chores,lists,
+             calendar,apps}.svg — same files the Add Rooms picker
+             already uses, no new assets shipped.
+           * Porch -> /modules/porch.svg (Hearth lantern).
+         Sized 22px (matches the previous `font-size:20px` emoji cap
+         height at 1.1x line-height) and centred via flex; the nav's
+         existing `gap:3px` between icon and label stays. Emoji font
+         fallback is intentionally absent — if a module SVG is missing
+         the `alt` text shows the label alone. -->
+    <button data-p="home" class="on" aria-label="Home"><span class="ico"><img src="/icon.svg" alt="" width="22" height="22"></span>Home</button>
+    <button data-p="tasks" aria-label="Tasks"><span class="ico"><img src="/modules/chores.svg" alt="" width="22" height="22"></span>Tasks</button>
+    <button data-p="r-lists" aria-label="Lists"><span class="ico"><img src="/modules/lists.svg" alt="" width="22" height="22"></span>Lists</button>
+    <button data-p="r-calendar" aria-label="Calendar"><span class="ico"><img src="/modules/calendar.svg" alt="" width="22" height="22"></span>Calendar</button>
+    <button data-p="svc" aria-label="Apps"><span class="ico"><img src="/modules/apps.svg" alt="" width="22" height="22"></span>Apps</button>
     <!-- PHA-2200.5 / PHA-2206: in-place Porch tab. Replaces the old
          `navPorch` <a> that linked to /porch.html as a separate page;
          now it's a real tab button that switches to #page-wall. Hidden
@@ -575,7 +597,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
          string (matches the page div id, not the module key) so we
          use the room name 'porch' to avoid colliding with the
          PHA-2209 no-hardcoded-keys audit. -->
-    <button data-p="porch" id="navWall" style="display:none"><span class="ico">📸</span>Porch</button>
+    <button data-p="porch" id="navWall" style="display:none" aria-label="Porch"><span class="ico"><img src="/modules/porch.svg" alt="" width="22" height="22"></span>Porch</button>
   </nav>
 
   <!-- PHA-1898 + PHA-2498: meta-agent chat drawer.
