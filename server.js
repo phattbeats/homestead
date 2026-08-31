@@ -38,6 +38,7 @@ const plexSync = require('./lib/sync/plex');
 const kavitaSync = require('./lib/sync/kavita');
 const agentTokens = require('./lib/agent-tokens');
 const agentEndpoints = require('./lib/agent-endpoints');
+const agentConnections = require('./lib/agent-connections');
 const appApiLog = require('./lib/app-api-log');
 const appInstall = require('./lib/app-install');
 const connectorInstall = require('./lib/connector-install');
@@ -106,6 +107,10 @@ connectorWizard.migrate(db);
 // migrated after userModel so the FK resolves, same pattern as
 // agent_tokens / calendar_sources.
 agentEndpoints.migrate(db);
+// PHA-2880 (PHA-2855 phase 1): agent_connections — companion-mediated
+// pairing flow, separate table from agent_endpoints above (that path
+// stays untouched). Migrated after userModel for the same FK reason.
+agentConnections.migrate(db);
 // PHA-1620: calendar_sources + calendar_event_cache schema. Migrated
 // last so the FK to users(id) resolves, same boot-migration pattern.
 calendarSources.migrate(db);
@@ -2050,6 +2055,77 @@ app.delete('/api/users/:username/agent-endpoints/:id', auth, requireAdmin, (req,
   const removed = agentEndpoints.remove(db, req.params.id, { ownerUserId: target.id });
   if (!removed) return res.status(404).json({ error: 'not found' });
   res.json({ ok: true });
+});
+
+// ---- PHA-2880 (PHA-2855 phase 1): agent_connections — companion-mediated
+// pairing flow (OpenClaw / Claude Code / Codex tiles). Separate from the
+// agent-endpoints routes above; the Advanced/generic-webhook path is
+// untouched.
+//
+// GET /api/agent-connections — own connections, or (admin + ?user=)
+// another user's.
+app.get('/api/agent-connections', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  if (req.query.user) {
+    if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+    const target = db.prepare('SELECT id FROM users WHERE username = ?').get(userModel.validateUsername(req.query.user) || '');
+    if (!target) return res.status(404).json({ error: 'not found' });
+    return res.json(agentConnections.list(db, target.id));
+  }
+  res.json(agentConnections.list(db, me.id));
+});
+// POST /api/agent-connections/pair — mint a pairing code for a provider
+// tile. Returns the connection row plus the one-time pairing code and
+// its expiry.
+app.post('/api/agent-connections/pair', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { provider, label = '', scopes = [] } = req.body || {};
+  try {
+    const minted = agentConnections.mintPairingCode(db, me.id, { provider, label, scopes });
+    res.json(minted);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+// POST /api/agent-connections/redeem-pairing-code — the local companion
+// redeems a code while session-authenticated as the SAME user who
+// minted it. Single-use, 10 min TTL. Returns the connection plus the
+// one-time plaintext secret on success.
+app.post('/api/agent-connections/redeem-pairing-code', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { code } = req.body || {};
+  const redeemed = agentConnections.redeemPairingCode(db, code, { userId: me.id });
+  if (!redeemed) return res.status(400).json({ error: 'invalid_or_expired_code' });
+  res.json(redeemed);
+});
+// PATCH /api/agent-connections/:id — rename (label only), or
+// rotate_secret=true / revoke=true for the corresponding action.
+// rotate and revoke are mutually exclusive with a plain rename in one
+// call — each PATCH performs exactly one of rename/rotate/revoke so the
+// one-time secret reveal semantics stay unambiguous.
+app.patch('/api/agent-connections/:id', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { label, rotate_secret = false, revoke = false } = req.body || {};
+  try {
+    let updated;
+    if (revoke) {
+      updated = agentConnections.revoke(db, req.params.id, { ownerUserId: me.id });
+    } else if (rotate_secret) {
+      updated = agentConnections.rotateSecret(db, req.params.id, { ownerUserId: me.id });
+    } else if (label !== undefined) {
+      updated = agentConnections.rename(db, req.params.id, label, { ownerUserId: me.id });
+    } else {
+      return res.status(400).json({ error: 'nothing to update' });
+    }
+    if (!updated) return res.status(404).json({ error: 'not found' });
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // ---- PHA-2829: Hearth first-open intro path ----
