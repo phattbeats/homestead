@@ -50,6 +50,7 @@ const dedupMatcher = require('./lib/dedup/matcher');
 const calendarSources = require('./lib/calendar-sources');
 const secretBox = require('./lib/secret-box');
 const snapshot = require('./lib/snapshot');
+const gazette = require('./lib/gazette');
 const drawerDispatch = require('./lib/drawer-dispatch');
 const eventsDispatch = require('./lib/events-dispatch');
 const media = require('./lib/media');
@@ -180,6 +181,12 @@ lists.seed(db);
 // default rooms are PROPOSALS the first-run tutorial offers, and
 // nothing is written until the user accepts them.
 houseRooms.migrate(db);
+
+// PHA-2659: gazette_editions (the per-user, per-day edition cache).
+// FK to users(id), so it runs after userModel.migrate — same
+// boot-migration pattern as the other primitives. No seed: an edition
+// only exists once its reader has opened the sheet that day.
+gazette.migrate(db);
 
 // v0.1.0: web push subscriptions (PHA-1619)
 db.exec(`
@@ -719,6 +726,98 @@ app.get('/api/me/snapshot', auth, (req, res) => {
     res.status(500).json({ error: 'snapshot_build_failed' });
   }
 });
+
+// ---- PHA-2659: The Homestead Gazette ----
+//
+// GET /api/me/gazette/today — serve today's edition, minting it on the
+// first open of the day. This is the whole Gazette API surface;
+// docs/GAZETTE-DESIGN.md open question 1 (route naming) resolves here.
+//
+// Generation is lazy and per-user by design: the edition is NOT pushed
+// and NOT cron-generated, so a user who never opens the sheet never
+// spends a token. `?refresh=1` forces a re-mint for the same day —
+// the escape hatch for an edition that failed against a
+// temporarily-broken harness.
+//
+// The module toggle is the only thing that decides whether this route
+// answers — same `requireModuleEnabled` gate PHA-2811 put on
+// POST /api/tasks. The registry's `requires` edge means enabling
+// Gazette already pulled in the harness module it needs.
+app.get('/api/me/gazette/today', auth, requireModuleEnabled('gazette'), async (req, res) => {
+  const username = req.session.user && req.session.user.username;
+  if (!username) return res.status(401).json({ error: 'unauthorized' });
+  const me = userModel.getMe(db, username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+
+  const tz = snapshot.resolveTz(req);
+  const refresh = req.query.refresh === '1';
+
+  let ctx;
+  try {
+    ctx = gazette.assembleContext(db, username, { tz });
+  } catch (err) {
+    console.error('[gazette] context assembly failed', err);
+    return res.status(500).json({ error: 'gazette_context_failed' });
+  }
+
+  // Cache hit — the day's edition is already written. An 'unavailable'
+  // row is also a hit (a broken harness shouldn't be retried on every
+  // open) but is served with `retryable` so the sheet can offer the
+  // refresh instead of silently looking empty.
+  if (!refresh) {
+    const cached = gazette.getEdition(db, me.id, ctx.date);
+    if (cached) {
+      return res.json({ ...cached, retryable: cached.status === 'unavailable' });
+    }
+  }
+
+  // Thin-edition floor: nothing happened at all. Print the one line
+  // Homestead itself owns rather than paying the harness to say
+  // "nothing happened" in more words.
+  const sections = gazette.availableSections(ctx);
+  if (sections.length === 0) {
+    const thin = gazette.putEdition(db, me.id, ctx.date, {
+      tz,
+      status: 'thin',
+      edition: { lede: { headline: 'Quiet', body: gazette.THIN_NOTE }, briefs: [], editors_note: null },
+    });
+    return res.json({ ...thin, cached: false, retryable: false });
+  }
+
+  const { system, user } = gazette.buildPrompt(ctx);
+  const result = await agentRuntime.composeGazette({ system, user });
+
+  if (!result.ok) {
+    // Cache the failure for the day so a missing key doesn't re-dial
+    // the provider on every sheet open, but keep it retryable.
+    const failed = gazette.putEdition(db, me.id, ctx.date, {
+      tz,
+      status: 'unavailable',
+      edition: {},
+      error: result.status === 'no_key' ? 'no_key' : (result.lastError || result.status),
+    });
+    return res.status(200).json({ ...failed, cached: false, retryable: true });
+  }
+
+  let edition;
+  try {
+    edition = gazette.parseEdition(result.text, sections);
+  } catch (err) {
+    console.error('[gazette] unparseable harness output', err.message);
+    const failed = gazette.putEdition(db, me.id, ctx.date, {
+      tz, status: 'unavailable', edition: {}, error: err.message,
+    });
+    return res.status(200).json({ ...failed, cached: false, retryable: true });
+  }
+
+  const stored = gazette.putEdition(db, me.id, ctx.date, {
+    tz,
+    status: edition.briefs.length === 0 ? 'thin' : 'published',
+    edition,
+  });
+  res.json({ ...stored, cached: false, retryable: false });
+});
+
 // ---- PHA-2204 (PHA-2200.3): module / layout API surface ----
 //
 // Four read endpoints + two write endpoints:

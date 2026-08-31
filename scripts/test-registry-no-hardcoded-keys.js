@@ -48,10 +48,10 @@ const fs = require('fs');
 const path = require('path');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
-const KEYS = ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent'];
+const KEYS = ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent', 'gazette'];
 
 // Strict regex: literal between matching quote boundaries.
-const STRICT_KEY_RE = new RegExp(`(['"\`])(wall|lists|calendar|chores|apps|agent)\\1`, 'g');
+const STRICT_KEY_RE = new RegExp(`(['"\`])(wall|lists|calendar|chores|apps|agent|gazette)\\1`, 'g');
 
 const EXCLUDE_DIRS = new Set([
   'node_modules', '.git', 'data', 'tmp', 'coverage',
@@ -144,6 +144,15 @@ const EXCLUDE_FILES = new Set([
   // to assert the Hearth first-enable flow. Same category as the sibling
   // acceptance tests above — literal key is test fixture data, not render code.
   'scripts/test-2829-first-enable.js',
+  // PHA-2659 Gazette acceptance test: drives the module toggle, the
+  // requires/dependents cascade, and GET /api/me/gazette/today through
+  // literal keys. Same category as the sibling acceptance tests above —
+  // test config, not render code. Note that the Gazette's PRODUCTION
+  // code is deliberately absent from this list: lib/gazette.js, the
+  // applyLayout launcher loop and the sheet renderer all read
+  // `open_mode` / the server-sent `sheets[]` rather than naming a key,
+  // so they pass the audit on their own merits.
+  'scripts/test-2659-gazette.js',
   // PHA-2823 cross-page bottom-nav component: the `LINKS` array is a separate
   // navigation namespace (Wall/Porch/Rooms/Invites/Connect), not the registry
   // namespace. The `'wall'` literal is intentionally kept here as an extra

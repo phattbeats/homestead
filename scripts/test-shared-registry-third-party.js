@@ -54,7 +54,7 @@ console.log('PHA-2209 Amendment 1 — registry shared intake path\n');
 {
   console.log('Test 1: all built-ins pass validateEntryShape');
   const keys = Object.keys(modules.REGISTRY);
-  assertEq(keys.length, 6, 'REGISTRY has exactly 6 built-in entries');
+  assertEq(keys.length, 7, 'REGISTRY has exactly 7 built-in entries');
   for (const k of keys) {
     const entry = modules.REGISTRY[k];
     const err = validator.validateEntryShape(entry);

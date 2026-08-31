@@ -229,6 +229,35 @@ body[data-layout="meadow"] #addRoomPill:active{transform:scale(.96)}
   display:flex;align-items:center;justify-content:center;opacity:.95;flex-shrink:0}
 #drawerFab:active{transform:scale(.92)}
 #drawerFab.off{opacity:0;pointer-events:none;transform:scale(.7)}
+/* PHA-2659: sheet-module launchers, docked beside the chat FAB. Same
+   size and shadow so the header reads as one cluster; lighter fill so
+   the chat FAB stays the primary affordance. Each button carries the
+   module's registry icon. */
+#sheetLaunchers{display:flex;align-items:center;gap:8px}
+#sheetLaunchers:empty{display:none}
+.sheetFab{width:38px;height:38px;border-radius:50%;background:var(--card,#fff);
+  border:1px solid var(--line);box-shadow:0 6px 16px rgba(43,38,34,.18);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;
+  transition:transform .35s var(--ease)}
+.sheetFab:active{transform:scale(.92)}
+.sheetFab img{width:22px;height:22px;display:block}
+/* Gazette sheet: a newspaper column, not a form. Serif body, rules
+   between sections, two-column briefs where there's room. */
+.gz-masthead{text-align:center;border-bottom:2px solid var(--ink);padding-bottom:10px;margin-bottom:4px}
+.gz-masthead h2{font-family:Georgia,'Times New Roman',serif;font-size:30px;letter-spacing:.5px;margin:0}
+.gz-dateline{font-size:11px;letter-spacing:.14em;text-transform:uppercase;opacity:.65;margin-top:6px}
+.gz-body{font-family:Georgia,'Times New Roman',serif;line-height:1.55}
+.gz-lede{border-bottom:1px solid var(--line);padding:14px 0}
+.gz-lede h3{font-size:22px;margin:0 0 6px;font-family:Georgia,'Times New Roman',serif}
+.gz-briefs{display:grid;grid-template-columns:1fr 1fr;gap:0 22px;padding-top:12px}
+@media (max-width:560px){.gz-briefs{grid-template-columns:1fr}}
+.gz-brief{padding:0 0 14px;break-inside:avoid}
+.gz-brief .gz-kicker{font-size:10px;letter-spacing:.16em;text-transform:uppercase;opacity:.6;
+  font-family:system-ui,sans-serif;margin-bottom:4px}
+.gz-brief h4{font-size:16px;margin:0 0 4px;font-family:Georgia,'Times New Roman',serif}
+.gz-brief p{margin:0;font-size:14px}
+.gz-note{border-top:1px solid var(--line);padding-top:10px;margin-top:2px;
+  font-size:13px;font-style:italic;opacity:.8}
 #drawer{position:fixed;top:0;right:0;bottom:0;width:min(420px,100vw);background:var(--bg);
   border-left:1px solid var(--line);box-shadow:-12px 0 40px rgba(0,0,0,.08);
   transform:translateX(100%);transition:transform .42s var(--ease);z-index:80;
@@ -504,6 +533,12 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
            matches them in HTML comments (not stripped), so the
            registry-key guard would flag the word. -->
       <button id="drawerFab" type="button" title="Open chat" aria-label="Open chat drawer">💬</button>
+      <!-- PHA-2659: launchers for open-mode-sheet modules (the Gazette
+           today). Populated by applyLayout() from the layout payload's
+           sheets[] array - one button per enabled sheet module, empty
+           and invisible when the user has none. Sheet modules have no
+           nav room, so this header slot is their only affordance. -->
+      <span id="sheetLaunchers"></span>
     </div>
   </header>
   <main>
@@ -874,6 +909,36 @@ function applyLayout(layout) {
   if (fab) {
     if (layout.agentDrawer === true) fab.classList.remove('off');
     else fab.classList.add('off');
+  }
+
+  // PHA-2659: sheet-module launchers. `layout.sheets` carries one entry
+  // per enabled open-mode-sheet module ({key, icon, label}); the server
+  // derives that list from the registry's open_mode, so this loop never
+  // names a module key and the PHA-2209 Amendment 3 audit stays clean.
+  // Rebuilt wholesale on every applyLayout so a module toggled off in
+  // the add-a-room sheet loses its launcher immediately.
+  const launchers = document.getElementById('sheetLaunchers');
+  if (launchers) {
+    launchers.innerHTML = '';
+    for (const s of (Array.isArray(layout.sheets) ? layout.sheets : [])) {
+      if (!s || !s.key) continue;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'sheetFab';
+      b.dataset.sheet = s.key;
+      b.title = s.label || s.key;
+      b.setAttribute('aria-label', 'Open ' + (s.label || s.key));
+      if (typeof s.icon === 'string' && s.icon.startsWith('/')) {
+        const img = document.createElement('img');
+        img.src = s.icon;
+        img.alt = '';
+        b.appendChild(img);
+      } else {
+        b.textContent = s.icon || '📰';
+      }
+      b.onclick = () => openSheetModule(s.key, s.label || s.key);
+      launchers.appendChild(b);
+    }
   }
 
   // First-active page redirect: if the currently-active page is now
@@ -1519,6 +1584,110 @@ $('#page-home').classList.add('on');
 function openSheet(html){$('#sheet').innerHTML=html;$('#modal').classList.add('on')}
 function closeSheet(){$('#modal').classList.remove('on')}
 $('#modal').onclick=e=>{if(e.target.id==='modal')closeSheet()};
+
+/* PHA-2659: open-mode-sheet module dispatch.
+
+   SHEET_RENDERERS is a registration table, not a branch: a sheet
+   module's key maps to the async renderer that owns its surface. The
+   launcher loop in applyLayout() never reads a key literal - it just
+   hands whatever key the server sent to openSheetModule(), so adding a
+   second sheet module means adding one row here and nothing else. */
+const SHEET_RENDERERS = {
+  gazette: renderGazetteSheet,
+};
+
+async function openSheetModule(key, label){
+  const render = SHEET_RENDERERS[key];
+  if (!render) return;
+  openSheet(`<div class="gz-loading" style="padding:24px 0;text-align:center;opacity:.6">Setting the type…</div>`);
+  try {
+    await render();
+  } catch (_) {
+    openSheet(`<h2>${esc(label)}</h2><p class="muted">Couldn't reach the press. Try again in a moment.</p>
+      <button class="link" onclick="closeSheet()">Close</button>`);
+  }
+}
+
+/* The Gazette sheet. The edition arrives as structured JSON and is
+   rendered here through esc() - harness prose never reaches innerHTML
+   unescaped, so a compromised or confused model can't inject markup
+   into the sheet.
+
+   The three edition states each get a real surface: `published` prints
+   normally, `thin` prints the quiet-day line without empty columns
+   (the thin-edition rule is layout as much as copy - no reserved space
+   for sections that aren't there), and `unavailable` explains itself
+   and offers the refresh instead of showing a blank page. */
+async function renderGazetteSheet(){
+  const r = await fetch('/api/me/gazette/today', {headers:{'X-Homestead-Tz': Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'}});
+  if (!r.ok) {
+    const err = r.status === 403 ? 'The Gazette isn\'t one of your rooms right now.' : 'Couldn\'t reach the press.';
+    openSheet(`<h2>The Homestead Gazette</h2><p class="muted">${esc(err)}</p>
+      <button class="link" onclick="closeSheet()">Close</button>`);
+    return;
+  }
+  const d = await r.json();
+  paintGazette(d);
+}
+
+function paintGazette(d){
+  const ed = (d && d.edition) || {};
+  /* Parse YYYY-MM-DD as a LOCAL date. `new Date('2026-08-30')` is
+     parsed as UTC midnight, which prints as the 29th for any reader
+     west of Greenwich - a morning paper dated yesterday. */
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec((d && d.date) || '');
+  const dateObj = parts ? new Date(+parts[1], +parts[2] - 1, +parts[3]) : new Date();
+  const when = dateObj.toLocaleDateString(undefined,
+    {weekday:'long', month:'long', day:'numeric'});
+
+  const masthead = `<div class="gz-masthead">
+      <h2>The Homestead Gazette</h2>
+      <div class="gz-dateline">${esc(when)} · Published each dawn by Hearth</div>
+    </div>`;
+
+  if (d && d.status === 'unavailable') {
+    const why = d.error === 'no_key'
+      ? 'Your assistant needs a model key before it can write the edition. Add one under Settings.'
+      : 'The edition didn\'t come back from your assistant this morning.';
+    openSheet(`${masthead}<div class="gz-body"><p class="gz-note">${esc(why)}</p></div>
+      <button class="link" onclick="refreshGazette()">Try again</button>
+      <button class="link" onclick="closeSheet()">Close</button>`);
+    return;
+  }
+
+  const lede = ed.lede ? `<div class="gz-lede">
+      <h3>${esc(ed.lede.headline)}</h3>
+      <p>${esc(ed.lede.body)}</p>
+    </div>` : '';
+
+  /* No briefs -> no grid at all. An empty two-column shell is exactly
+     the padded quiet day the thin-edition rule forbids. */
+  const briefs = (Array.isArray(ed.briefs) && ed.briefs.length)
+    ? `<div class="gz-briefs">${ed.briefs.map(b => `<div class="gz-brief">
+          <div class="gz-kicker">${esc(b.title)}</div>
+          <h4>${esc(b.headline)}</h4>
+          <p>${esc(b.body)}</p>
+        </div>`).join('')}</div>`
+    : '';
+
+  const note = ed.editors_note
+    ? `<div class="gz-note">${esc(ed.editors_note)}</div>` : '';
+
+  openSheet(`${masthead}<div class="gz-body">${lede}${briefs}${note}</div>
+    <button class="link" onclick="refreshGazette()">Re-run the press</button>
+    <button class="link" onclick="closeSheet()">Close</button>`);
+}
+
+async function refreshGazette(){
+  openSheet(`<div style="padding:24px 0;text-align:center;opacity:.6">Resetting the type…</div>`);
+  try {
+    const r = await fetch('/api/me/gazette/today?refresh=1', {headers:{'X-Homestead-Tz': Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'}});
+    paintGazette(await r.json());
+  } catch (_) {
+    openSheet(`<h2>The Homestead Gazette</h2><p class="muted">Couldn't reach the press.</p>
+      <button class="link" onclick="closeSheet()">Close</button>`);
+  }
+}
 
 /* Generic user picker: Everyone + every USERS entry, with color dot per option.
    Selection: the picked button's background becomes the user's color. */
