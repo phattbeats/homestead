@@ -56,6 +56,7 @@ const media = require('./lib/media');
 const walls = require('./lib/walls');
 const wallEvents = require('./lib/wall-events');
 const lists = require('./lib/lists');
+const houseRooms = require('./lib/house-rooms');
 const notifications = require('./lib/notifications');
 const analytics = require('./lib/analytics');
 const invites = require('./lib/invites');
@@ -159,6 +160,15 @@ invites.migrate(db);
 // primitive end-to-end.
 lists.migrate(db);
 lists.seed(db);
+// PHA-2852: house_rooms + house_room_members — rooms as LOCATIONS of
+// the house (HALL / DEN / KITCHEN), distinct from the `room` nav
+// discriminator in lib/modules.js. FK to users(id) so it runs after
+// userModel.migrate; it also adds the additive `events.room_id`
+// column, whose FK target is house_rooms, so it must run after the
+// events table exists (userModel.migrate) too. No seed() — the three
+// default rooms are PROPOSALS the first-run tutorial offers, and
+// nothing is written until the user accepts them.
+houseRooms.migrate(db);
 
 // v0.1.0: web push subscriptions (PHA-1619)
 db.exec(`
@@ -3030,20 +3040,191 @@ app.delete('/api/list-items/:itemId', auth, requireScope('write:lists'), (req, r
   }
 });
 
+// ---- house rooms (PHA-2852) ----
+// Rooms as LOCATIONS of the house — HALL, DEN, KITCHEN. See
+// lib/house-rooms.js for why this is not the same thing as the `room`
+// nav discriminator in lib/modules.js.
+//
+// Auth posture: `auth` only, no requireScope(). These live under
+// /api/me/* and follow the same posture as /api/me/modules and
+// /api/me/layout — they are user-scoped by construction (every query
+// is keyed to the caller's own user id), and adding a `read:rooms` /
+// `write:rooms` pair would mean extending the LOCKED PHA-2201 §3
+// scope vocabulary in lib/scope-display.js. That's a deliberate
+// follow-up, not a thing to do quietly: until then an installed
+// third-party app inherits its user's room access, exactly as it
+// already does for /api/me/modules.
+//
+// Route order note: /api/me/rooms/proposals is declared BEFORE
+// /api/me/rooms/:slug, since Express matches in declaration order and
+// "proposals" is a syntactically valid slug. lib/house-rooms.js also
+// reserves that slug so nobody can create an unreachable room.
+
+// _roomsCaller — resolves the session user to a row, or writes the
+// 401 and returns null. Every room route starts with this.
+function _roomsCaller(req, res) {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) {
+    res.status(401).json({ error: 'unknown_user' });
+    return null;
+  }
+  return me;
+}
+
+function _roomsError(res, e, fallback) {
+  res.status(e.status || 500).json({ error: e.code || fallback });
+}
+
+app.get('/api/me/rooms', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    const includeArchived = req.query.include_archived === '1' || req.query.include_archived === 'true';
+    res.json({ rooms: houseRooms.listRooms(db, me.id, { includeArchived }) });
+  } catch (e) { _roomsError(res, e, 'rooms_failed'); }
+});
+
+// GET /api/me/rooms/proposals — the first-run tutorial's three stubs,
+// each flagged with whether the caller already has that slug live.
+app.get('/api/me/rooms/proposals', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    res.json(houseRooms.listProposals(db, me.id));
+  } catch (e) { _roomsError(res, e, 'proposals_failed'); }
+});
+
+// POST /api/me/rooms/proposals — accept-all-or-edit-and-accept. Body
+// omitted (or `{}`) accepts all three as proposed; `{ rooms: [...] }`
+// accepts an edited set. Idempotent: already-live slugs are reported
+// under `skipped` rather than rejected, so a half-finished tutorial
+// can be re-run.
+app.post('/api/me/rooms/proposals', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    const body = req.body || {};
+    const rooms = Object.prototype.hasOwnProperty.call(body, 'rooms') ? body.rooms : undefined;
+    res.status(201).json(houseRooms.acceptProposals(db, me.id, rooms));
+  } catch (e) { _roomsError(res, e, 'proposals_failed'); }
+});
+
+app.post('/api/me/rooms', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    res.status(201).json(houseRooms.createRoom(db, me.id, req.body || {}));
+  } catch (e) { _roomsError(res, e, 'room_failed'); }
+});
+
+app.get('/api/me/rooms/:slug', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    res.json(houseRooms.getRoom(db, me.id, req.params.slug));
+  } catch (e) { _roomsError(res, e, 'room_failed'); }
+});
+
+app.patch('/api/me/rooms/:slug', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    res.json(houseRooms.updateRoom(db, me.id, req.params.slug, req.body || {}));
+  } catch (e) { _roomsError(res, e, 'room_failed'); }
+});
+
+// DELETE is a SOFT delete — stamps archived_at. The row and any
+// events tagged to it survive; PATCH { archived: false } restores.
+app.delete('/api/me/rooms/:slug', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    res.json(houseRooms.archiveRoom(db, me.id, req.params.slug));
+  } catch (e) { _roomsError(res, e, 'room_failed'); }
+});
+
+// GET /api/me/rooms/:slug/events — the acceptance query, "events
+// happening in HALL today": ?from=2026-08-30&to=2026-08-30. Rows come
+// back with room_slug/room_label joined on as columns so the Gazette
+// can print "6:00 — Blake call — HALL" from a single request.
+app.get('/api/me/rooms/:slug/events', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit, 10) : undefined;
+    res.json({
+      events: houseRooms.listEventsInRoom(db, me.id, req.params.slug, {
+        from: req.query.from,
+        to: req.query.to,
+        limit,
+      }),
+    });
+  } catch (e) { _roomsError(res, e, 'room_events_failed'); }
+});
+
+// Members: owner manages, members read (the whole ACL — richer
+// per-room grants are the v2 conversation PHA-2852 defers).
+app.get('/api/me/rooms/:slug/members', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    res.json({ members: houseRooms.listMembers(db, me.id, req.params.slug) });
+  } catch (e) { _roomsError(res, e, 'room_members_failed'); }
+});
+
+app.post('/api/me/rooms/:slug/members', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    res.status(201).json({ members: houseRooms.addMember(db, me.id, req.params.slug, req.body || {}) });
+  } catch (e) { _roomsError(res, e, 'room_members_failed'); }
+});
+
+app.delete('/api/me/rooms/:slug/members/:userId', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    res.json({ members: houseRooms.removeMember(db, me.id, req.params.slug, req.params.userId) });
+  } catch (e) { _roomsError(res, e, 'room_members_failed'); }
+});
+
 // ---- events ----
+// PHA-2852: events can be tagged with a house room. `room_id` accepts
+// either a room id or a slug on write and is stored as the id; reads
+// decorate every row with room_slug/room_label/room_icon, left null
+// for rooms the caller can't see rather than leaking another user's
+// labels. `?room=` filters ("events happening in HALL today").
 app.get('/api/events', auth, (req, res) => {
   const { from, to } = req.query;
-  if (from && to) {
-    return res.json(db.prepare('SELECT * FROM events WHERE date >= ? AND date <= ? ORDER BY date, time').all(from, to));
+  const roomRef = req.query.room || req.query.room_id;
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  if (roomRef) {
+    try {
+      return res.json(houseRooms.listEventsInRoom(db, me.id, String(roomRef), { from, to }));
+    } catch (e) {
+      return res.status(e.status || 500).json({ error: e.code || 'events_failed' });
+    }
   }
-  res.json(db.prepare('SELECT * FROM events ORDER BY date, time').all());
+  const rows = (from && to)
+    ? db.prepare('SELECT * FROM events WHERE date >= ? AND date <= ? ORDER BY date, time').all(from, to)
+    : db.prepare('SELECT * FROM events ORDER BY date, time').all();
+  res.json(houseRooms.joinRoomColumns(db, me.id, rows));
 });
 app.post('/api/events', auth, (req, res) => {
   const { title, date, time = '', notes = '', owner = 'all' } = req.body || {};
   if (!title || !date) return res.status(400).json({ error: 'title and date required' });
   if (!userModel.validateAssignee(db, owner)) return res.status(400).json({ error: 'unknown owner' });
-  const r = db.prepare('INSERT INTO events (title,date,time,notes,owner,created_by) VALUES (?,?,?,?,?,?)')
-    .run(title, date, time, notes, owner, req.session.user.username);
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  let roomId;
+  try {
+    roomId = houseRooms.resolveRoomIdForWrite(db, me.id, (req.body || {}).room_id);
+  } catch (e) {
+    return res.status(e.status || 500).json({ error: e.code || 'invalid_room' });
+  }
+  const r = db.prepare('INSERT INTO events (title,date,time,notes,owner,created_by,room_id) VALUES (?,?,?,?,?,?,?)')
+    .run(title, date, time, notes, owner, req.session.user.username, roomId);
   const created = db.prepare('SELECT * FROM events WHERE id = ?').get(r.lastInsertRowid);
   // PHA-1617.7: fire-and-forget events webhook fan-out (see /api/tasks).
   eventsDispatch.dispatchEventForAssignee(db, app.locals.eventsStreakMap, owner, 'event_created', { event: created }).catch(() => {});
@@ -3054,8 +3235,21 @@ app.put('/api/events/:id', auth, (req, res) => {
   if (!e) return res.status(404).json({ error: 'not found' });
   const b = { ...e, ...req.body };
   if (!userModel.validateAssignee(db, b.owner)) return res.status(400).json({ error: 'unknown owner' });
-  db.prepare('UPDATE events SET title=?,date=?,time=?,notes=?,owner=? WHERE id=?')
-    .run(b.title, b.date, b.time, b.notes, b.owner, e.id);
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  // Only re-resolve when the caller actually sent room_id — an
+  // untouched tag must survive a PUT that doesn't mention it, even if
+  // this caller can't see that room.
+  let roomId = e.room_id;
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'room_id')) {
+    try {
+      roomId = houseRooms.resolveRoomIdForWrite(db, me.id, req.body.room_id);
+    } catch (err) {
+      return res.status(err.status || 500).json({ error: err.code || 'invalid_room' });
+    }
+  }
+  db.prepare('UPDATE events SET title=?,date=?,time=?,notes=?,owner=?,room_id=? WHERE id=?')
+    .run(b.title, b.date, b.time, b.notes, b.owner, roomId, e.id);
   res.json(db.prepare('SELECT * FROM events WHERE id = ?').get(e.id));
 });
 app.delete('/api/events/:id', auth, (req, res) => {
