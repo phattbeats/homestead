@@ -57,6 +57,11 @@ const EXCLUDE_DIRS = new Set([
   'node_modules', '.git', 'data', 'tmp', 'coverage',
   'homestead-data', 'homestead-cache', 'dist', 'build',
   '.cache', '.next', 'worktrees',
+  // Generated smoke-output artifacts under verify-out/ are produced by the
+  // regression smoke (scripts/smoke-*.js) and contain DB schema dumps.
+  // They are NEVER render code; the entire directory should be excluded
+  // from the audit by convention.
+  'verify-out',
 ]);
 
 const EXCLUDE_FILES = new Set([
@@ -100,6 +105,29 @@ const EXCLUDE_FILES = new Set([
   // the layout API never advertises a 404 HTML route. Same pattern as the
   // sibling acceptance tests above — literals are test config, not render code.
   'scripts/test-2587-layout-route-contract.js',
+  // PHA-2704 identity foundation tests: assert the new identity_links
+  // schema (provider/issuer/provider_subject literals) and the local
+  // credentials shape. Same pattern as the sibling acceptance tests.
+  'scripts/test-2704-identity-foundation.js',
+  'scripts/test-2704-identity-api.js',
+  // PHA-2711 invite-signup tests: assert the public invite path uses
+  // 'password' as the auth_provider and 'household' as the seed wall
+  // slug. Same pattern as sibling acceptance tests — test fixtures,
+  // not render branches.
+  'scripts/test-2711-invite-signup.js',
+  // PHA-2708 owner-recovery tests: assert the recovery primitive
+  // strings ("owner_recovery_minted"/"owner_recovery_consumed"/
+  // etc.) and the audit kind enum ("owner_recovery"). Same
+  // pattern as the sibling acceptance tests — literals are test
+  // config, not render code.
+  'scripts/test-2708-owner-recovery.js',
+  // PHA-2706 OIDC link tests: assert the oidc_link_states schema
+  // (provider/issuer/handle literals) and the OIDC link lifecycle
+  // (PKCE code_verifier, state, nonce, issuer subject). Same pattern
+  // as the sibling acceptance tests — literals are test config, not
+  // render code.
+  'scripts/test-2706-oidc-link.js',
+  'scripts/smoke-2706-oidc-link.js',
   // PHA-2644 media-context acceptance test: drives the new
   // /api/media/:id/context route through image + video comprehension
   // packages. Same category as the sibling acceptance tests above —
@@ -107,6 +135,27 @@ const EXCLUDE_FILES = new Set([
   // `/api/media/...` paths via string match) are test config, not
   // render code.
   'scripts/test-2644-media-context.js',
+  // PHA-2811 task-module-gate regression test: asserts the `chores`
+  // module toggle blocks POST/PUT /api/tasks. Same category as the
+  // sibling acceptance tests above — literal keys are test config
+  // driving /api/me/modules/:key/enable|disable, not render code.
+  'scripts/test-2811-task-module-gate.js',
+  // PHA-2829 first-enable test: drives userModel.enableModule(db, brandon.id, 'agent')
+  // to assert the Hearth first-enable flow. Same category as the sibling
+  // acceptance tests above — literal key is test fixture data, not render code.
+  'scripts/test-2829-first-enable.js',
+  // PHA-2823 cross-page bottom-nav component: the `LINKS` array is a separate
+  // navigation namespace (Wall/Porch/Rooms/Invites/Connect), not the registry
+  // namespace. The `'wall'` literal is intentionally kept here as an extra
+  // entry alongside the registry-derived nav; it's a separate concern.
+  // Same as `'agent'` for appendDrawerStreaming('agent') in public/index.html.
+  'public/components/app-nav.js',
+  // Generated smoke-output artifacts under verify-out/ are produced by the
+  // regression smoke (scripts/smoke-*.js) and contain DB schema dumps.
+  // They are NEVER render code; everything under this directory should be
+  // excluded from the audit by convention.
+  'verify-out/',
+  'verify-out/smoke-2704-db-shape.json',
 ]);
 
 const SCAN_EXTS = new Set([
@@ -187,6 +236,12 @@ const ALLOWED_LEGITIMATE = [
   // element allow-list above; the table name is a SQL identifier,
   // not a render-time module-key branch).
   { file: 'lib/snapshot.js', literal: "'lists'" },
+  // PHA-2811: 'chores' as the argument to ENABLED_MODULE_KEYS.has(...)
+  // in public/index.html's FAB picker — this IS reading from the
+  // registry-derived Set populated by applyLayout(); the literal only
+  // selects which key's membership to test, same pattern as
+  // lib/app-install.js's allow-listed setUserModule('apps', ...) calls.
+  { file: 'public/index.html', literal: "'chores'" },
 ];
 
 function isAllowedLegitimate(file, match) {

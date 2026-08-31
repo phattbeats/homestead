@@ -1,3 +1,348 @@
+## Unreleased — Homestead visual asset pack + canonical opening-door repair (PHA-2846)
+
+**PHA-2846:** the live header icon was a flat closed-arch mark that didn't match the canonical opening-door brand asset. The app also shipped inconsistent emoji icons in the Add Rooms picker and the Settings → Apps sheet for built-in modules. Brandon attached the canonical source art (the OUT NOW poster, two teasers, Hearth's avatar + corrected six-frame animation sheet, six module SVGs, the live-icon-mismatch screenshot).
+
+- **Canonical opening-door mark.** `public/icon.svg`, `public/favicon.svg`, `public/icon-192.png`, `public/icon-512.png`, `public/icon-maskable.svg`, `public/icon-maskable-512.png` now derive from one canonical SVG (`public/icon.svg`). Composition: arched doorway reveal on the viewer-left, sage door slab hinged at the right jamb and swung open toward viewer-right, brass handle on the free right edge, warm amber hearth glow visible inside, dark olive rounded-square background. Maskable variant is scaled to fit the 70% safe-zone.
+- **Built-in module icons.** Six new SVGs under `public/modules/` (porch, lists, calendar, chores, apps, agent) — same brand palette (`#4b4624`, `#6d7b59`, `#f6e4c3`, `#ad5c05`, `#d49a40`) so they read as one household vocabulary. `lib/modules.js` registry's `icon` field is now a path string (`/modules/{key}.svg`); the 16-field contract is preserved (icon is still a non-empty string). The Add Rooms picker (`public/modules.html`) and the Settings → Apps sheet + App detail header (`public/index.html`) detect the `/modules/` prefix and render an `<img>`; third-party manifests still ship emoji strings and pass through as escaped text.
+- **Service worker cache bump.** `public/sw.js` bumped from `homestead-v4` to `homestead-v5`; the old cache is dropped on `activate` so no stale closed-arch icon remains reachable offline.
+- **Hearth art (durable).** `docs/brand/hearth/avatar.png` (Hearth's lantern static avatar) and `docs/brand/hearth/animation-frames.png` (six-frame sheet, 2×3 grid, read left-to-right then top-to-bottom; only flame/wisps/sparks/glow animate, ember-orb body and eyes stay fixed). Source art preserved as supplied — no auto-conversion to GIF.
+- **Teasers (durable).** `docs/brand/teasers/teaser-out-now.png` and `docs/brand/teasers/teaser-add-rooms.png` placed in a versioned brand path with descriptive names.
+- **Asset index.** `docs/brand/ASSETS.md` written — single source of truth for which brand file is canonical and where it is consumed.
+
+## v0.5.7 (2026-08-30) — Porch wall live-updates via SSE
+
+**PHA-2821:** first real two-human usage caught the wall not behaving like a
+shared room — Tyler posted, Brandon's open session showed nothing until a
+manual reload. Adds `GET /api/walls/:slug/events`, a long-lived SSE stream
+keyed per wall (`lib/wall-events.js`), reusing the wire format PHA-1899
+established for the drawer rather than a second realtime mechanism.
+`walls.createPost`/`walls.createComment` publish after a successful write;
+`feed.js` opens a native `EventSource` per mounted wall, prepends new posts,
+updates comment counts, closes the connection on hidden tabs, and falls back
+to reload-on-focus once reconnection looks dead. Reactions are explicitly
+out of scope for the live path (see issue for why). Typing indicators,
+presence, and read receipts remain out of scope entirely.
+
+## v0.5.6 (2026-08-30) — Discoverable add-a-room affordance on the wall-only funnel
+
+**PHA-2822:** first outside tester (Brandon + Tyler on PHA-2804) landed on the
+wall-only `/porch.html` shell and had no way to find or enable any other
+module — the door to `/modules.html` (already built, already wired to
+`/api/me/modules/:key/enable` via PHA-2205) only existed inside the SPA's
+`#page-wall` mount, which a brand-new single-module user never reaches
+because `boot()` redirects straight to the standalone shell. Adds a quiet
+"+ Add a room" text pill to that shell (`public/porch.html`,
+`public/porch.css`, `public/components/feed.js`), opt-in via
+`cfg.addRoomPill`, placed less prominently than the compose FAB so posting
+stays the obvious first move. Once a 2nd module is enabled, `computeLayout()`
+routes into the SPA's existing tab/pill layout, so the standalone shell only
+ever needs to cover the single-module case.
+
+## v0.5.5 (2026-08-30) — Brand system + BYOK modal fix + chore-module gate + wall notify wiring
+
+Rolls up everything landed on `main` since v0.5.4 for the real-usage feedback
+loop on PHA-2804: the brand system apply pass below, plus **PHA-2804: fix
+BYOK token modal stuck after Stored** (the modal no longer hangs after a
+successful token save), **PHA-2811: gate chore creation on the chores
+module being enabled** (fixes the orphaned "help me make homestad" chore
+Tyler couldn't close), and **PHA-2656: wire the wall notify-level dropdown**
+to `GET/PUT /api/walls/:slug/notifications`.
+
+## Homestead brand system lands (PHA-2777)
+
+Brandon's canonical README (`vault/PHATT-TECH/Projects/homestead-app/canonical/homestead-logo-canonical.png`,
+locked 2026-08-28) makes the carved-wood lettering in the lockup the wordmark itself —
+the lockup answers the typeface question ("vectorize THIS lettering"). The
+apply pass also picks up Brandon's 2026-08-30 09:31 EDT direction correction
+("USE THE CANONICAL LOGO AND BANNER") and the 2026-08-30 10:01 EDT second-pass
+correction ("STILL NOT THE RIGHT ASSETS") which replaced the spec-v3 Fraunces
+hedges with the canonical SVG/PNG assets in `agents/ledger/assets/homestead/`.
+Apply pass lands:
+
+- **Canonical app icons**: olive/sage doorway with brass knob, hearth-lit
+  interior. Painterly PNG for the standalone icon (the icon portion of
+  the canonical lockup), flat SVG variants for header, favicon, and
+  PWA manifest at 192/512. Maskable variant (full-bleed olive safe
+  area) at 512.
+- **Canonical wordmark** (`/public/wordmark.svg`): the carved-wood
+  vector traced from `homestead/canonical/homestead-logo-canonical.png`
+  — single-color `#4e2d0f` on transparent, 1206×514 viewBox. The lockup
+  answers the typeface question; we render the SVG as `<img>` in the
+  header lockup and never substitute a typeset alternative.
+- **Canonical login hero** (`/public/brand-hero.png`): the **full** login
+  lockup from `login-lockup-canonical.png` (icon + wordmark,
+  transparent ground, 1774×887). NOT the standalone painterly icon
+  — Brandon's 10:01 EDT correction explicitly showed `login-lockup-canonical.png`
+  as the asset he wanted on the login screen.
+- **Canonical README banner** (`docs/brand/homestead-banner.png`):
+  `homestead-banner.png` from the canonical folder (2172×724 wide
+  variant of the lockup). Replaces the prior `banner-canonical-readme.png`.
+- **Local fonts**: self-hosted Fraunces Italic 400 (tagline) + Plus Jakarta
+  Sans (400/800) under `/public/fonts/`, precached by `sw.js` for offline
+  PWA. **Fraunces SemiBold 600 dropped** — the wordmark is now the SVG,
+  not a typeset font. One shared font include in `brand.css` covers
+  `index.html`, `porch.css`, `connectors.css`, and `consent.css`.
+- **Header lockup**: doorway (canonical flat SVG) + canonical wordmark
+  SVG side by side across `index.html`, the Porch standalone header
+  (via `components/feed.js`), `connectors.html`, and `consent.html`.
+- **Login surface**: full canonical lockup hero + Fraunces Italic 400
+  tagline ("Your home. Your data. Your apps.") on the parchment-warm
+  login card.
+- **Muted token darken**: `--muted #8A8177` → `--muted #7a7269` (4.59:1
+  contrast on `--bg #FFFBF5`, up from 3.71:1) so muted labels and button
+  text pass WCAG AA.
+
+Guardrails honored: body text stays Plus Jakarta Sans (readable sans);
+the painterly mark only lives on login, splash, store, and README —
+no teaser imagery in feeds, lists, settings, or Porch cards.
+
+
+Brandon's brand spec (`vault/PHATT-TECH/Projects/homestead-app/brand/brand-spec-v3.md`)
+locks the canonical doorway-with-handle as the product identity, with the
+carved-wood wordmark in Fraunces SemiBold 600 + Fraunces Italic 400 for
+the tagline. Apply pass lands:
+
+- **Canonical app icons**: olive/sage doorway with brass knob, hearth-lit
+  interior. Painterly PNG for the login hero (`/brand-hero.png`,
+  1254×1254 master); flat SVG/PNG variants for header, favicon, and
+  PWA manifest at 192/512. Maskable variant (full-bleed olive safe
+  area) at 512.
+- **Local fonts**: self-hosted Fraunces SemiBold 600 + Fraunces Italic 400
+  + Plus Jakarta Sans (400/800) under `/public/fonts/`, precached by `sw.js`
+  for offline PWA. One shared font include in `brand.css` covers
+  `index.html`, `porch.css`, `connectors.css`, and `consent.css`.
+- **Header lockup**: doorway + Fraunces "Homestead" wordmark across
+  `index.html`, the Porch standalone header (via `components/feed.js`),
+  `connectors.html`, and `consent.html`.
+- **Login lockup**: painterly doorway hero + Fraunces wordmark + Fraunces
+  Italic tagline ("Your home. Your data. Your apps.") on the parchment-warm
+  login card.
+- **README banner**: canonical `banner-canonical-readme.png` (2120×640)
+  replaces the prior hand-drawn banner.
+- **Muted token darken**: `--muted #8A8177` → `--muted #7a7269` (4.59:1
+  contrast on `--bg #FFFBF5`, up from 3.71:1) so muted labels and button
+  text pass WCAG AA.
+
+Guardrails honored: body text stays Plus Jakarta Sans (readable sans);
+the painterly mark only lives on login, splash, store, and README —
+no teaser imagery in feeds, lists, settings, or Porch cards.
+## v0.5.4 (2026-08-29) — Link Authentik later: OIDC self-service identity linking (PHA-2706, landed via PHA-2719)
+
+The standalone-Homestead user who registered with username + password
+can now add Authentik (or any RFC-compliant OIDC provider) as a
+SECOND sign-in path without migrating or replacing their account.
+Built on top of PHA-2704's canonical identity foundation (which
+landed on `main` separately via PHA-2711 before this port). PHA-2706
+was originally built on a stale point in history and never merged;
+PHA-2719 ports it forward onto current `main`, alongside the
+PHA-2708 owner-recovery cascade above.
+
+### What's new
+
+- **`lib/oidc-link.js` (new).** Pure-function OIDC
+  authorization-code + PKCE (RFC 7636) + state (RFC 6749 §10.12) +
+  nonce (OIDC Core §3.1.2.1) machinery. `createPending(db, userId)`
+  mints a one-time handle, PKCE pair, state, and nonce and binds
+  them to the requesting user + local-re-auth timestamp. `findPending`
+  / `recordValidated` / `consumePending` / `cancelPending` are the
+  state-machine transitions; `consumePending` is atomic and refuses
+  replays. `verifyIdToken` validates RS256 signature + `iss` + `aud` +
+  `nonce` + `exp` and rejects algorithm downgrade (HS256 / none).
+- **`oidc_link_states(handle, user_id, provider, issuer, ...,
+  state, nonce, code_verifier, code_challenge,
+  code_challenge_method, expires_at, status,
+  validated_subject, validated_email, validated_email_verified,
+  validated_display, ...)`** — pending-link state table, owned by
+  `lib/oidc-link.js`'s own `migrate()`. `status` is
+  `pending → consumed | cancelled | expired`. Validated OIDC claims
+  are stamped onto the row so `/confirm` never trusts
+  client-supplied subjects.
+- **`POST /api/me/identities/link/start { password }`** — verify
+  the local password (re-auth gate), mint a handle, return the
+  `authorize_url`. Refuses unauthenticated (401), missing password
+  (400), wrong password (401), users with no local credential
+  (400).
+- **`GET /api/me/identities/link/callback?handle=...&code=***&state=...`**
+  — token exchange + ID-token validation. 302's the browser to
+  `/identities-link.html?handle=...` after stamping validated claims
+  onto the pending row. JSON mode (Accept: application/json) for
+  programmatic callers (tests, future API integrations).
+- **`GET /api/me/identities/link/preview?handle=...`** — read-only
+  confirmation payload that names both identities explicitly so
+  the SPA can show "you are about to link <homestead_user> to
+  <oidc_account>".
+- **`POST /api/me/identities/link/confirm { handle }`** — writes
+  one `identity_links` row pointing at the existing `users.id` via
+  the current `lib/identity.js` `linkIdentity`. Subject comes from
+  the validated row, NEVER from the client. Refuses replays (410).
+  Maps `identity_collision` to 409 with a clear "contact admin for
+  recovery" hint and the conflicting user id.
+- **`POST /api/me/identities/link/cancel { handle }`** — user
+  bailed before confirming; burns the pending row.
+- **`POST /api/me/identities/:linkId/unlink`** — self-service
+  unlink by identity_links.id. Delegates to `identity.unlinkIdentity`
+  so the no_login_path / would_lock_out_owner rules (the latter from
+  the PHA-2708 port above) are uniform across admin and self-service
+  paths.
+- **`public/identities-link.html`** — three-screen SPA: start
+  (verify local password + click Continue), confirm (names both
+  identities + click Link), done. Handle carried in
+  `sessionStorage` across the IdP round-trip; the SPA never sees
+  the id_token (server validates + stamps the row, SPA fetches
+  the read-only `/preview`).
+- **`lib/oidc-link-test-helper.js` (new)** — in-process OIDC mock
+  IdP for tests (RFC-compliant discovery, JWKS, /authorize,
+  /token). Generates an RSA keypair, signs id_tokens with the
+  matching private key, validates PKCE. No external network.
+
+### Security
+
+- The IdP subject is the only thing that becomes `provider_subject`.
+  Email is surfaced for display only — never used as the link key.
+- One-time handles prevent replay across the OIDC dance. State and
+  nonce are validated at `/callback`; the validated subject is
+  stamped onto the pending row; `/confirm` reads from the row, not
+  the request body.
+- Local re-auth (plaintext password verify against
+  `local_credentials`) is mandatory before starting a link. This
+  blocks a session-hijacker from silently adding an account they
+  can later sign in with.
+- Algorithm downgrade is refused at the verify step: only RS256
+  signatures are accepted (HS256 / none would let an attacker
+  forge a token signed with the client_secret).
+- Provider-subject collision (UNIQUE on
+  `(provider, issuer, provider_subject)`) is mapped to 409
+  `identity_collision` and surfaces the conflicting user id so the
+  SPA can show "this Authentik account is already linked to a
+  different Homestead user — contact an admin."
+
+### Tests
+
+- `scripts/test-2706-oidc-link.js` (77 assertions across 14
+  groups): schema, unauth/missing-password/wrong-password/no-local
+  rejection on /start, happy-path PKCE + state + nonce round-trip,
+  callback with mock IdP, /preview confirmation payload, /confirm
+  writing one identity_links row, replay refusal (410), collision
+  refusal (409 with conflicting user id), cancel burns handle,
+  state mismatch rejection (400), HS256 algorithm downgrade
+  rejection at verifyIdToken, self-service /unlink, data-layer
+  no_login_path orphan-block, orphan-allow when local credential
+  exists, handle ownership (one user can't consume another's
+  handle).
+- `scripts/smoke-2706-oidc-link.js` — end-to-end smoke against a
+  real server.js boot + real OIDC mock IdP. Writes verify-out
+  artifacts (authorize-url, preview, link-row, collision response,
+  unlink result, db shape).
+
+### Configuration
+
+Production Authentik integration requires four env vars:
+
+```
+OIDC_ISSUER=https://authentik.phatt.vip/application/oauth/homestead/
+OIDC_CLIENT_ID=<from Authentik application config>
+OIDC_CLIENT_SECRET=<from Authentik application config>
+OIDC_REDIRECT_URI=https://life.phatt.vip/api/me/identities/link/callback
+```
+
+OIDC_SCOPES, OIDC_LINK_TTL_MS (default 600000 / 10min, max 15min),
+and OIDC_AUTHORIZE_URL / OIDC_TOKEN_URL / OIDC_ID_TOKEN_PEM are
+optional overrides.
+
+## v0.5.4 (2026-08-29) — Owner recovery: audited break-glass + Authentik outage resilience (PHA-2708, landed via PHA-2719)
+
+**Prevent another owner lockout.** Builds on the PHA-2704 identity
+foundation. The owner (`is_admin = 1`) is the household's break-glass
+target; PHA-2708 closes the three loops that made them lockable:
+
+1. **Authentik unreachable** — owner still signs in via the LAN
+   password fallback (`/api/login` already worked; PHA-2708 ships
+   tests for the outage path so we don't lose coverage).
+2. **Owner forgot the password** — new host-side CLI
+   (`scripts/owner-recovery.js`) mints a 1h, one-shot,
+   sha256-hashed reset token directly against the SQLite DB.
+   Does not depend on Homestead being up, does not depend on
+   Authentik, does not depend on the owner's session.
+3. **Owner's last login path** — `unlinkIdentity` now refuses to
+   remove the OWNER's last identity link with `would_lock_out_owner`
+   (409). The owner recovery CLI is the only sanctioned way to
+   rotate their local credential.
+
+PHA-2708 was originally built on a stale point in history and never
+merged; PHA-2719 ports the same feature forward onto current `main`.
+In the meantime `main` had independently absorbed a general-purpose,
+any-user password-reset flow (PHA-2711:
+`scripts/reset-owner-password.js`, `POST /api/public/invites/reset`,
+`lib/invites.js` `createResetToken`/`consumeResetToken`) that shares
+a filename convention and the `local_credentials` table with this
+feature. To land both without collision, PHA-2708's storage was
+moved to two DEDICATED columns — `owner_recovery_token_hash` /
+`owner_recovery_token_expires_at` — and its CLI was renamed to
+`scripts/owner-recovery.js`. PHA-2711's `reset-owner-password.js`
+and its `recovery_token_hash` / `recovery_token_expires_at` columns
+are untouched and remain the general-purpose reset path for
+non-owner accounts.
+
+### What's new
+
+- **`lib/identity.js` PHA-2708 section.** Adds `findOwnerUserId`,
+  `isOwner`, `mintOwnerRecoveryToken`, `clearOwnerRecoveryToken`,
+  `consumeOwnerRecoveryToken`, `auditOwnerRecovery`, and
+  `parseExpiresAt`/`parseIsoUtc`. Strengthens `unlinkIdentity` to
+  block owner lockout. Storage lives in two NEW `local_credentials`
+  columns added by an idempotent migration:
+  `owner_recovery_token_hash`, `owner_recovery_token_expires_at`.
+  Expiry stored as millisecond-integer for exact comparison.
+- **`POST /api/admin/owner/recover`** — deliberately unauthenticated;
+  the one-shot token IS the credential. Rotates the owner's
+  password, clears the recovery columns, writes
+  `owner_recovery_consumed` (or `_rejected`) to `analytics_events`.
+  Returns 401 `invalid_or_expired_token` on bad/expired/replay;
+  does not leak which.
+- **`GET /api/admin/owner/login-paths`** — read-only inventory
+  of the owner's viable login methods (local credential, identity
+  links count, recovery-token presence + expiry). Never returns
+  hashes, tokens, or plaintext. Admin only.
+- **`scripts/owner-recovery.js`** — host-side CLI. Mints a
+  one-shot 60-minute reset token directly against
+  `$DATA_DIR/life.db`. No HTTP calls. Writes one
+  `owner_recovery_minted` audit row. `--revoke` clears an
+  active token without minting a new one. Prints a ready-to-paste
+  curl line for the consume endpoint.
+- **`scripts/test-2708-owner-recovery.js`** — assertions across
+  five groups: privilege preservation, recovery primitives,
+  outage resilience, API surfaces, CLI round-trip.
+- **`scripts/smoke-2708-owner-recovery.js`** — end-to-end smoke
+  against a real `server.js` boot. Writes `verify-out/` artifacts:
+  db-shape, login-paths, mint (token redacted), recover-success,
+  recover-replay, recover-badtoken, audit-events.
+- **`docs/OWNER-RECOVERY.md`** — operational runbook. No hashes,
+  tokens, or passwords. Maps every behavior to the test that
+  guards it, and calls out how this mechanism differs from
+  PHA-2711's `reset-owner-password.js`.
+
+### Migration
+
+Additive: `local_credentials` gains `owner_recovery_token_hash` and
+`owner_recovery_token_expires_at` columns via a guarded
+`ALTER TABLE ... ADD COLUMN`, applied once per install. The existing
+`recovery_token_hash` / `recovery_token_expires_at` columns are
+untouched and keep serving PHA-2711's general-purpose reset flow.
+
+### Known Limitations
+
+- One active token at a time (intentional — keeps the threat
+  model simple; the operator can wait for expiry or `--revoke`).
+- The recovery path is for the owner only. Family-member
+  reset uses the existing `/api/users/:username/password`
+  admin path or PHA-2711's `reset-owner-password.js`.
+- CLI does not validate the DB schema before writing. If you
+  point it at a half-migrated DB, the helper functions throw
+  but the row may have been written. Always take a backup
+  before running on a production instance.
+
+## v0.5.3 (2026-08-29) — invite-redemption welcome screen (PHA-2707)
+
 ## v0.4.5 (2026-08-29) — Media-comprehension package (PHA-2644)
 
 **The Porch needs agents that can see, not just text-match.** A

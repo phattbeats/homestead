@@ -6,7 +6,8 @@
 <title>Add rooms — Homestead</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#FFFBF5">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/brand.css">
 <style>
 :root{
   --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#8A8177;
@@ -29,7 +30,12 @@ main{padding:8px 18px 110px;max-width:680px;margin:0 auto}
   box-shadow:0 6px 30px rgba(0,0,0,.035)}
 .card-in{border:1px solid var(--line);border-radius:17px;padding:16px;display:flex;align-items:center;gap:14px}
 .tile{font-size:28px;width:48px;height:48px;border-radius:14px;background:var(--accent-soft);
-  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  /* PHA-2846: when .tile contains an <img>, make the image fill the
+     tile and round its corners to match the accent-soft squircle.
+     Emoji glyphs ignore these rules and render in the slot. */
+  overflow:hidden}
+.tile img{display:block;width:36px;height:36px;object-fit:contain}
 .body{flex:1;min-width:0}
 .name{font-weight:700;font-size:15px}
 .desc{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.35}
@@ -88,6 +94,22 @@ async function api(method, url, body) {
   return r.json();
 }
 
+// PHA-2846: built-in modules now ship a path-style icon
+// ("/modules/{key}.svg") under public/modules/. The registry
+// returns this string from GET /api/modules. Third-party
+// manifests still ship emoji strings (e.g. "🍿"); they pass
+// through as text. The renderer dispatches:
+//   * "/modules/" prefix   → <img> (built-in SVG)
+//   * anything else         → emoji glyph (text content)
+// This keeps the 16-field manifest contract intact (icon is
+// always a non-empty string) while letting Homestead deliver
+// real vector marks to the Add Rooms picker.
+function moduleIconHtml(icon) {
+  if (typeof icon === 'string' && icon.startsWith('/modules/')) {
+    return `<img src="${icon}" alt="" aria-hidden="true">`;
+  }
+  return icon || '·';
+}
 const ICONS = { wall:'📸', lists:'📝', calendar:'📅', chores:'✓', apps:'🛰️', agent:'🤖' };
 
 let REGISTRY = [];
@@ -103,7 +125,7 @@ function render() {
     row.className = 'card';
     row.innerHTML = `
       <div class="card-in">
-        <div class="tile">${m.icon || ICONS[m.key] || '·'}</div>
+        <div class="tile">${moduleIconHtml(m.icon || ICONS[m.key] || '·')}</div>
         <div class="body">
           <div class="name">${m.name}</div>
           <div class="desc">${m.description || ''}</div>
@@ -175,5 +197,7 @@ function render() {
   }
 })();
 </script>
+<!-- PHA-2823: persistent cross-page nav (wall/porch/rooms/invites/connectors) -->
+<script src="/components/app-nav.js" data-active="modules"></script>
 </body>
 </html>

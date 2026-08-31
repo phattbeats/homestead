@@ -274,7 +274,12 @@ console.log('PHA-2203 module-registry tests\n');
   const defaults = userModel.getDefaultEnabledModules();
   assertEq(defaults.map(e => e.key), ['wall'], 'getDefaultEnabledModules returns [{ key: "wall", ...full registry entry }]');
   const wall = defaults[0];
-  assert(wall && wall.key === 'wall' && wall.name === 'Porch' && wall.icon === '📸', 'default entry is the full wall registry entry');
+  // PHA-2846: built-in icons are now SVG paths under /modules/ rather than
+  // emoji literals (third-party manifests still use emoji strings — see
+  // the dispatch rule in public/modules.html + public/index.html). The
+  // 16-field contract (PHA-2201) is preserved: `icon` is still a non-empty
+  // string. The registry's wall entry is the source of truth.
+  assert(wall && wall.key === 'wall' && wall.name === 'Porch' && wall.icon === '/modules/porch.svg', 'default entry is the full wall registry entry (wall icon is /modules/porch.svg per PHA-2846)');
 }
 
 // -----------------------------------------------------------------------------

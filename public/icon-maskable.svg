@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Homestead canonical PWA maskable icon (PHA-2846).
+  One canonical opening-door vector, scaled to fit inside the
+  PWA maskable safe zone (the central 80% of the tile, leaving
+  ~10% padding on every side so the OS can crop to circles /
+  squircles / rounded squares without clipping the door).
+  Source: agents/ledger/assets/homestead/canonical/ (the OUT NOW
+  teaser opening-door mark).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="t">
+  <title id="t">Homestead</title>
+  <!-- Full-bleed olive background (no rounded corners — the OS
+       crops the maskable). -->
+  <rect width="512" height="512" fill="#4b4624"/>
+  <!-- Scale + center the canonical mark into the safe zone
+       (40% -> 60% of the canvas = 80% safe area, with 10%
+       padding on each side). -->
+  <g transform="translate(76.8 76.8) scale(0.7)">
+    <g transform="translate(0 0)">
+      <!-- Wall texture stripes -->
+      <g stroke="#3d3820" stroke-width="2" opacity=".55">
+        <line x1="380" y1="80"  x2="380" y2="432"/>
+        <line x1="412" y1="80"  x2="412" y2="432"/>
+        <line x1="444" y1="80"  x2="444" y2="432"/>
+      </g>
+      <!-- Arched doorway opening -->
+      <path d="M64 432V232c0-86 50-140 112-140s112 54 112 140v200Z" fill="#f6e4c3"/>
+      <!-- Hearth glow -->
+      <radialGradient id="hearthMask" cx="60%" cy="80%" r="55%">
+        <stop offset="0%" stop-color="#f6e4c3"/>
+        <stop offset="35%" stop-color="#f3a849"/>
+        <stop offset="75%" stop-color="#ad5c05"/>
+        <stop offset="100%" stop-color="#7a3d04"/>
+      </radialGradient>
+      <path d="M64 432V232c0-86 50-140 112-140s112 54 112 140v200Z" fill="url(#hearthMask)"/>
+      <circle cx="220" cy="394" r="9" fill="#f6e4c3"/>
+      <circle cx="200" cy="416" r="5" fill="#f6e4c3"/>
+      <circle cx="248" cy="372" r="6" fill="#f6e4c3"/>
+      <path d="M64 432V232c0-86 50-140 112-140s112 54 112 140v200"
+            fill="none" stroke="#2a1f10" stroke-width="6" stroke-linejoin="round"/>
+      <path d="M64 432h224" stroke="#2a1f10" stroke-width="6" stroke-linecap="round"/>
+      <path d="M64 432h384" stroke="#351901" stroke-width="6" stroke-linecap="round"/>
+      <!-- Door slab -->
+      <path d="M288 152 L424 116 L424 432 L288 432 Z"
+            fill="#6d7b59" stroke="#2a1f10" stroke-width="5" stroke-linejoin="round"/>
+      <path d="M310 196 L402 174 L402 252 L310 256 Z"
+            fill="#5d6b48" stroke="#2a1f10" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M310 274 L402 256 L402 388 L310 396 Z"
+            fill="#5d6b48" stroke="#2a1f10" stroke-width="3" stroke-linejoin="round"/>
+      <rect x="278" y="180" width="20" height="10" rx="2" fill="#d49a40" stroke="#2a1f10" stroke-width="1.5"/>
+      <rect x="278" y="394" width="20" height="10" rx="2" fill="#d49a40" stroke="#2a1f10" stroke-width="1.5"/>
+      <g transform="translate(414 270)">
+        <rect x="-7" y="-18" width="20" height="36" rx="3" fill="#b07f2c" stroke="#2a1f10" stroke-width="1.5"/>
+        <circle cx="0" cy="0" r="10" fill="#d49a40" stroke="#2a1f10" stroke-width="1.5"/>
+        <circle cx="-3" cy="-3" r="3.5" fill="#f3d18b"/>
+      </g>
+    </g>
+  </g>
+</svg>

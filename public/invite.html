@@ -3,179 +3,371 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Join a wall — Homestead</title>
+<title>You're invited to Homestead</title>
 <meta name="theme-color" content="#FFFBF5">
 <link rel="manifest" href="/manifest.json">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/brand.css">
 <style>
-/* PHA-2207 (PHA-2200.6): invite redemption page. The page itself is
-   unauthenticated — it just shows the wall the invite is for and
-   asks the user to confirm. The actual API call requires auth, so
-   we bounce through GET /api/login (server-defined 302 to /?next=
-   with this URL preserved — PHA-2583) and POST /api/invites/:code/
-   redeem on the way back. Tokens mirror public/porch.css +
-   welcome.html. */
+/* PHA-2711: same-day closed-beta invite handshake.
+   Public, no-auth page. Two clear choices — create a standalone
+   Homestead account, or sign in with an existing local account — to
+   claim the invite. The whole path completes without ever touching
+   Authentik.
+
+   Tokens mirror public/porch.css + welcome.html so the visual handoff
+   to /welcome.html feels like the same app, not a different site. */
 :root{
   --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#8A8177;
   --line:rgba(43,38,34,.07);
   --accent:#C4703C; --accent-soft:#F8E9DE;
+  --danger:#B04A3C; --danger-soft:#F5DCD6;
   --ease:cubic-bezier(.22,1,.36,1);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
 body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100dvh}
 button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input{font:inherit}
 
-#app{max-width:520px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 36px) 22px 30px;min-height:100dvh;display:flex;flex-direction:column}
+#app{max-width:560px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 32px) 22px 30px;min-height:100dvh;display:flex;flex-direction:column}
 .heading{font-size:30px;font-weight:800;letter-spacing:-.025em;line-height:1.15;margin-bottom:6px}
-.subheading{color:var(--muted);font-size:15px;line-height:1.45;margin-bottom:26px}
+.subheading{color:var(--muted);font-size:15px;line-height:1.45;margin-bottom:22px}
 
-.wall-card{background:var(--surface);border-radius:22px;padding:18px;margin-bottom:18px;box-shadow:0 6px 30px rgba(0,0,0,.035)}
+.intro{background:var(--surface);border-radius:22px;padding:18px 20px;margin-bottom:18px;box-shadow:0 6px 30px rgba(0,0,0,.035);font-size:14px;line-height:1.55;color:var(--ink)}
+.intro strong{color:var(--ink)}
+.intro em{color:var(--muted);font-style:normal}
+
+.wall-card{background:var(--surface);border-radius:22px;padding:18px 20px;margin-bottom:18px;box-shadow:0 6px 30px rgba(0,0,0,.035)}
 .wall-name{font-size:22px;font-weight:800;margin-bottom:4px}
-.wall-meta{color:var(--muted);font-size:12px;letter-spacing:.05em;text-transform:uppercase}
+.wall-meta{color:var(--muted);font-size:12px;letter-spacing:.05em;text-transform:uppercase;margin-bottom:10px}
+.inviter{font-size:13px;color:var(--ink);margin-bottom:8px}
+.inviter b{font-weight:700}
+.note{background:var(--accent-soft);border-radius:14px;padding:10px 12px;font-size:13px;color:var(--ink);margin-top:10px;white-space:pre-wrap}
 
-.note{background:var(--accent-soft);border-radius:14px;padding:12px 14px;font-size:13px;color:var(--ink);margin-top:14px;white-space:pre-wrap}
+.choices{display:flex;flex-direction:column;gap:12px;margin-top:8px}
+.choice{background:var(--surface);border-radius:22px;padding:18px 20px;box-shadow:0 6px 30px rgba(0,0,0,.035);border:2px solid transparent;transition:border-color .2s var(--ease)}
+.choice.open{border-color:var(--accent)}
+.choice-title{font-size:17px;font-weight:800;margin-bottom:4px}
+.choice-desc{color:var(--muted);font-size:13px;line-height:1.5;margin-bottom:14px}
+.toggle{display:inline-block;font-size:13px;font-weight:600;color:var(--accent);padding:6px 0}
+.toggle:active{opacity:.7}
 
-.cta{margin-top:auto;padding-top:20px}
+.form{display:none;flex-direction:column;gap:12px;margin-top:6px}
+.choice.open .form{display:flex}
+
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.03em;text-transform:uppercase}
+.field input{width:100%;padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:#FFFCF7;color:var(--ink);font-size:15px;outline:none;transition:border-color .2s var(--ease)}
+.field input:focus{border-color:var(--accent)}
+.field-hint{font-size:12px;color:var(--muted);margin-top:-2px}
+
 .btn{display:block;width:100%;padding:14px 18px;border-radius:16px;background:var(--accent);color:#fff;font-weight:700;font-size:15px;text-align:center;transition:transform .2s var(--ease),opacity .2s}
 .btn:active{transform:scale(.97)}
 .btn:disabled{opacity:.5;cursor:default}
+.btn.secondary{background:transparent;color:var(--accent);border:1px solid var(--accent)}
 
-.error{background:var(--surface);border-radius:18px;padding:18px;border:1px solid var(--line)}
-.error h2{font-size:18px;margin-bottom:6px}
-.error p{color:var(--muted);font-size:14px}
+.error{background:var(--danger-soft);border-radius:14px;padding:10px 12px;color:var(--danger);font-size:13px;border:1px solid rgba(176,74,60,.15)}
+.error:empty{display:none}
 
-.loading{color:var(--muted);text-align:center;padding:18px 0;font-size:14px}
+.status{padding:10px 0;color:var(--muted);font-size:13px;text-align:center}
+
+.legal{font-size:11px;color:var(--muted);line-height:1.45;margin-top:14px}
 </style>
 </head>
 <body>
 <div id="app">
   <div id="content">
-    <p class="loading">Loading invite…</p>
-  </div>
-  <div class="cta">
-    <button id="redeemBtn" class="btn" style="display:none">Join this wall</button>
+    <p class="status">Loading invite…</p>
   </div>
 </div>
 
 <script>
 'use strict';
 
-// PHA-2207 (PHA-2200.6): invite redemption handshake.
+// PHA-2711: same-day closed-beta invite handshake.
 //   1. Extract the code from the URL: /invite/{code}
-//   2. GET /api/me — if unauthenticated, bounce to login with ?next=
-//      set so we come back here.
-//   3. POST /api/invites/:code/redeem — authed redeem.
-//      On success, the response includes `redirect: /welcome.html?wall=<slug>`
-//      and a `first_run` boolean. New users go to /welcome; existing
-//      users go straight to the feed.
-//   4. If the invite is expired/redeemed/invalid, the API returns
-//      410/404. We render an error card with a back-to-home link.
+//   2. GET /api/public/invites/:code — public peek (no auth).
+//      - Renders Homestead intro + inviter + wall card.
+//      - 410 expired / 410 exhausted / 410 revoked / 404 unknown → render error.
+//   3. User picks ONE of two paths:
+//        a. Create a standalone Homestead account (signup form)
+//        b. Sign in with an existing local Homestead account (signin form)
+//      Both POST to /api/public/invites/:code/{signup,signin}.
+//   4. On success, the API also sets the session cookie. The SPA
+//      redirects to result.redirect (/welcome.html?wall=<slug>).
+//   5. Sign-out/sign-in persistence is tested in
+//      scripts/test-2711-invite-signup.js — the cookie is the durable
+//      artifact, the JS just bounces.
 
 const content = document.getElementById('content');
-const ctaBtn = document.getElementById('redeemBtn');
+let currentCode = null;
 
 function el(tag, props = {}, children = []) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {
     if (k === 'class') e.className = v;
     else if (k === 'text') e.textContent = v;
+    else if (k === 'html') e.innerHTML = v;
     else if (k === 'style') Object.assign(e.style, v);
     else e.setAttribute(k, v);
   }
-  for (const c of children) e.appendChild(c);
+  for (const c of children) if (c) e.appendChild(c);
   return e;
-}
-
-function renderError(title, body) {
-  return el('div', { class: 'error' }, [
-    el('h2', { text: title }),
-    el('p', { text: body }),
-  ]);
 }
 
 function clear() { while (content.firstChild) content.removeChild(content.firstChild); }
 
-async function ensureAuthed() {
-  // GET /api/me — same shape used by the rest of the SPA.
-  try {
-    const r = await fetch('/api/me', { credentials: 'same-origin' });
-    const me = await r.json();
-    if (me && me.user) return me;
-  } catch (_) { /* fall through to login bounce */ }
-  // Not signed in — bounce to login and come back to this URL.
-  location.replace('/api/login?next=' + encodeURIComponent(location.pathname));
-  return null;
+function renderError(title, body) {
+  return el('div', { class: 'error' }, [
+    el('div', { style: { fontWeight: '700', marginBottom: '4px' }, text: title }),
+    el('div', { text: body }),
+  ]);
+}
+
+async function peekInvite(code) {
+  const r = await fetch('/api/public/invites/' + encodeURIComponent(code), { credentials: 'same-origin' });
+  if (r.status === 404) return { error: 'not_found' };
+  if (r.status === 410) {
+    const body = await r.json().catch(() => ({}));
+    return { error: body.error || 'invalid', detail: body.detail };
+  }
+  if (!r.ok) return { error: 'unknown', status: r.status };
+  return await r.json();
+}
+
+function renderInvite(data, code) {
+  clear();
+  // Homestead intro
+  const intro = el('div', { class: 'intro' });
+  intro.innerHTML = '<strong>Homestead</strong> is the private shared home for everyone in this circle. ' +
+    'Accepting this invite adds you to <em>' + escapeHtml(data.wall_name) + '</em> — a private wall ' +
+    'where members post, react, and keep in touch. You\'ll be able to see the feed, post to the wall, ' +
+    'and add more rooms when you\'re ready.';
+  content.appendChild(intro);
+
+  // Wall card
+  const card = el('div', { class: 'wall-card' });
+  if (data.inviter && data.inviter.display) {
+    card.appendChild(el('div', { class: 'inviter', html: 'Invited by <b>' + escapeHtml(data.inviter.display) + '</b>' }));
+  }
+  card.appendChild(el('div', { class: 'wall-name', text: data.wall_name }));
+  card.appendChild(el('div', { class: 'wall-meta', text: '@' + data.wall_slug + ' · ' + data.remaining + ' ' + (data.remaining === 1 ? 'spot' : 'spots') + ' left' }));
+  if (data.note) card.appendChild(el('div', { class: 'note', text: data.note }));
+  content.appendChild(card);
+
+  // Choices
+  const choices = el('div', { class: 'choices' });
+  choices.appendChild(buildSignupChoice(code, data));
+  choices.appendChild(buildSigninChoice(code, data));
+  content.appendChild(choices);
+
+  // Legal / scope reminder
+  content.appendChild(el('p', {
+    class: 'legal',
+    text: 'By accepting, you agree this wall is private to its members. Your account is local — no external sign-in is required to use Homestead.',
+  }));
+}
+
+function buildSignupChoice(code, data) {
+  const wrap = el('div', { class: 'choice' });
+  wrap.appendChild(el('div', { class: 'choice-title', text: 'I\'m new — create my Homestead account' }));
+  wrap.appendChild(el('div', { class: 'choice-desc', text: 'Pick a username, a display name, and a password. You\'ll land on the welcome screen.' }));
+
+  const toggle = el('a', { class: 'toggle', text: 'Show form →' });
+  const form = el('form', { class: 'form' });
+  const errBox = el('div', { class: 'error' });
+  form.appendChild(errBox);
+
+  const fUser = field('Username', 'alice42', '2-32 chars · letters, numbers, _ or -');
+  const fDisplay = field('Display name', 'Alice', 'How others will see you');
+  const fPass = field('Password', '••••••••', 'At least 8 characters', 'password');
+  form.appendChild(fUser.row); form.appendChild(fDisplay.row); form.appendChild(fPass.row);
+
+  const submit = el('button', { type: 'submit', class: 'btn', text: 'Create account & join' });
+  form.appendChild(submit);
+  form.appendChild(el('div', { class: 'legal', text: 'After creating, you\'ll be signed in automatically and dropped into the welcome screen.' }));
+
+  toggle.addEventListener('click', (e) => {
+    e.preventDefault();
+    wrap.classList.toggle('open');
+    const isOpen = wrap.classList.contains('open');
+    toggle.textContent = isOpen ? 'Hide form ↑' : 'Show form →';
+    if (isOpen) fUser.input.focus();
+  });
+
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    errBox.textContent = '';
+    submit.disabled = true;
+    submit.textContent = 'Creating account…';
+    try {
+      const r = await fetch('/api/public/invites/' + encodeURIComponent(code) + '/signup', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          username: fUser.input.value.trim(),
+          display: fDisplay.input.value.trim(),
+          password: fPass.input.value,
+        }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        errBox.textContent = '';
+        errBox.appendChild(el('div', { style: { fontWeight: '700' }, text: friendlyError(r.status, body) }));
+        submit.disabled = false;
+        submit.textContent = 'Create account & join';
+        return;
+      }
+      // Success — server set the session cookie. Bounce to welcome.
+      location.replace(body.redirect || ('/welcome.html?wall=' + encodeURIComponent(body.wall_slug)));
+    } catch (err) {
+      errBox.textContent = '';
+      errBox.appendChild(el('div', { text: 'Network error — check your connection and try again.' }));
+      submit.disabled = false;
+      submit.textContent = 'Create account & join';
+    }
+  });
+
+  wrap.appendChild(toggle);
+  wrap.appendChild(form);
+  return wrap;
+}
+
+function buildSigninChoice(code, data) {
+  const wrap = el('div', { class: 'choice' });
+  wrap.appendChild(el('div', { class: 'choice-title', text: 'I already have a Homestead account' }));
+  wrap.appendChild(el('div', { class: 'choice-desc', text: 'Sign in with your existing local username + password. You\'ll be added to ' + data.wall_name + ' on the way in.' }));
+
+  const toggle = el('a', { class: 'toggle', text: 'Show form →' });
+  const form = el('form', { class: 'form' });
+  const errBox = el('div', { class: 'error' });
+  form.appendChild(errBox);
+
+  const fUser = field('Username', 'alice42', '');
+  const fPass = field('Password', '••••••••', '', 'password');
+  form.appendChild(fUser.row); form.appendChild(fPass.row);
+
+  const submit = el('button', { type: 'submit', class: 'btn', text: 'Sign in & join' });
+  form.appendChild(submit);
+  form.appendChild(el('div', { class: 'legal', text: 'Your sign-in also claims this invite — the wall membership is added in the same request.' }));
+
+  toggle.addEventListener('click', (e) => {
+    e.preventDefault();
+    wrap.classList.toggle('open');
+    const isOpen = wrap.classList.contains('open');
+    toggle.textContent = isOpen ? 'Hide form ↑' : 'Show form →';
+    if (isOpen) fUser.input.focus();
+  });
+
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    errBox.textContent = '';
+    submit.disabled = true;
+    submit.textContent = 'Signing in…';
+    try {
+      const r = await fetch('/api/public/invites/' + encodeURIComponent(code) + '/signin', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          username: fUser.input.value.trim(),
+          password: fPass.input.value,
+        }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        errBox.textContent = '';
+        errBox.appendChild(el('div', { style: { fontWeight: '700' }, text: friendlyError(r.status, body) }));
+        submit.disabled = false;
+        submit.textContent = 'Sign in & join';
+        return;
+      }
+      location.replace(body.redirect || ('/welcome.html?wall=' + encodeURIComponent(body.wall_slug)));
+    } catch (err) {
+      errBox.textContent = '';
+      errBox.appendChild(el('div', { text: 'Network error — check your connection and try again.' }));
+      submit.disabled = false;
+      submit.textContent = 'Sign in & join';
+    }
+  });
+
+  wrap.appendChild(toggle);
+  wrap.appendChild(form);
+  return wrap;
+}
+
+function field(label, placeholder, hint, type = 'text') {
+  const row = el('div', { class: 'field' });
+  const lab = el('label', { text: label });
+  const input = el('input', { type, placeholder, autocomplete: type === 'password' ? 'current-password' : 'username' });
+  row.appendChild(lab);
+  row.appendChild(input);
+  if (hint) row.appendChild(el('div', { class: 'field-hint', text: hint }));
+  return { row, input };
+}
+
+function friendlyError(status, body) {
+  const code = body && body.error;
+  if (status === 400 && code === 'invalid_username') return 'Username must be 2-32 characters (letters, numbers, underscore, or dash).';
+  if (status === 400 && code === 'invalid_display') return 'Display name must be 1-64 characters.';
+  if (status === 400 && code === 'weak_password') return 'Password must be at least 8 characters.';
+  if (status === 409 && code === 'username_taken') return 'That username is taken. Try a different one.';
+  if (status === 401) return 'Wrong username or password.';
+  if (status === 410 && code === 'invite_expired') return 'This invite has expired.';
+  if (status === 410 && code === 'invite_already_redeemed') return 'This invite has already been used up.';
+  if (status === 410 && code === 'invite_revoked') return 'This invite was cancelled.';
+  if (status === 404) return 'Server couldn\'t find that invite.';
+  return 'Couldn\'t complete that. (' + (code || status) + ')';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
 async function bootstrap() {
   const m = location.pathname.match(/^\/invite\/([A-Fa-f0-9]+)$/);
   if (!m) {
     clear();
-    content.appendChild(renderError('Invalid invite link', 'This URL doesn\'t look like an invite. Check the link you were sent.'));
+    content.appendChild(el('h1', { class: 'heading', text: 'Invalid invite link' }));
+    content.appendChild(el('p', { class: 'subheading', text: 'That URL doesn\'t look like a Homestead invite. Double-check the link you were sent.' }));
     return;
   }
   const code = m[1];
-
-  const me = await ensureAuthed();
-  if (!me) return; // bouncing to login
-
-  // Authed. Hit the redeem endpoint.
-  ctaBtn.style.display = 'none';
-  clear();
-  content.appendChild(el('p', { class: 'loading', text: 'Joining…' }));
-
-  let result;
+  currentCode = code;
+  let data;
   try {
-    const r = await fetch('/api/invites/' + encodeURIComponent(code) + '/redeem', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'content-type': 'application/json' },
-      body: '{}',
-    });
-    if (!r.ok) {
-      const body = await r.json().catch(() => ({}));
-      const errCode = body.error || '';
-      clear();
-      if (r.status === 410 && errCode === 'invite_expired') {
-        content.appendChild(renderError('Invite expired', 'This invite has expired. Ask whoever sent it for a fresh one.'));
-      } else if (r.status === 410 && errCode === 'invite_already_redeemed') {
-        content.appendChild(renderError('Already used', 'This invite has already been redeemed. Sign in with the account that used it.'));
-      } else if (r.status === 404) {
-        content.appendChild(renderError('Invite not found', 'This invite doesn\'t exist or has been deleted.'));
-      } else {
-        content.appendChild(renderError('Couldn\'t redeem', 'Server error: ' + (errCode || r.status) + '. Try again in a moment.'));
-      }
-      return;
-    }
-    result = await r.json();
+    data = await peekInvite(code);
   } catch (err) {
     clear();
     content.appendChild(renderError('Network error', 'Couldn\'t reach the server. Check your connection and try again.'));
     return;
   }
-
-  // Success — render the wall card + "Join this wall" CTA (in case
-  // the user wants one last look at the wall name before bouncing).
-  clear();
-  content.appendChild(el('h1', { class: 'heading', text: 'You\'re invited to ' + result.wall_name }));
-  const memberCount = (result.members || []).length;
-  content.appendChild(el('p', {
-    class: 'subheading',
-    text: memberCount === 0
-      ? 'You\'ll be the first one here. Start the conversation.'
-      : 'You\'ll be joining ' + memberCount + ' ' + (memberCount === 1 ? 'person' : 'people') + ' on this wall.',
-  }));
-  const card = el('div', { class: 'wall-card' });
-  card.appendChild(el('div', { class: 'wall-name', text: result.wall_name }));
-  card.appendChild(el('div', { class: 'wall-meta', text: '@' + result.wall_slug }));
-  content.appendChild(card);
-
-  ctaBtn.textContent = result.first_run ? 'Welcome me in →' : 'Open the feed →';
-  ctaBtn.style.display = 'block';
-  ctaBtn.addEventListener('click', () => {
-    location.href = result.redirect || ('/welcome.html?wall=' + encodeURIComponent(result.wall_slug));
-  });
+  if (data && data.error === 'not_found') {
+    clear();
+    content.appendChild(el('h1', { class: 'heading', text: 'Invite not found' }));
+    content.appendChild(el('p', { class: 'subheading', text: 'This invite doesn\'t exist or has been deleted. Ask whoever sent it for a fresh link.' }));
+    return;
+  }
+  if (data && (data.error === 'invite_expired' || data.error === 'invite_already_redeemed' || data.error === 'invite_revoked')) {
+    clear();
+    const heading = data.error === 'invite_expired' ? 'This invite has expired'
+                  : data.error === 'invite_revoked' ? 'This invite was cancelled'
+                  : 'This invite is no longer available';
+    const body = data.error === 'invite_already_redeemed'
+      ? 'All ' + (data.invite && data.invite.max_uses ? '' : '') + 'spots have been claimed. Ask whoever sent it for a new invite.'
+      : 'Ask whoever sent it for a fresh link.';
+    content.appendChild(el('h1', { class: 'heading', text: heading }));
+    content.appendChild(el('p', { class: 'subheading', text: body }));
+    return;
+  }
+  if (data && data.error) {
+    clear();
+    content.appendChild(renderError('Couldn\'t load invite', 'Server error: ' + (data.error || 'unknown') + '.'));
+    return;
+  }
+  renderInvite(data, code);
 }
 
 bootstrap();

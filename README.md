@@ -1,5 +1,7 @@
 # Homestead
 
+![Homestead — Your home. Your data. Your apps.](docs/brand/homestead-banner.png)
+
 A shared-life app for self-hosted households. Tasks and chores with
 take-turns rotation, a calendar, and a launcher grid that opens your
 self-hosted services in a full-screen iframe shell inside Homestead.
@@ -282,7 +284,7 @@ UI lists google in the add-source picker but marks it as
          -b cookies.txt \
          -d '{
            "provider": "ms365",
-           "account_id": "brandon@phatt.vip",
+           "account_id": "owner@example.com",
            "calendar_id": "AAMkAGRiYW5kb24tY2Fs",
            "display_name": "Work",
            "color": "#8a9ec4",

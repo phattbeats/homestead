@@ -29,8 +29,10 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 const webpush = require('web-push');
+const crypto = require('crypto');
 
 const userModel = require('./lib/user-model');
+const identity = require('./lib/identity');
 const modules = require('./lib/modules');
 const plexSync = require('./lib/sync/plex');
 const kavitaSync = require('./lib/sync/kavita');
@@ -51,11 +53,24 @@ const drawerDispatch = require('./lib/drawer-dispatch');
 const eventsDispatch = require('./lib/events-dispatch');
 const media = require('./lib/media');
 const walls = require('./lib/walls');
+const wallEvents = require('./lib/wall-events');
 const lists = require('./lib/lists');
 const notifications = require('./lib/notifications');
 const analytics = require('./lib/analytics');
 const invites = require('./lib/invites');
 const wallMembers = require('./lib/wall-members');
+const porchSweep = require('./lib/porch/sweep');
+const porchContract = require('./lib/porch/participation-contract');
+const porchComprehension = require('./lib/porch/comprehension');
+const oidcLink = require('./lib/oidc-link');
+const mailbox = require('./lib/porch/mailbox');
+
+const hearthCharacters = require('./lib/hearth-characters');
+// PHA-2827.C: server-side Hearth runtime. Short-circuits the external
+// drawer POST when the user's character is `hearth` and a model key is
+// configured. See lib/agent-runtime.js for the provider adapter + SOUL.md
+// system prompt loader.
+const agentRuntime = require('./lib/agent-runtime');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -78,6 +93,10 @@ appApiLog.migrate(db);
 // users(id), so it runs after userModel.migrate; no dependency on
 // installed_apps (consent tokens exist before an app is installed).
 appInstall.migrate(db);
+// PHA-2706: self-service OIDC identity-linking state table. FK to
+// users(id), so it runs after userModel.migrate (same boot-migration
+// pattern as the tables above).
+oidcLink.migrate(db);
 // Connector Forge's immutable specs, encrypted per-user secrets, installs,
 // and surface-cache tables. This must boot before the wizard routes below.
 connectorInstall.migrate(db);
@@ -97,7 +116,34 @@ media.migrate(db);
 // media_uploads(id), so it runs after userModel.migrate and media.migrate.
 walls.migrate(db);
 walls.seed(db);
+// PHA-2646: Porch sweep scheduler ledger (sweep-state cadence gate +
+// agent-action budget/cooldown ledger). FKs to walls(id)/wall_posts(id)/
+// users(id), so it runs after walls.migrate().
+porchSweep.migrate(db);
+// PHA-2645: participation contract's own ledger (banter memory for
+// dedupe/callbacks + per-wall opt-out). Same FK dependencies as
+// porchSweep above, so it runs right after.
+porchContract.migrate(db);
+// PHA-2426: agent-to-agent mailbox. FKs to installed_apps(key) (created
+// by agentTokens.migrate), users(id), and wall_posts(id), so it runs
+// after both agentTokens.migrate and walls.migrate.
+mailbox.migrate(db);
 analytics.migrate(db);
+// PHA-2829: Hearth character table + per-user seed from agents/hearth/SOUL.md.
+// FKs to users(id), so it runs after userModel.migrate (same pattern as
+// the other primitives above). The seed fires lazily on first agent
+// module enable — not at boot — so a fresh install doesn't create a
+// character row until the user actually wants Hearth.
+hearthCharacters.migrate(db);
+// PHA-2831 (PHA-2827.D): Hearth is a Porch citizen, not just a drawer
+// companion — ensure his built-in system account exists (or already
+// does) and is backfilled into every wall's membership, so
+// lib/porch/sweep.js's listAgentUserIds() and lib/walls.js's identity
+// UI (badge + vote-off) see him alongside any user-installed agent
+// characters. Idempotent; runs after walls.migrate() so there's
+// something to back-fill, and self-heals walls created since the last
+// boot on every restart.
+hearthCharacters.ensureBuiltinAgentUser(db);
 // PHA-2207 (PHA-2200.6): invite codes. FKs to walls(slug), so it
 // runs after walls.migrate().
 invites.migrate(db);
@@ -329,6 +375,24 @@ function requireWallReadScope(req, res, next) {
   return res.status(403).json({ error: 'insufficient_scope', required: `read:walls:${scopeSlug}` });
 }
 
+// requireModuleEnabled(key): the session user must have this module
+// turned on (per user_modules) before the route may write data into
+// it. PHA-2811: POST /api/tasks had no such gate, so a chore added
+// without the `chores` module enabled wrote a row that never rendered
+// anywhere — no nav tab, no home-page task list, nothing. Scopes
+// (requireScope) only gate third-party app tokens; first-party
+// session users sail through those with `scopes === null`, so a
+// module-enabled check is a separate, additional gate.
+function requireModuleEnabled(key) {
+  return function (req, res, next) {
+    const me = userModel.getMe(db, req.session.user.username);
+    if (!me) return res.status(401).json({ error: 'not authenticated' });
+    const enabledKeys = userModel.getEnabledModules(db, me.id).map(e => e.key);
+    if (enabledKeys.includes(key)) return next();
+    return res.status(403).json({ error: 'module_not_enabled', module: key });
+  };
+}
+
 // ---- VAPID keypair (PHA-1619) ----
 // Generated once on first startup, persisted to DATA_DIR/vapid.json.
 // The public key is exposed via /api/push/vapid-public-key so the service
@@ -526,8 +590,12 @@ app.get('/api/login', (req, res) => {
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body || {};
   const cleanUser = userModel.validateUsername(username);
-  const u = db.prepare('SELECT * FROM users WHERE username = ?').get(cleanUser || '');
-  if (!u || !u.pass_hash || !bcrypt.compareSync(password || '', u.pass_hash)) {
+  const u = db.prepare('SELECT id, username, display, color, is_admin FROM users WHERE username = ?').get(cleanUser || '');
+  // PHA-2704: password lives in local_credentials now, not users.pass_hash.
+  // hasLocalCredential() returns false for users without a local account
+  // (e.g. header-trust-only profiles) — we still respond 401 in that case
+  // so the LAN probe can't tell 'wrong password' from 'no local account'.
+  if (!u || !identity.hasLocalCredential(db, u.id) || !identity.verifyLocalPassword(db, u.id, password || '')) {
     return res.status(401).json({ error: 'Wrong username or password' });
   }
   userModel.touchLastSeen(db, u.id);
@@ -685,6 +753,30 @@ app.post('/api/me/modules/:key/enable', auth, (req, res) => {
   const withRequirements = !!(req.body && req.body.withRequirements === true);
   try {
     const result = userModel.enableModule(db, u.id, key, { withRequirements });
+
+    // PHA-2829: when the agent module is first enabled for a user, seed
+    // the default Hearth character row from agents/hearth/SOUL.md +
+    // agents/hearth/IDENTITY.md. Idempotent — re-enabling the agent
+    // module does NOT clobber per-user edits (the seed function
+    // short-circuits if a row already exists). Fires the
+    // `module_first_enable` analytics event on the transition from
+    // "no character row" → "seeded row"; subsequent enables emit
+    // `module_enabled`. Uses the character row's absence as the
+    // first-enable signal so we don't need a separate ledger.
+    if (key === 'agent' && result.enabled) {
+      const hadHearthBefore = !!hearthCharacters.getCharacter(
+        db, u.id, hearthCharacters.CHARACTER_KEY_HEARTH);
+      hearthCharacters.seedDefaultHearthCharacter(db, u.id);
+      const isFirstEnable = !hadHearthBefore;
+      analytics.logEvent(db, {
+        kind: isFirstEnable ? 'module_first_enable' : 'module_enabled',
+        userId: u.id,
+        subjectType: 'module',
+        subjectId: key,
+        meta: { character: 'hearth' },
+      });
+    }
+
     res.json({
       enabled: result.enabled,
       also_enabled: result.also_enabled,
@@ -792,12 +884,12 @@ function _resolveCaller(req, res) {
 app.post('/api/invites', auth, requireAdmin, (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
   if (!me) return res.status(401).json({ error: 'unknown_user' });
-  const { wall_slug, expires_in_days, note } = req.body || {};
+  const { wall_slug, expires_in_days, note, max_uses } = req.body || {};
   if (!wall_slug || typeof wall_slug !== 'string') {
     return res.status(400).json({ error: 'wall_slug required', hint: 'PHA-1575 wall-less invites are gone (see PHA-2207).' });
   }
   try {
-    const inv = invites.create(db, { wall_slug, expires_in_days, note, created_by: me.id });
+    const inv = invites.create(db, { wall_slug, expires_in_days, note, created_by: me.id, max_uses });
     res.status(201).json(inv);
   } catch (err) {
     if (err && err.status) return res.status(err.status).json({ error: err.code || 'invalid' });
@@ -815,6 +907,197 @@ app.get('/api/invites', auth, requireAdmin, (req, res) => {
   } catch (err) {
     console.error('[api/invites GET]', err);
     res.status(500).json({ error: 'list_failed' });
+  }
+});
+
+// POST /api/invites/:code/revoke — admin kills an invite early (PHA-2674).
+// Idempotent on an already-revoked/exhausted code; 404 on an unknown
+// code. Once revoked, peek()/redeem() 410 with code invite_revoked.
+app.post('/api/invites/:code/revoke', auth, requireAdmin, (req, res) => {
+  try {
+    const inv = invites.revoke(db, req.params.code);
+    res.json({ ok: true, id: inv.id, revoked_at: inv.revoked_at });
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.code || 'invalid' });
+    console.error('[api/invites/:code/revoke]', err);
+    res.status(500).json({ error: 'revoke_failed' });
+  }
+});
+
+// GET /api/invites/:code/redemptions — admin "redemption canary" log:
+// every successful redemption of this porch code, newest first.
+app.get('/api/invites/:code/redemptions', auth, requireAdmin, (req, res) => {
+  const invite = db.prepare('SELECT id FROM invites WHERE id = ?').get(req.params.code);
+  if (!invite) return res.status(404).json({ error: 'invite_not_found' });
+  const rows = db.prepare(`
+    SELECT r.id, r.user_id, r.redeemed_at, u.username, u.display
+    FROM invite_redemptions r
+    LEFT JOIN users u ON u.id = r.user_id
+    WHERE r.invite_id = ?
+    ORDER BY r.redeemed_at DESC
+  `).all(req.params.code);
+  res.json({ redemptions: rows });
+});
+
+// ---- PHA-2711: same-day closed-beta vertical path ----
+//
+// Public (no-auth) invite-handshake endpoints so a fresh browser can
+// complete the entire path without an Authentik session or a
+// pre-provisioned account. The two routes mirror the two choices the
+// /invite/:code page offers:
+//
+//   * POST /api/public/invites/:code/signup — create a fresh standalone
+//     local account, atomically seed defaults + add wall membership +
+//     consume the invite. Single transaction; any failure rolls back.
+//
+//   * POST /api/public/invites/:code/signin — claim the invite on an
+//     existing local account. Verifies the local credential, then adds
+//     the wall membership and stamps the redemption. Preserves the
+//     invite target through sign-in (the user is signing in WITH the
+//     invite, not bouncing to /api/login first).
+//
+// The public peek (GET /api/public/invites/:code) is the third leg:
+// it's what the /invite/:code HTML page hits BEFORE the user has
+// decided between signup and signin, so the page can render the wall
+// card + the inviter + the admin note without an auth round-trip.
+//
+// All three paths use the existing users/pass_hash local-account
+// model (PHA-2711 implementation boundary). They do NOT depend on
+// PHA-2704's local_credentials table — but they DO write to it
+// because identity.createUser is the canonical path and it populates
+// both users and local_credentials in one tx, with users.pass_hash
+// shadow-synced. Future PHA-2705/2706 hardening is additive and
+// lossless against this data.
+//
+// Break-glass: POST /api/public/invites/reset consumes a one-shot
+// recovery token (minted via the reset CLI in scripts/ — see
+// scripts/reset-owner-password.js). This is the documented
+// "Brandon's owner account has a working local credential independent
+// of Authentik" path: if the env-seeded password is forgotten, the
+// admin mints a 1-hour token via host-side CLI, uses it once, and the
+// new password takes effect. The token is stored as a sha256 hash
+// with a 1-hour TTL and cleared on consume.
+
+// GET /api/public/invites/:code — peek an invite without auth, so the
+// /invite/:code page can render "what is Homestead / who invited you /
+// which wall" before any signup/signin choice is made. 410 on
+// expired/exhausted/revoked; 404 on unknown.
+app.get('/api/public/invites/:code', (req, res) => {
+  try {
+    const inv = invites.peek(db, req.params.code);
+    if (!inv) return res.status(404).json({ error: 'invite_not_found' });
+    res.json({
+      id: inv.id,
+      wall_slug: inv.wall_slug,
+      wall_name: inv.wall_name,
+      note: inv.note || null,
+      inviter: inv.created_by_username ? {
+        username: inv.created_by_username,
+        display: inv.created_by_display || inv.created_by_username,
+      } : null,
+      expires_at: inv.expires_at,
+      max_uses: inv.max_uses,
+      uses_count: inv.uses_count,
+      remaining: Math.max(0, inv.max_uses - inv.uses_count),
+    });
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.code, detail: err.message, invite: { id: err.invite && err.invite.id, wall_slug: err.invite && err.invite.wall_slug, wall_name: err.invite && err.invite.wall_name } });
+    console.error('[api/public/invites/:code GET]', err);
+    res.status(500).json({ error: 'peek_failed' });
+  }
+});
+
+// POST /api/public/invites/:code/signup — public signup path.
+// Body: { username, display, password }
+// On success: 201 with { user, wall_slug, wall_name, first_run, redirect, members }
+// On failure: 400 invalid_username/weak_password, 404 invite_not_found,
+//             409 username_taken, 410 invite_expired/invite_already_redeemed/invite_revoked.
+app.post('/api/public/invites/:code/signup', (req, res) => {
+  const { username, display, password } = req.body || {};
+  try {
+    const result = invites.signupViaInvite(db, req.params.code, { username, display, password });
+    // Start a session for the new user immediately — same shape the
+    // /api/login handler sets, so the SPA can land on /welcome.html
+    // without a second round-trip.
+    req.session.user = {
+      username: result.user.username,
+      display: result.user.display,
+      color: db.prepare('SELECT color FROM users WHERE id = ?').get(result.user.id)?.color || '#7c9a72',
+      isAdmin: false,
+      authProvider: 'password',
+    };
+    recordSessionStart(req, { id: result.user.id, username: result.user.username, display: result.user.display }, 'password');
+    res.status(201).json({
+      ok: true,
+      user: result.user,
+      wall_slug: result.wall_slug,
+      wall_name: result.wall_name,
+      first_run: result.first_run,
+      redirect: result.redirect,
+      members: wallMembers.getMembers(db, result.wall_slug).members,
+    });
+  } catch (err) {
+    if (err && err.status) {
+      const body = { error: err.code || 'invalid', detail: err.message };
+      if (err.field) body.field = err.field;
+      return res.status(err.status).json(body);
+    }
+    console.error('[api/public/invites/:code/signup]', err);
+    res.status(500).json({ error: 'signup_failed' });
+  }
+});
+
+// POST /api/public/invites/:code/signin — public signin-and-claim path.
+// Body: { username, password }
+// On success: 200 with same shape as signup.
+// On failure: 401 invalid_credentials (ambiguous for both unknown user
+//             and wrong password, same as /api/login), 404/410 for invite.
+app.post('/api/public/invites/:code/signin', (req, res) => {
+  const { username, password } = req.body || {};
+  try {
+    const result = invites.signinViaInvite(db, req.params.code, { username, password });
+    req.session.user = {
+      username: result.user.username,
+      display: result.user.display,
+      color: db.prepare('SELECT color FROM users WHERE id = ?').get(result.user.id)?.color || '#7c9a72',
+      isAdmin: false,
+      authProvider: 'password',
+    };
+    recordSessionStart(req, { id: result.user.id, username: result.user.username, display: result.user.display }, 'password');
+    res.json({
+      ok: true,
+      user: result.user,
+      wall_slug: result.wall_slug,
+      wall_name: result.wall_name,
+      first_run: result.first_run,
+      redirect: result.redirect,
+      members: wallMembers.getMembers(db, result.wall_slug).members,
+    });
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.code || 'invalid', detail: err.message });
+    console.error('[api/public/invites/:code/signin]', err);
+    res.status(500).json({ error: 'signin_failed' });
+  }
+});
+
+// POST /api/public/invites/reset — break-glass owner recovery.
+// Body: { token, new_password } — the token is minted by the
+// scripts/reset-owner-password.js CLI (or by an admin via the
+// lib/invites.createResetToken API). On success: 200 with { user_id, username }.
+// The endpoint is intentionally PUBLIC (no session, no auth) because
+// the whole point is to recover from a state where you can't log in.
+// The token itself is the credential; sha256-hashed + 1-hour TTL +
+// single-use, so a leak is short-lived and replay-resistant.
+app.post('/api/public/invites/reset', (req, res) => {
+  const { token, new_password } = req.body || {};
+  try {
+    const userId = invites.consumeResetToken(db, token, new_password);
+    const u = db.prepare('SELECT id, username, display, color FROM users WHERE id = ?').get(userId);
+    res.json({ ok: true, user_id: userId, username: u && u.username });
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.code || 'invalid', detail: err.message });
+    console.error('[api/public/invites/reset]', err);
+    res.status(500).json({ error: 'reset_failed' });
   }
 });
 
@@ -882,10 +1165,17 @@ app.get('/api/walls/:slug/members', auth, (req, res) => {
 
 app.post('/api/password', auth, (req, res) => {
   const { current, next } = req.body || {};
-  const u = db.prepare('SELECT * FROM users WHERE username = ?').get(req.session.user.username);
-  if (!bcrypt.compareSync(current || '', u.pass_hash)) return res.status(400).json({ error: 'Current password is wrong' });
+  const u = db.prepare('SELECT id, username FROM users WHERE username = ?').get(req.session.user.username);
+  if (!u) return res.status(401).json({ error: 'unknown_user' });
+  // PHA-2704: read current password via identity.verifyLocalPassword;
+  // write the new password via identity.setLocalPassword. The legacy
+  // users.pass_hash column is kept in sync as a deprecated shadow so
+  // pre-PHA-2704 readers (other lib/ modules, future migrations) still
+  // see the value. New code MUST go through the local_credentials table.
+  if (!identity.verifyLocalPassword(db, u.id, current || '')) return res.status(400).json({ error: 'Current password is wrong' });
   if (!next || next.length < 4) return res.status(400).json({ error: 'New password too short' });
-  db.prepare('UPDATE users SET pass_hash = ? WHERE username = ?').run(bcrypt.hashSync(next, 10), u.username);
+  identity.setLocalPassword(db, u.id, next);
+  db.prepare('UPDATE users SET pass_hash = (SELECT password_hash FROM local_credentials WHERE user_id = ?) WHERE id = ?').run(u.id, u.id);
   res.json({ ok: true });
 });
 
@@ -933,18 +1223,496 @@ app.put('/api/users/:username', auth, (req, res) => {
   );
   res.json({ ok: true });
 });
+// ---- identity foundation (PHA-2704) ----
+// Read/write endpoints for the canonical identity surface. New API
+// paths that downstream features (PHA-2705 invite enrollment, PHA-2706
+// Authentik linking, PHA-2708 owner recovery) build on top of.
+//
+// GET  /api/me/identities       — list linked external identities for the signed-in user
+// POST /api/me/identities       — link a new external identity (admin-gated; PHA-2706 will
+//                                  replace this with the OIDC-flow version)
+// DELETE /api/me/identities     — unlink an external identity (refuses the last link when
+//                                  the user also has no local credential)
+app.get('/api/me/identities', auth, (req, res) => {
+  const u = db.prepare('SELECT id FROM users WHERE username = ?').get(req.session.user.username);
+  if (!u) return res.status(401).json({ error: 'unknown_user' });
+  res.json({ identities: identity.listIdentityLinks(db, u.id) });
+});
+app.post('/api/me/identities', auth, (req, res) => {
+  const me = db.prepare('SELECT id, is_admin FROM users WHERE username = ?').get(req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { user_id, provider, issuer, provider_subject } = req.body || {};
+  // PHA-2704 surface: link an identity on behalf of an existing user.
+  // Today this is admin-only — the self-service Authentik OIDC flow
+  // lands in PHA-2706. The admin path is required so the migration
+  // tooling (PHA-2703 release gate "provider collisions stop safely
+  // and require recovery/admin review") can resolve collisions.
+  if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+  if (!provider || !issuer || !provider_subject) {
+    return res.status(400).json({ error: 'provider, issuer, provider_subject required' });
+  }
+  const targetId = user_id != null ? Number(user_id) : me.id;
+  try {
+    const result = identity.linkIdentity(db, targetId, provider, issuer, provider_subject);
+    res.status(result.alreadyLinked ? 200 : 201).json({ ok: true, ...result });
+  } catch (e) {
+    if (e.code === 'identity_collision') {
+      return res.status(409).json({ error: 'identity_collision', conflictingUserId: e.conflictingUserId });
+    }
+    if (e.message && e.message.startsWith('provider required')) return res.status(400).json({ error: 'provider required' });
+    if (e.message && e.message.startsWith('issuer required')) return res.status(400).json({ error: 'issuer required' });
+    if (e.message && e.message.startsWith('provider_subject required')) return res.status(400).json({ error: 'provider_subject required' });
+    throw e;
+  }
+});
+app.delete('/api/me/identities', auth, (req, res) => {
+  const me = db.prepare('SELECT id, is_admin FROM users WHERE username = ?').get(req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { provider, issuer, provider_subject, user_id } = req.body || {};
+  if (!provider || !issuer || !provider_subject) {
+    return res.status(400).json({ error: 'provider, issuer, provider_subject required' });
+  }
+  // Admins can target another user via user_id (recovery tooling per
+  // PHA-2703 release gate "provider collisions require recovery/admin
+  // review"). Self-service path is always me.id.
+  let targetId = me.id;
+  if (user_id != null && user_id !== me.id) {
+    if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+    targetId = Number(user_id);
+    if (!Number.isInteger(targetId)) return res.status(400).json({ error: 'invalid user_id' });
+  }
+  const result = identity.unlinkIdentity(db, targetId, provider, issuer, provider_subject);
+  if (result.blocked === 'would_lock_out_owner') {
+    return res.status(409).json({ error: 'would_lock_out_owner', message: 'Refusing to unlink the last login path for the household owner. Use the owner recovery CLI to rotate their password; never delete the owner\'s break-glass credential via this API.' });
+  }
+  if (result.blocked === 'no_login_path') {
+    return res.status(409).json({ error: 'no_login_path', message: 'Refusing to unlink the last identity for a user with no local credential — would orphan the account.' });
+  }
+  if (!result.removed) return res.status(404).json({ error: 'identity_not_found' });
+  res.json({ ok: true });
+});
+
+// ---- owner recovery (PHA-2708, ported forward as PHA-2719) ----
+//
+// Homestead's owner-recovery surface has two halves:
+//
+//   * `GET /api/admin/owner/login-paths` — read-only inventory of
+//     the owner's viable login methods. Used by ops + tests to
+//     confirm the owner has at least one break-glass path, and
+//     that no recent change accidentally removed it. Never returns
+//     hashes, tokens, or plaintext.
+//
+//   * `POST /api/admin/owner/recover` — consume a recovery token
+//     minted by `scripts/owner-recovery.js`. The plaintext token is
+//     sent in the request body; the server validates via sha256
+//     against the stored hash, rotates the owner's password via
+//     `identity.setLocalPassword`, and clears the token row. Replay
+//     is impossible — the hash is wiped on consume.
+//
+// `login-paths` is a read-only inventory and stays gated behind an
+// authenticated admin session — it's an ops/test convenience, not
+// part of the break-glass path itself.
+//
+// `recover` is DELIBERATELY UNAUTHENTICATED. Break-glass means the
+// owner has no working credential (forgotten LAN password) AND
+// Authentik is unreachable (no x-authentik-* headers, no way to
+// establish a session at all) — gating this route behind `auth` +
+// `requireAdmin` would make it unreachable in exactly the scenario
+// PHA-2708 exists to fix. The one-shot, 256-bit, TTL-bound,
+// timing-safe-compared recovery token minted by
+// `scripts/owner-recovery.js` (host-side, out of band) IS the
+// authentication for this route, the same way a password IS the
+// authentication for `/api/login`. The operator's flow is
+//   1. Run `scripts/owner-recovery.js` on the host → prints
+//      token + curl example. The token is host-bound at this point.
+//   2. POST the token + new password to `/api/admin/owner/recover`
+//      from any client — no prior login required. The audit log
+//      gets `owner_recovery_consumed`.
+//
+// This mechanism is intentionally separate from PHA-2711's
+// general-purpose `POST /api/public/invites/reset` (any user, via
+// `lib/invites.js` createResetToken/consumeResetToken, stored in
+// `local_credentials.recovery_token_hash`). Owner recovery is
+// owner-only, stores its token in the dedicated
+// `owner_recovery_token_hash` / `owner_recovery_token_expires_at`
+// columns, and carries the fuller audit trail + lockout-guard
+// integration described above.
+app.get('/api/admin/owner/login-paths', auth, requireAdmin, (req, res) => {
+  const ownerId = identity.findOwnerUserId(db);
+  if (ownerId == null) return res.status(404).json({ error: 'no_owner' });
+  const owner = db.prepare('SELECT id, username, display, is_admin FROM users WHERE id = ?').get(ownerId);
+  const links = identity.listIdentityLinks(db, ownerId);
+  const local = db.prepare('SELECT owner_recovery_token_expires_at AS exp FROM local_credentials WHERE user_id = ?').get(ownerId);
+  const hasLocal = identity.hasLocalCredential(db, ownerId);
+  const hasRecoveryToken = !!(local && local.exp && identity.parseExpiresAt(local.exp) > Date.now());
+  res.json({
+    owner: { id: owner.id, username: owner.username, display: owner.display, isAdmin: !!owner.is_admin },
+    login_paths: {
+      local_credential: hasLocal,
+      identity_links: links.length,
+      recovery_token_active: hasRecoveryToken,
+      recovery_token_expires_at: hasRecoveryToken ? local.exp : null,
+    },
+    identity_links: links.map(l => ({ provider: l.provider, issuer: l.issuer, linked_at: l.linked_at, last_used_at: l.last_used_at })),
+  });
+});
+
+app.post('/api/admin/owner/recover', (req, res) => {
+  const { token, new_password } = req.body || {};
+  if (!token || typeof token !== 'string' || !new_password || typeof new_password !== 'string') {
+    return res.status(400).json({ error: 'token and new_password required' });
+  }
+  if (new_password.length < 8) {
+    return res.status(400).json({ error: 'new_password too short', message: 'Owner recovery requires a new password of at least 8 characters.' });
+  }
+  // No prior session is required or expected — see the comment above
+  // this route. `actor` reflects an existing session if one happens
+  // to be present (e.g. an admin rotating the owner's password on
+  // their behalf), but the recovery token is what actually authorizes
+  // this request.
+  const actor = (req.session && req.session.user && req.session.user.username) || 'unauthenticated-recovery';
+  const result = identity.consumeOwnerRecoveryToken(db, token, new_password);
+  if (!result.ok) {
+    identity.auditOwnerRecovery(db, {
+      kind: 'owner_recovery_rejected',
+      actor,
+      userId: null,
+      meta: { route: '/api/admin/owner/recover', code: result.code },
+    });
+    return res.status(401).json({ error: result.code });
+  }
+  identity.auditOwnerRecovery(db, {
+    kind: 'owner_recovery_consumed',
+    actor,
+    userId: result.userId,
+    meta: { route: '/api/admin/owner/recover' },
+  });
+  res.json({ ok: true, username: result.username });
+});
+
+// ---- identity linking: self-service OIDC flow (PHA-2706) ----
+// "Link Authentik later" — a Homestead user who already has a local
+// password can add an OIDC identity (Authentik in production) as a
+// SECOND way to sign in. The flow is intentionally explicit:
+//   1. POST /api/me/identities/link/start  { password }   — verify
+//      local password, mint a one-time handle + PKCE + state + nonce.
+//   2. Browser is redirected to the IdP's /authorize. The IdP
+//      authenticates the user and redirects back to /callback with
+//      ?code=...&state=...
+//   3. GET /api/me/identities/link/callback exchanges the code for
+//      an id_token, validates signature/iss/aud/nonce/exp, and
+//      returns a confirmation payload naming both identities.
+//   4. POST /api/me/identities/link/confirm  { handle }       —
+//      user has read the confirmation and clicked "Link." Writes
+//      identity_links row.
+//   5. POST /api/me/identities/link/cancel  { handle }       —
+//      user bailed at any point before step 4.
+//
+// Every step is gated on `auth` (existing Homestead session) AND on
+// the requesting user owning the handle. The local password is
+// re-verified at step 1 only — the callback/confirm steps inherit
+// trust from the session + handle binding.
+//
+// All routes use 401/403/409 consistently with the existing
+// /api/me/identities surface.
+
+app.post('/api/me/identities/link/start', auth, (req, res) => {
+  const me = db.prepare('SELECT id, username, display FROM users WHERE username = ?').get(req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { password } = req.body || {};
+  if (!password || typeof password !== 'string') {
+    return res.status(400).json({ error: 'password_required', message: 'Local re-authentication is required to start an identity link.' });
+  }
+  // Local re-auth: verify the plaintext password against the
+  // local_credentials row. This guards against a session-hijacker who
+  // could otherwise permanently attach an OIDC identity to a stolen
+  // session.
+  if (!identity.hasLocalCredential(db, me.id)) {
+    return res.status(400).json({
+      error: 'no_local_credential',
+      message: 'This account has no local password — cannot start a self-service identity link. Contact an admin.',
+    });
+  }
+  if (!identity.verifyLocalPassword(db, me.id, password)) {
+    return res.status(401).json({ error: 'invalid_password', message: 'Local re-authentication failed.' });
+  }
+  try {
+    const pending = oidcLink.createPending(db, me.id);
+    res.json({
+      ok: true,
+      handle: pending.handle,
+      authorize_url: pending.authorizeUrl,
+      expires_at: pending.expiresAt,
+      provider: pending.provider,
+      issuer: pending.issuer,
+    });
+  } catch (e) {
+    if (e.code === 'oidc_not_configured') {
+      return res.status(503).json({ error: 'oidc_not_configured', message: 'Identity linking is not configured on this server.' });
+    }
+    throw e;
+  }
+});
+
+// GET /api/me/identities/link/callback?handle=...&code=...&state=...
+// Called by the browser after the IdP redirects back. Exchanges the
+// code for tokens, validates the ID token, then redirects the
+// browser to /identities-link.html (which carries the handle in
+// sessionStorage) so the SPA can render the confirmation card.
+// The actual token exchange + ID-token validation lives here; the
+// SPA does NOT do crypto.
+//
+// The endpoint accepts both:
+//   * Browser navigation (IdP redirect — 302 back to /identities-link.html
+//     with the handle + code + state carried in the query string so
+//     the SPA can re-fetch the JSON payload via the dedicated
+//     `/api/me/identities/link/callback/json` route).
+//   * Programmatic JSON via `Accept: application/json` (test scripts
+//     and previews — returns the payload directly).
+async function runLinkCallback(req, res, { json }) {
+  const me = db.prepare('SELECT id, username, display FROM users WHERE username = ?').get(req.session.user.username);
+  if (!me) {
+    if (json) return res.status(401).json({ error: 'unknown_user' });
+    return res.redirect('/identities-link.html?error=unknown_user');
+  }
+  const { handle, code, state, error: oauthError } = req.query || {};
+  if (oauthError) {
+    if (handle) oidcLink.cancelPending(db, handle, me.id);
+    if (json) return res.status(400).json({ error: 'oidc_denied', message: `Identity provider returned: ${oauthError}` });
+    return res.redirect('/identities-link.html?error=oidc_denied&detail=' + encodeURIComponent(String(oauthError)));
+  }
+  if (!handle || !code || !state) {
+    if (json) return res.status(400).json({ error: 'missing_params', message: 'handle, code, state are required.' });
+    return res.redirect('/identities-link.html?error=missing_params');
+  }
+  const pending = oidcLink.findPending(db, handle);
+  if (!pending || pending._stale) {
+    if (json) return res.status(410).json({ error: 'handle_invalid_or_expired', message: 'Link session expired — restart the flow.' });
+    return res.redirect('/identities-link.html?error=handle_expired');
+  }
+  if (pending.user_id !== me.id) {
+    if (json) return res.status(403).json({ error: 'handle_owner_mismatch' });
+    return res.redirect('/identities-link.html?error=handle_owner_mismatch');
+  }
+  if (pending.state !== state) {
+    if (json) return res.status(400).json({ error: 'state_mismatch', message: 'OIDC state mismatch — possible tampering.' });
+    return res.redirect('/identities-link.html?error=state_mismatch');
+  }
+  const cfg = oidcLink.loadConfig();
+  const tokenUrl = process.env.OIDC_TOKEN_URL || cfg.issuer.replace(/\/+$/, '') + '/application/o/token/';
+  let tokens;
+  try {
+    tokens = await oidcLink.exchangeCodeForTokens({
+      tokenUrl,
+      clientId: pending.client_id,
+      clientSecret: cfg.clientSecret,
+      redirectUri: pending.redirect_uri,
+      code,
+      codeVerifier: pending.code_verifier,
+    });
+  } catch (e) {
+    if (json) return res.status(502).json({ error: e.code || 'token_exchange_failed', message: e.message });
+    return res.redirect('/identities-link.html?error=token_exchange_failed');
+  }
+  if (!tokens.id_token) {
+    if (json) return res.status(502).json({ error: 'no_id_token', message: 'Token endpoint did not return an id_token.' });
+    return res.redirect('/identities-link.html?error=no_id_token');
+  }
+  let publicKeyPem = process.env.OIDC_ID_TOKEN_PEM || null;
+  if (!publicKeyPem) {
+    try {
+      const jwksUrl = cfg.issuer.replace(/\/+$/, '') + '/application/o/jwks/';
+      const jr = await fetch(jwksUrl);
+      if (!jr.ok) throw new Error(`jwks ${jr.status}`);
+      const jwks = await jr.json();
+      const headerKid = JSON.parse(Buffer.from(tokens.id_token.split('.')[0], 'base64url').toString('utf8')).kid;
+      const jwk = jwks.keys.find(k => k.kid === headerKid);
+      if (!jwk) throw new Error('kid not found in JWKS');
+      publicKeyPem = crypto.createPublicKey({ key: jwk, format: 'jwk' }).export({ type: 'spki', format: 'pem' });
+    } catch (e) {
+      if (json) return res.status(502).json({ error: 'jwks_unavailable', message: e.message });
+      return res.redirect('/identities-link.html?error=jwks_unavailable');
+    }
+  }
+  let claims;
+  try {
+    claims = oidcLink.verifyIdToken(tokens.id_token, {
+      expectedIssuer: pending.issuer,
+      expectedAudience: pending.client_id,
+      expectedNonce: pending.nonce,
+      publicKeyPem,
+    });
+  } catch (e) {
+    if (json) return res.status(400).json({ error: e.code || 'id_token_invalid', message: e.message });
+    return res.redirect('/identities-link.html?error=' + encodeURIComponent(e.code || 'id_token_invalid'));
+  }
+  // Stamp the validated claims onto the pending row. /preview and
+  // /confirm read these values; the SPA never sees the raw id_token.
+  oidcLink.recordValidated(db, handle, claims);
+  if (json) {
+    const payload = oidcLink.formatLinkPayload(me, claims, pending.issuer);
+    return res.json({
+      ok: true,
+      handle: pending.handle,
+      expires_at: pending.expires_at,
+      ...payload,
+    });
+  }
+  // Browser redirect — the SPA lands on /identities-link.html?handle=...
+  // and fetches /api/me/identities/link/preview?handle=... to render
+  // the confirmation card.
+  const target = new URL('/identities-link.html', `${req.protocol}://${req.get('host')}`);
+  target.searchParams.set('handle', pending.handle);
+  res.redirect(target.toString());
+}
+
+app.get('/api/me/identities/link/callback', auth, (req, res) => {
+  const accept = String(req.get('accept') || '');
+  const json = accept.includes('application/json');
+  return runLinkCallback(req, res, { json });
+});
+
+// GET /api/me/identities/link/preview?handle=...
+// Returns the validated OIDC identity + the Homestead identity for
+// the confirmation card. Read-only; never writes. The /confirm
+// endpoint enforces the write — /preview just renders the choice.
+app.get('/api/me/identities/link/preview', auth, (req, res) => {
+  const me = db.prepare('SELECT id, username, display FROM users WHERE username = ?').get(req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const handle = String(req.query.handle || '');
+  if (!handle) return res.status(400).json({ error: 'handle_required' });
+  const v = oidcLink.findValidated(db, handle);
+  if (!v) return res.status(410).json({ error: 'handle_invalid_or_expired' });
+  if (v.user_id !== me.id) return res.status(403).json({ error: 'handle_owner_mismatch' });
+  if (v._stale) return res.status(410).json({ error: 'handle_invalid_or_expired' });
+  if (!v.validated_subject) return res.status(400).json({ error: 'not_validated', message: 'Callback has not completed for this handle yet.' });
+  res.json({
+    ok: true,
+    handle,
+    expires_at: v.expires_at,
+    homestead: { user_id: me.id, username: me.username, display: me.display },
+    oidc: {
+      provider: v.provider,
+      issuer: v.issuer,
+      subject: v.validated_subject,
+      email: v.validated_email,
+      email_verified: !!v.validated_email_verified,
+      display: v.validated_display,
+    },
+  });
+});
+
+// POST /api/me/identities/link/confirm { handle }
+// User has reviewed the confirmation page and clicked "Link." Now we:
+//   * re-look up the handle and check it's still pending + validated + owned by us
+//   * consume the handle (one-shot)
+//   * call identity.linkIdentity with the validated subject — never
+//     a client-supplied subject (the subject was stamped onto the
+//     pending row by /callback after IdP verification, so the SPA
+//     cannot influence what gets written).
+//   * map identity_collision to 409 + a clear "contact admin" hint.
+app.post('/api/me/identities/link/confirm', auth, (req, res) => {
+  const me = db.prepare('SELECT id, username, display FROM users WHERE username = ?').get(req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { handle } = req.body || {};
+  if (!handle) return res.status(400).json({ error: 'handle_required' });
+  const v = oidcLink.findValidated(db, handle);
+  if (!v) return res.status(410).json({ error: 'handle_invalid_or_expired' });
+  if (v.user_id !== me.id) return res.status(403).json({ error: 'handle_owner_mismatch' });
+  if (v._stale) return res.status(410).json({ error: 'handle_invalid_or_expired' });
+  if (!v.validated_subject) return res.status(400).json({ error: 'not_validated', message: 'Callback has not completed for this handle yet.' });
+  // Atomically consume the handle so a replay of this /confirm call
+  // returns a 410 instead of writing a duplicate row.
+  const consumed = oidcLink.consumePending(db, handle);
+  if (!consumed) {
+    return res.status(410).json({ error: 'handle_invalid_or_expired', message: 'Link session was already used or expired.' });
+  }
+  try {
+    const result = identity.linkIdentity(db, me.id, v.provider, v.issuer, v.validated_subject);
+    res.status(result.alreadyLinked ? 200 : 201).json({
+      ok: true,
+      alreadyLinked: !!result.alreadyLinked,
+      link_id: result.id,
+      provider: v.provider,
+      issuer: v.issuer,
+      subject: v.validated_subject,
+    });
+  } catch (e) {
+    if (e.code === 'identity_collision') {
+      return res.status(409).json({
+        error: 'identity_collision',
+        message: 'This OIDC identity is already linked to a different Homestead user. Contact an admin for recovery.',
+        conflictingUserId: e.conflictingUserId,
+      });
+    }
+    // Re-throw — anything else is a real bug.
+    throw e;
+  }
+});
+
+app.post('/api/me/identities/link/cancel', auth, (req, res) => {
+  const me = db.prepare('SELECT id FROM users WHERE username = ?').get(req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { handle } = req.body || {};
+  if (!handle) return res.status(400).json({ error: 'handle_required' });
+  const changed = oidcLink.cancelPending(db, handle, me.id);
+  res.json({ ok: true, cancelled: changed > 0 });
+});
+
+// POST /api/me/identities/:linkId/unlink — self-service unlink by
+// row id. Used by the identities-list page where each row carries
+// its identity_links.id. Refuses the last viable login path via the
+// existing identity.unlinkIdentity() guard (no_login_path → 409, or
+// would_lock_out_owner → 409 for the household owner — PHA-2708).
+app.post('/api/me/identities/:linkId/unlink', auth, (req, res) => {
+  const me = db.prepare('SELECT id FROM users WHERE username = ?').get(req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const linkId = Number(req.params.linkId);
+  if (!Number.isInteger(linkId)) return res.status(400).json({ error: 'invalid_link_id' });
+  const row = db.prepare('SELECT provider, issuer, provider_subject FROM identity_links WHERE id = ? AND user_id = ?').get(linkId, me.id);
+  if (!row) return res.status(404).json({ error: 'identity_not_found' });
+  const result = identity.unlinkIdentity(db, me.id, row.provider, row.issuer, row.provider_subject);
+  if (result.blocked === 'would_lock_out_owner') {
+    return res.status(409).json({ error: 'would_lock_out_owner', message: 'Refusing to unlink the last login path for the household owner. Use the owner recovery CLI to rotate their password; never delete the owner\'s break-glass credential via this API.' });
+  }
+  if (result.blocked === 'no_login_path') {
+    return res.status(409).json({ error: 'no_login_path', message: 'Refusing to unlink the last identity for a user with no local credential — would orphan the account.' });
+  }
+  if (!result.removed) return res.status(404).json({ error: 'identity_not_found' });
+  res.json({ ok: true });
+});
+
 app.post('/api/users/:username/password', auth, (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
-  const target = db.prepare('SELECT * FROM users WHERE username = ?').get(req.params.username);
+  const target = db.prepare('SELECT id, username, is_admin FROM users WHERE username = ?').get(req.params.username);
   if (!target) return res.status(404).json({ error: 'not found' });
   const { current, next } = req.body || {};
   if (!next || next.length < 4) return res.status(400).json({ error: 'New password too short' });
   if (me.username === target.username) {
-    if (!bcrypt.compareSync(current || '', target.pass_hash)) return res.status(400).json({ error: 'Current password is wrong' });
+    // PHA-2704: same path as /api/password — verify via local_credentials,
+    // write via setLocalPassword, sync the legacy users.pass_hash shadow.
+    if (!identity.verifyLocalPassword(db, target.id, current || '')) return res.status(400).json({ error: 'Current password is wrong' });
   } else if (!me.is_admin) {
     return res.status(403).json({ error: 'admin only' });
   }
-  db.prepare('UPDATE users SET pass_hash = ? WHERE username = ?').run(bcrypt.hashSync(next, 10), target.username);
+  identity.setLocalPassword(db, target.id, next);
+  db.prepare('UPDATE users SET pass_hash = (SELECT password_hash FROM local_credentials WHERE user_id = ?) WHERE id = ?').run(target.id, target.id);
+  // PHA-2708 (ported forward as PHA-2719): when an admin resets
+  // another user's password (no `current` provided, actor != target),
+  // record an audit event. This is the normal "non-recovery" admin
+  // reset path — different from the owner-recovery break-glass path
+  // so the operator can tell them apart in the analytics feed. Owner
+  // resets get a dedicated `owner_password_reset_by_admin` kind so
+  // lockout-postmortems can surface them with one filter.
+  if (me.username !== target.username) {
+    const kind = target.is_admin ? 'owner_password_reset_by_admin' : 'password_reset_by_admin';
+    identity.auditOwnerRecovery(db, {
+      kind,
+      actor: me.username,
+      userId: target.id,
+      meta: { route: '/api/users/:username/password' },
+    });
+  }
   res.json({ ok: true });
 });
 
@@ -1284,6 +2052,34 @@ app.delete('/api/users/:username/agent-endpoints/:id', auth, requireAdmin, (req,
   res.json({ ok: true });
 });
 
+// ---- PHA-2829: Hearth first-open intro path ----
+// When a user opens the drawer for the first time after enabling the
+// Agent module, the server returns the seeded Hearth intro text
+// directly from the characters row (no external POST, no LLM call).
+// The SPA calls this on drawer open if it doesn't yet have a
+// `drawer_intro_seen` flag in localStorage.
+//
+// Idempotent — calling it twice returns the same text. Returns 404
+// if the user has no character row (i.e., hasn't enabled the Agent
+// module or has a custom character not named `hearth`). The SPA
+// uses a 404 here to know to fall back to whatever it was going to
+// do before Hearth existed.
+app.get('/api/drawer/intro', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const character = hearthCharacters.getDefaultCharacter(db, me.id);
+  if (!character || character.character_key !== hearthCharacters.CHARACTER_KEY_HEARTH) {
+    return res.status(404).json({ error: 'no_default_character' });
+  }
+  res.json({
+    character: character.character_key,
+    intro_text: character.intro_text,
+    soul_source_sha: character.soul_source_sha,
+    identity_source_sha: character.identity_source_sha,
+    is_default: !!character.is_default,
+  });
+});
+
 // ---- PHA-1617.6: drawer backend — outbound POST + SSE consumer + retry/circuit breaker ----
 // Design doc §6.2–6.5. The drawer UI (PHA-1617.5) POSTs here with
 // {message, endpoint_id, conversation_id}; this route signs and forwards
@@ -1330,19 +2126,46 @@ app.post('/api/drawer', auth, async (req, res) => {
   // persistent record of recent dispatch health.
   const streakMap = (req.app && req.app.locals && req.app.locals.drawerStreakMap) || null;
 
+  // PHA-2827.C: log drawer_call_started BEFORE the dispatch so the
+  // analytics timeline matches the existing closed-enum contract
+  // (started → completed|failed). Subject is the endpoint row; the
+  // completed/failed event records whether the call took the server-
+  // runtime (Hearth) path or the external-POST path.
+  analytics.logEvent(db, {
+    userId: me.id,
+    kind: 'drawer_call_started',
+    subjectType: 'agent_endpoint',
+    subjectId: endpointId,
+    meta: {
+      conversation_id: conversationId,
+      hearth: false,
+    },
+  });
+
   const result = await drawerDispatch.dispatchDrawer(db, me, {
     message,
     endpointId,
     conversationId,
+    // byokKey: PHA-2827.C ships with server-staged env as the default
+    // (HEARTH_*_KEY). A future per-user BYOK column on `agent_endpoints`
+    // would feed through here; out of scope for C (tracked separately).
+    byokKey: '',
   });
+
   analytics.logEvent(db, {
     userId: me.id,
     kind: result.ok ? 'drawer_call_completed' : 'drawer_call_failed',
     subjectType: 'agent_endpoint',
     subjectId: endpointId,
     durationSeconds: Math.round((result.durationMs || 0) / 1000),
-    meta: { status_code: result.lastStatus || null, request_id: result.requestId || null,
-      conversation_id: conversationId, error: result.lastError || null },
+    meta: {
+      status_code: result.lastStatus || null,
+      request_id: result.requestId || null,
+      conversation_id: conversationId,
+      error: result.lastError || null,
+      hearth: !!result.hearth,
+      route: result.hearth ? 'server_runtime' : 'external_post',
+    },
   });
 
   // Update the streak after dispatch.
@@ -1376,6 +2199,34 @@ app.post('/api/drawer', auth, async (req, res) => {
 
   if (result.status === 'endpoint_not_found') {
     return res.status(404).json({ error: 'endpoint_not_found' });
+  }
+  // PHA-2827.C: Hearth short-circuit fallbacks.
+  if (result.status === 'hearth_no_key') {
+    // No BYOK or server-staged key configured for the default Hearth
+    // character. Render the in-drawer prompt that points the user at the
+    // settings page (issue acceptance: negative case 3). 200 because the
+    // drawer UI is still alive; the message body explains.
+    return res.json({
+      request_id: result.requestId,
+      conversation_id: result.conversationId,
+      text: "Hearth needs a model key before I can answer. Add one in Settings → Agent, or ask your server admin to set HEARTH_LITELLM_KEY (or HEARTH_ANTHROPIC_PROXY_KEY / HEARTH_OPENAI_KEY).",
+      actions: [{ kind: 'open_settings', label: 'Open Settings', url: '/settings/agent' }],
+      duration_ms: 0,
+      hearth_no_key: true,
+    });
+  }
+  if (result.status === 'hearth_provider_error') {
+    // The provider rejected the call. Surface a graceful message and
+    // don't auto-trip the circuit breaker on the user's external
+    // endpoint (we never tried it).
+    return res.status(502).json({
+      error: 'hearth_provider_error',
+      message: 'Hearth reached its model provider but the call failed; try again or check provider status.',
+      last_status: result.lastStatus || null,
+      last_error: result.lastError || null,
+      request_id: result.requestId,
+      conversation_id: result.conversationId,
+    });
   }
   if (result.status === 'endpoint_offline') {
     return res.status(502).json({
@@ -1533,8 +2384,51 @@ app.post('/api/walls/:slug/posts', auth, requireScope('write:walls:post'), (req,
   const me = userModel.getMe(db, req.session.user.username);
   if (!me) return res.status(401).json({ error: 'unknown_user' });
   try {
-    res.json(walls.createPost(req.params.slug, me.id, req.body || {}));
+    const post = walls.createPost(req.params.slug, me.id, req.body || {});
+    wallEvents.publish(req.params.slug, 'post', post);
+    res.json(post);
   } catch (e) { wallsErr(res, e); }
+});
+// PHA-2821: long-lived SSE stream so a wall live-updates for every member
+// who has it open — reuses the SSE wire format PHA-1899 established for
+// the drawer rather than standing up a second realtime transport. Unlike
+// the drawer's one-shot request/reply stream, this connection stays open
+// for the tab's lifetime; events are pushed in from wallEvents.publish()
+// at the write sites (post/comment create) instead of being generated
+// inline here.
+app.get('/api/walls/:slug/events', auth, requireWallReadScope, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const slug = req.params.slug;
+  try { walls.assertMember(slug, me.id); } catch (e) { return wallsErr(res, e); }
+
+  res.status(200);
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders && res.flushHeaders();
+  // Tell the browser's native EventSource reconnect backoff, and send an
+  // immediate comment so proxies flush headers before the first real event.
+  res.write('retry: 3000\n');
+  res.write(': connected\n\n');
+
+  const unsubscribe = wallEvents.subscribe(slug, ({ event, data }) => {
+    if (res.writableEnded) return;
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  });
+  // Keepalive comment ping so idle proxies/load balancers don't time the
+  // connection out during quiet walls.
+  const heartbeat = setInterval(() => {
+    if (res.writableEnded) return;
+    res.write(': ping\n\n');
+  }, 25000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+  });
 });
 app.delete('/api/walls/:slug/posts/:postId', auth, (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
@@ -1568,8 +2462,80 @@ app.post('/api/walls/posts/:postId/comments', auth, (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
   if (!me) return res.status(401).json({ error: 'unknown_user' });
   try {
-    res.json(walls.createComment(req.params.postId, me.id, req.body && req.body.body));
+    const comment = walls.createComment(req.params.postId, me.id, req.body && req.body.body);
+    wallEvents.publish(comment.wallSlug, 'comment', comment);
+    res.json(comment);
   } catch (e) { wallsErr(res, e); }
+});
+
+// ---- agent-to-agent mailbox (PHA-2426) ----
+// A "foreign harness" here is nothing more than an installed third-party
+// app (PHA-2201) whose token carries read:mailbox/write:mailbox — there
+// is no separate external-agent registry. `mailboxCallerContext` is the
+// one place that decides whose thread-scope a request gets: an
+// app-scoped token only ever sees its OWN app's threads (`ctx.appId`);
+// a full-access caller (household session, or this household's own
+// user-level PAT) sees every thread, matching the household-wide
+// visibility the Porch mirror post already gives this data (PHA-2426
+// rule 3 — there is no hidden layer to additionally restrict).
+function mailboxCallerContext(req) {
+  const scopes = tokenScopes(req);
+  if (scopes === null) return { appScoped: false };
+  const detail = req.session.user.authProviderDetail;
+  const tokenRow = detail && db.prepare('SELECT * FROM agent_tokens WHERE id = ?').get(detail.tokenId);
+  if (!tokenRow || !tokenRow.app_id) return { appScoped: false };
+  const app = db.prepare('SELECT * FROM installed_apps WHERE key = ?').get(tokenRow.app_id);
+  return { appScoped: true, appId: tokenRow.app_id, appName: (app && app.name) || tokenRow.app_id };
+}
+function mailboxErr(res, e) {
+  if (e && e.status) return res.status(e.status).json({ error: e.code || 'error' });
+  return res.status(500).json({ error: 'internal_error', detail: e && e.message });
+}
+function mailboxHttpError(status, code) {
+  return Object.assign(new Error(code), { status, code });
+}
+app.get('/api/mailbox/threads', auth, requireScope('read:mailbox'), (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const ctx = mailboxCallerContext(req);
+  const filter = ctx.appScoped ? { appId: ctx.appId } : { localUserId: me.id };
+  res.json({ threads: mailbox.listThreads(db, filter) });
+});
+app.get('/api/mailbox/threads/:threadId/messages', auth, requireScope('read:mailbox'), (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const thread = mailbox.getThread(db, req.params.threadId);
+  if (!thread) return res.status(404).json({ error: 'not_found' });
+  const ctx = mailboxCallerContext(req);
+  if (ctx.appScoped && thread.app_id !== ctx.appId) return res.status(404).json({ error: 'not_found' });
+  try {
+    const messages = mailbox.listMessages(db, thread.id, { sinceId: req.query.since, limit: req.query.limit });
+    mailbox.markRead(db, messages.map((m) => m.id), ctx.appScoped ? `app:${ctx.appId}` : `user:${me.id}`);
+    res.json({ threadId: thread.id, messages });
+  } catch (e) { mailboxErr(res, e); }
+});
+// POST /api/mailbox/messages: an app-scoped (foreign) caller always
+// posts `inbound` into its own app's thread; a full-access (local)
+// caller posts `outbound` and must name which installed app the reply
+// is for (`appId`) — and must actually own that app's install (be the
+// household member who granted it access), so one member can't reply
+// into another member's foreign-agent relationship.
+app.post('/api/mailbox/messages', auth, requireScope('write:mailbox'), (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const ctx = mailboxCallerContext(req);
+  const { threadKey, topic, body, appId, wallSlug } = req.body || {};
+  try {
+    const params = ctx.appScoped
+      ? { appId: ctx.appId, localUserId: me.id, threadKey, topic, direction: 'inbound', fromIdentity: ctx.appName, body, wallSlug }
+      : (() => {
+          if (!appId) throw mailboxHttpError(400, 'app_id_required');
+          const owns = db.prepare('SELECT 1 FROM agent_tokens WHERE app_id = ? AND user_id = ? AND revoked_at IS NULL').get(appId, me.id);
+          if (!owns) throw mailboxHttpError(403, 'not_app_owner');
+          return { appId, localUserId: me.id, threadKey, topic, direction: 'outbound', fromIdentity: `local:${me.username}`, body, wallSlug };
+        })();
+    res.json(mailbox.postMessage(db, params));
+  } catch (e) { mailboxErr(res, e); }
 });
 
 // ---- notification prefs + mentions (PHA-2218) ----
@@ -1668,6 +2634,44 @@ app.delete('/api/walls/:slug/members/:username', auth, requireAdmin, (req, res) 
     return res.status(500).json({ error: 'internal_error', detail: e && e.message });
   }
 });
+
+// ---- PHA-2647: Porch agent identity — "vote off the porch" wall opt-out ----
+// Admin-only, same tier as the wall CRUD/member routes above. Both the
+// per-post button and the wall-settings "Agents" toggle hit these same
+// two mutating routes — there's exactly one piece of state
+// (porch_wall_settings, via lib/porch/participation-contract.js) behind
+// both surfaces, so toggling one always shows up in the other.
+app.get('/api/walls/:slug/agents', auth, requireAdmin, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json({ agents: walls.listWallAgents(db, req.params.slug) });
+  } catch (e) {
+    if (e && e.status) return res.status(e.status).json({ error: e.code || 'error', message: e.message });
+    return res.status(500).json({ error: 'internal_error', detail: e && e.message });
+  }
+});
+app.post('/api/walls/:slug/agents/:username/opt-out', auth, requireAdmin, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json(walls.setAgentWallVisibility(db, req.params.slug, req.params.username, false));
+  } catch (e) {
+    if (e && e.status) return res.status(e.status).json({ error: e.code || 'error', message: e.message });
+    return res.status(500).json({ error: 'internal_error', detail: e && e.message });
+  }
+});
+app.post('/api/walls/:slug/agents/:username/opt-in', auth, requireAdmin, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json(walls.setAgentWallVisibility(db, req.params.slug, req.params.username, true));
+  } catch (e) {
+    if (e && e.status) return res.status(e.status).json({ error: e.code || 'error', message: e.message });
+    return res.status(500).json({ error: 'internal_error', detail: e && e.message });
+  }
+});
+
 // GET /api/groups — admin-only list of group names so the wall-create UI
 // can populate its visibility='group' picker without a hardcoded list.
 // Returns the same set lib/user-model.js seeds (household / family /
@@ -1764,7 +2768,7 @@ app.get('/api/groups', auth, (req, res) => {
 app.get('/api/tasks', auth, (req, res) => {
   res.json(db.prepare('SELECT * FROM tasks ORDER BY done, due_date IS NULL, due_date, id DESC').all());
 });
-app.post('/api/tasks', auth, (req, res) => {
+app.post('/api/tasks', auth, requireModuleEnabled('chores'), (req, res) => {
   const { title, notes = '', assignee = 'all', alt_assignee = null, due_date = null, recur = '', rotate = 0 } = req.body || {};
   if (!title) return res.status(400).json({ error: 'title required' });
   if (!userModel.validateAssignee(db, assignee)) return res.status(400).json({ error: 'unknown assignee' });
@@ -1779,7 +2783,7 @@ app.post('/api/tasks', auth, (req, res) => {
   eventsDispatch.dispatchEventForAssignee(db, app.locals.eventsStreakMap, assignee, 'task_created', { task: created }).catch(() => {});
   res.json(created);
 });
-app.put('/api/tasks/:id', auth, (req, res) => {
+app.put('/api/tasks/:id', auth, requireModuleEnabled('chores'), (req, res) => {
   const t = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (!t) return res.status(404).json({ error: 'not found' });
   const b = { ...t, ...req.body };
@@ -2975,7 +3979,7 @@ app.get(/^\/invite\/([A-Fa-f0-9]{16,64})$/, (req, res) => {
 app.get('/favicon.ico', (req, res) => {
   res.set('Content-Type', 'image/svg+xml');
   res.set('Cache-Control', 'public, max-age=86400');
-  res.sendFile('public/icon.svg', { root: __dirname });
+  res.sendFile('public/favicon.svg', { root: __dirname });
 });
 
 // PHA-2658: entity pages are an explicit SPA route, not a static asset.
@@ -3043,6 +4047,89 @@ function startHealthChecker() {
         }
       }
     },
+  });
+}
+
+// ---- Porch sweep scheduler boot (PHA-2646 / PHA-2844) ----
+// Same independent-setInterval pattern as startHealthChecker above.
+//
+// onDecision closes the loop PHA-2827.D left open: sweep.js decides
+// WHEN an agent (Hearth or any installed character) should consider a
+// post; from here we resolve who they are (porchContract.resolveCharacter),
+// build what they'd see (porchComprehension.buildComprehension), draft
+// what they might say per allowed register (agentRuntime.draftPorchCandidate),
+// and hand all of it to porchContract.decide() — the anti-lame gate
+// that decides whether any of it actually goes out. A 'post'/'riff'
+// verdict creates a real comment through lib/walls.js (same path a
+// human comment takes) and calls porchSweep.recordAction() so the
+// daily budget/cooldown ledger stays honest; 'silent' does nothing.
+//
+// An agent with no `characters` row (resolveCharacter returns null —
+// an installed agent nobody has wired a character for yet) falls back
+// to the pre-PHA-2844 log-only behavior rather than erroring: sweep
+// proposing a decision for an agent doesn't guarantee that agent has
+// anything to say yet.
+async function porchOnDecision(decision, log) {
+  const character = porchContract.resolveCharacter(db, decision.agentUserId);
+  if (!character) {
+    log(`decision skipped, no character row yet: wall=${decision.wallId} post=${decision.postId} agent=${decision.agentUserId}`);
+    return;
+  }
+
+  const post = db.prepare('SELECT * FROM wall_posts WHERE id = ?').get(decision.postId);
+  if (!post) {
+    log(`decision skipped, post gone: wall=${decision.wallId} post=${decision.postId} agent=${decision.agentUserId}`);
+    return;
+  }
+
+  const comprehension = await porchComprehension.buildComprehension(db, {
+    post,
+    agentUserId: decision.agentUserId,
+  });
+
+  const allowed = porchContract.allowedRegisters(character, character.isForeignAgent);
+  const drafts = await Promise.all(allowed.map((register) => agentRuntime.draftPorchCandidate({
+    comprehension,
+    register,
+    postText: post.text_body || '',
+  })));
+  const candidates = drafts
+    .filter((d) => d && d.ok && d.text)
+    .map((d) => ({ register: d.register, text: d.text }));
+
+  const action = porchContract.decide(db, {
+    wallId: decision.wallId,
+    postId: decision.postId,
+    agentUserId: decision.agentUserId,
+    character,
+    comprehension,
+    candidates,
+  });
+
+  if (action.action === 'silent') {
+    log(`silent (${action.reason}): wall=${decision.wallId} post=${decision.postId} agent=${decision.agentUserId}`);
+    return;
+  }
+
+  const comment = walls.createComment(decision.postId, decision.agentUserId, action.text);
+  wallEvents.publish(comment.wallSlug, 'comment', comment);
+  porchSweep.recordAction(db, {
+    wallId: decision.wallId,
+    agentUserId: decision.agentUserId,
+    postId: decision.postId,
+    authorUserId: decision.authorUserId,
+    actionKind: 'comment',
+  });
+  log(`${action.action} (${action.register}): wall=${decision.wallId} post=${decision.postId} agent=${decision.agentUserId} comment=${comment.id}`);
+}
+
+let porchSweepHandle = null;
+function startPorchSweep() {
+  if (porchSweepHandle) return;
+  const log = (...args) => console.log('[porch-sweep]', ...args);
+  porchSweepHandle = porchSweep.start(db, {
+    log,
+    onDecision: (decision) => porchOnDecision(decision, log),
   });
 }
 if (require.main === module) {
@@ -3189,6 +4276,7 @@ if (require.main === module) {
   }
   startScheduler();
   startHealthChecker();
+  startPorchSweep();
   app.listen(PORT, () => console.log(`Homestead on :${PORT}`));
 }
 module.exports = app;

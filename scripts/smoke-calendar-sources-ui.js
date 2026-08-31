@@ -188,7 +188,7 @@ fakeCalDav.listen(fakeCalDavPort, '127.0.0.1', () => {
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
       body: JSON.stringify({
         provider: 'ms365',
-        account_id: 'brandon@phatt.vip',
+        account_id: 'owner@example.com',
         calendar_id: 'AAMkAGRiYW5kb24tY2Fs',
         display_name: 'Work (ms365)',
         color: '#8a9ec4',

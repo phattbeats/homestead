@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Link an identity — Homestead</title>
+<meta name="theme-color" content="#FFFBF5">
+<link href="https://fonts.googleapis.com/css2?family=Plus Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* PHA-2706 — self-service "Link Authentik" flow page.
+   Three screens: (1) start — verify local password and kick off the
+   OIDC flow, (2) confirmation — display the resolved OIDC identity
+   alongside the Homestead identity, ask the user to click "Link",
+   (3) done — success state with a link back to the app. Tokens
+   mirror public/welcome.html so the handoff feels consistent. */
+:root{
+  --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#8A8177;
+  --line:rgba(43,38,34,.07); --line-strong:rgba(43,38,34,.14);
+  --accent:#C4703C; --accent-soft:#F8E9DE;
+  --danger:#B14A3B; --danger-soft:#FBE7E2;
+  --ok:#3F7A5C; --ok-soft:#E1EFE7;
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100dvh}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+
+#app{max-width:520px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 36px) 22px 30px;min-height:100dvh;display:flex;flex-direction:column}
+
+.heading{font-size:30px;font-weight:800;letter-spacing:-.025em;line-height:1.15;margin-bottom:6px}
+.subheading{color:var(--muted);font-size:15px;line-height:1.45;margin-bottom:26px}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:14px;box-shadow:0 1px 0 rgba(0,0,0,.02)}
+.card h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:12px}
+.identity-name{font-size:17px;font-weight:700;margin-bottom:4px}
+.identity-meta{color:var(--muted);font-size:13px;line-height:1.45;word-break:break-all}
+
+.field{margin-bottom:16px}
+.field label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px}
+.field input{width:100%;font:inherit;font-size:16px;padding:13px 14px;border-radius:12px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);outline:none;transition:border-color .2s var(--ease)}
+.field input:focus{border-color:var(--accent)}
+
+.btn{display:block;width:100%;font:inherit;font-size:16px;font-weight:700;padding:14px 16px;border-radius:12px;background:var(--accent);color:#fff;text-align:center;transition:transform .15s var(--ease),background .2s var(--ease)}
+.btn:hover:not(:disabled){background:#A85A2A}
+.btn:active:not(:disabled){transform:translateY(1px)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn-secondary{background:transparent;color:var(--ink);border:1px solid var(--line-strong);margin-top:10px}
+.btn-danger{background:var(--danger)}
+
+.alert{padding:12px 14px;border-radius:10px;font-size:14px;line-height:1.45;margin-bottom:14px}
+.alert-error{background:var(--danger-soft);color:var(--danger)}
+.alert-ok{background:var(--ok-soft);color:var(--ok)}
+
+.divider{display:flex;align-items:center;gap:10px;margin:14px 0;color:var(--muted);font-size:13px}
+.divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--line)}
+
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--line-strong);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.muted-link{font-size:13px;color:var(--muted);text-align:center;margin-top:14px;display:block;text-decoration:underline}
+</style>
+</head>
+<body>
+<div id="app">
+  <h1 class="heading" id="heading">Link another sign-in</h1>
+  <p class="subheading" id="subheading">Connect Authentik so you can sign in either way. Your account stays separate.</p>
+
+  <!-- Start screen: verify local password -->
+  <section id="screen-start" class="screen">
+    <div class="card">
+      <h2>Step 1 — Confirm your Homestead password</h2>
+      <p class="identity-meta" style="margin-bottom:14px">We re-check your local password before attaching a new identity. This blocks session-hijackers from silently adding an account they can later sign in with.</p>
+      <form id="start-form">
+        <div class="field">
+          <label for="password">Local password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" autofocus>
+        </div>
+        <button type="submit" class="btn" id="start-btn">Continue to Authentik →</button>
+      </form>
+    </div>
+    <div id="start-error" class="alert alert-error" style="display:none"></div>
+    <a class="muted-link" href="/">Cancel and return to Homestead</a>
+  </section>
+
+  <!-- Confirmation screen: show both identities -->
+  <section id="screen-confirm" class="screen" style="display:none">
+    <div class="card">
+      <h2>Step 2 — Confirm both identities</h2>
+      <p class="identity-meta" style="margin-bottom:14px">Review the two identities below. If anything looks wrong, cancel and contact an admin.</p>
+
+      <div style="border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;background:var(--bg)">
+        <h2 style="margin-bottom:8px;color:var(--accent)">Your Homestead account</h2>
+        <div class="identity-name" id="confirm-homestead-name"></div>
+        <div class="identity-meta" id="confirm-homestead-meta"></div>
+      </div>
+
+      <div style="border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--bg)">
+        <h2 style="margin-bottom:8px;color:var(--accent)">Authentik account</h2>
+        <div class="identity-name" id="confirm-oidc-name"></div>
+        <div class="identity-meta" id="confirm-oidc-meta"></div>
+      </div>
+    </div>
+
+    <div id="confirm-error" class="alert alert-error" style="display:none"></div>
+
+    <button class="btn" id="confirm-btn">Link these identities</button>
+    <button class="btn btn-secondary" id="cancel-btn">Cancel</button>
+  </section>
+
+  <!-- Done screen: success state -->
+  <section id="screen-done" class="screen" style="display:none">
+    <div class="card">
+      <h2 style="color:var(--ok)">Linked</h2>
+      <p class="identity-name" id="done-message">You can now sign in with either your Homestead password or Authentik.</p>
+    </div>
+    <a class="muted-link" href="/">Back to Homestead</a>
+  </section>
+</div>
+
+<script>
+'use strict';
+// PHA-2706 — UI controller for the link flow.
+//
+// Three-step state machine:
+//   start → confirm → done
+//
+// State carried across the IdP round-trip:
+//   handle  — opaque token that pins the pending OIDC link to this
+//             user + nonce + PKCE pair. Burned on /confirm or
+//             /cancel.
+//   subject — the OIDC subject returned by /callback. The /confirm
+//             endpoint requires us to POST it back so the server
+//             doesn't have to trust client-claimed identities.
+const $ = (id) => document.getElementById(id);
+const screens = {
+  start: $('screen-start'),
+  confirm: $('screen-confirm'),
+  done: $('screen-done'),
+};
+function show(name) {
+  for (const k of Object.keys(screens)) screens[k].style.display = k === name ? '' : 'none';
+}
+function setError(targetId, msg) {
+  const el = $(targetId);
+  if (!msg) { el.style.display = 'none'; el.textContent = ''; return; }
+  el.textContent = msg;
+  el.style.display = '';
+}
+
+// ---- Start: verify local password, kick off the OIDC flow ----
+$('start-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  setError('start-error', null);
+  const pw = $('password').value;
+  if (!pw) return setError('start-error', 'Password is required.');
+  $('start-btn').disabled = true;
+  $('start-btn').innerHTML = '<span class="spinner"></span>Starting…';
+  try {
+    const r = await fetch('/api/me/identities/link/start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: pw }),
+    });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      $('start-btn').disabled = false;
+      $('start-btn').textContent = 'Continue to Authentik →';
+      return setError('start-error', body.message || body.error || `HTTP ${r.status}`);
+    }
+    const body = await r.json();
+    // Stash the handle so /confirm knows which pending link to consume.
+    sessionStorage.setItem('homestead-oidc-link-handle', body.handle);
+    // Redirect to the IdP. The IdP will bounce back to
+    // /api/me/identities/link/callback?handle=...&code=...&state=...
+    // The callback response is JSON — we capture it via fetch from
+    // this page rather than navigating, because the IdP cannot
+    // redirect back to a static HTML page with a JSON body. The
+    // /callback endpoint supports JSON output; the SPA shell will
+    // route us here on the way back.
+    window.location.href = body.authorize_url;
+  } catch (e) {
+    $('start-btn').disabled = false;
+    $('start-btn').textContent = 'Continue to Authentik →';
+    setError('start-error', e.message || 'Network error.');
+  }
+});
+
+// ---- Callback: page loads with ?handle=... ----
+// The /api/me/identities/link/callback endpoint accepts both browser
+// navigation (302 redirect) and Accept: application/json. After the
+// IdP redirects to the API endpoint, the server exchanges the code,
+// stamps the validated claims onto the pending row, and 302's the
+// browser here. We then drive the confirmation card by GET-ing
+// /api/me/identities/link/preview?handle=...
+async function handleCallback() {
+  const params = new URLSearchParams(window.location.search);
+  const err = params.get('error');
+  if (err) {
+    show('start');
+    setError('start-error', params.get('detail') || `Identity provider returned: ${err}`);
+    history.replaceState(null, '', window.location.pathname);
+    return;
+  }
+  const handle = params.get('handle') || sessionStorage.getItem('homestead-oidc-link-handle');
+  if (!handle) return;
+  const url = '/api/me/identities/link/preview?handle=' + encodeURIComponent(handle);
+  const r = await fetch(url, { credentials: 'same-origin' });
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    show('start');
+    setError('start-error', body.message || body.error || `Identity provider returned an error (${r.status}).`);
+    history.replaceState(null, '', window.location.pathname);
+    return;
+  }
+  const body = await r.json();
+  sessionStorage.setItem('homestead-oidc-link-handle', body.handle);
+  // Render confirmation screen.
+  $('confirm-homestead-name').textContent = body.homestead.display || body.homestead.username;
+  $('confirm-homestead-meta').textContent = `username: ${body.homestead.username}`;
+  const oidcName = body.oidc.display || body.oidc.email || body.oidc.subject;
+  $('confirm-oidc-name').textContent = oidcName;
+  $('confirm-oidc-meta').textContent =
+    `subject: ${body.oidc.subject}` +
+    (body.oidc.email ? ` · ${body.oidc.email}` : '') +
+    (body.oidc.email_verified ? ' (verified)' : '');
+  show('confirm');
+  history.replaceState(null, '', window.location.pathname);
+}
+
+// ---- Confirm: POST the handle, server writes identity_links ----
+$('confirm-btn').addEventListener('click', async () => {
+  const handle = sessionStorage.getItem('homestead-oidc-link-handle');
+  if (!handle) return setError('confirm-error', 'Missing link handle — restart the flow.');
+  setError('confirm-error', null);
+  $('confirm-btn').disabled = true;
+  $('confirm-btn').innerHTML = '<span class="spinner"></span>Linking…';
+  try {
+    const r = await fetch('/api/me/identities/link/confirm', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ handle }),
+    });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      $('confirm-btn').disabled = false;
+      $('confirm-btn').textContent = 'Link these identities';
+      return setError('confirm-error', body.message || body.error || `HTTP ${r.status}`);
+    }
+    sessionStorage.removeItem('homestead-oidc-link-handle');
+    sessionStorage.removeItem('homestead-oidc-link-subject');
+    show('done');
+  } catch (e) {
+    $('confirm-btn').disabled = false;
+    $('confirm-btn').textContent = 'Link these identities';
+    setError('confirm-error', e.message || 'Network error.');
+  }
+});
+
+// ---- Cancel: burn the handle, return to the start screen ----
+$('cancel-btn').addEventListener('click', async () => {
+  const handle = sessionStorage.getItem('homestead-oidc-link-handle');
+  if (handle) {
+    await fetch('/api/me/identities/link/cancel', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ handle }),
+    }).catch(() => {});
+  }
+  sessionStorage.removeItem('homestead-oidc-link-handle');
+  sessionStorage.removeItem('homestead-oidc-link-subject');
+  show('start');
+  $('password').value = '';
+});
+
+// On page load, if we have callback params in the URL, drive the
+// /callback fetch.
+handleCallback();
+</script>
+</body>
+</html>
