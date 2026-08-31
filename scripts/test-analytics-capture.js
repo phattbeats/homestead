@@ -7,7 +7,7 @@
 // Scope (this PR — `pha-2210-analytics-capture`):
 //   1. `analytics_events` table schema exists with the documented columns
 //      and the 4 indexes (3 standard + 1 partial on bytes).
-//   2. `KINDS` is a frozen Set with exactly the 23 documented kinds.
+//   2. `KINDS` is a frozen Set with exactly the 25 documented kinds.
 //   3. `logEvent()` validates `kind` against KINDS (rejects unknown).
 //   4. `logEvent()` is best-effort: a malformed entry returns false, never
 //      throws into the caller's request path.
@@ -48,11 +48,11 @@ function assert(cond, label, detail) {
 }
 
 // -----------------------------------------------------------------------------
-// Test 1: KINDS frozen Set has the 23 documented kinds.
+// Test 1: KINDS frozen Set has the 25 documented kinds.
 // -----------------------------------------------------------------------------
 console.log('Test 1: KINDS frozen Set');
 assert(Object.isFrozen(analytics.KINDS), 'KINDS is frozen');
-assertEq(analytics.KINDS.size, 23, 'KINDS has 23 entries');
+assertEq(analytics.KINDS.size, 25, 'KINDS has 25 entries');
 const expectedKinds = [
   'module_enabled', 'module_disabled', 'module_first_enable',
   'invite_issued', 'invite_accepted',
@@ -63,6 +63,8 @@ const expectedKinds = [
   'tile_opened',
   'tile_health_transition', 'push_delivered', 'push_failed',
   'drawer_call_started', 'drawer_call_completed', 'drawer_call_failed',
+  // PHA-2851: Hearth's house-actions.
+  'hearth_action_invoked', 'hearth_action_failed',
 ];
 for (const k of expectedKinds) {
   assert(analytics.KINDS.has(k), `KINDS contains ${k}`);

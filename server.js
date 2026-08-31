@@ -68,6 +68,12 @@ const oidcLink = require('./lib/oidc-link');
 const mailbox = require('./lib/porch/mailbox');
 
 const hearthCharacters = require('./lib/hearth-characters');
+// PHA-2851: Hearth's inbound action surface — the house-actions the
+// drawer demo promised ("queue Part Two", "tell him the meme was mid").
+// Exposed twice on purpose: as provider tools inside lib/agent-runtime.js,
+// and as the plain REST routes below, both landing on the same
+// permission-checked functions.
+const hearthActions = require('./lib/hearth-actions');
 // PHA-2827.C: server-side Hearth runtime. Short-circuits the external
 // drawer POST when the user's character is `hearth` and a model key is
 // configured. See lib/agent-runtime.js for the provider adapter + SOUL.md
@@ -150,6 +156,11 @@ hearthCharacters.migrate(db);
 // something to back-fill, and self-heals walls created since the last
 // boot on every restart.
 hearthCharacters.ensureBuiltinAgentUser(db);
+// PHA-2851: media_queue, the table behind Hearth's enqueue_media action.
+// FKs to users(id); its wall_post_id is a soft reference (see the module
+// header for why), so ordering against walls.migrate() is a courtesy
+// rather than a constraint — it still runs after it.
+hearthActions.migrate(db);
 // PHA-2207 (PHA-2200.6): invite codes. FKs to walls(slug), so it
 // runs after walls.migrate().
 invites.migrate(db);
@@ -2337,6 +2348,13 @@ app.post('/api/drawer', auth, async (req, res) => {
       conversation_id: result.conversationId,
       text: result.text || '',
       ...(result.actions ? { actions: result.actions } : {}),
+      // PHA-2851: same payload the SSE path emits as `tool_result`
+      // events, for the Accept: application/json consumer.
+      ...(result.toolResults && result.toolResults.length
+        ? { tool_results: result.toolResults.map(tr => ({
+            action: tr.action, ok: !!tr.ok, chip: tr.chip || '', code: tr.code || null,
+          })) }
+        : {}),
       ...(typeof result.tokensIn === 'number' ? { tokens_in: result.tokensIn } : {}),
       ...(typeof result.tokensOut === 'number' ? { tokens_out: result.tokensOut } : {}),
       duration_ms: result.durationMs,
@@ -2372,6 +2390,21 @@ app.post('/api/drawer', auth, async (req, res) => {
     if (i > 0) await new Promise(r => setTimeout(r, 30));
     writeSse('chunk', { text: chunkList[i] });
   }
+  // PHA-2851: one `tool_result` event per house-action Hearth ran, after
+  // the prose and before `done`. A separate event rather than more
+  // `chunk` text so the drawer can render it as a chip — a claim the
+  // server stands behind ("this row exists") is a different kind of
+  // thing from the model's narration, and it should not be possible for
+  // the model to fake one by typing it.
+  for (const tr of (result.toolResults || [])) {
+    if (res.writableEnded) break;
+    writeSse('tool_result', {
+      action: tr.action,
+      ok: !!tr.ok,
+      chip: tr.chip || '',
+      code: tr.code || null,
+    });
+  }
   writeSse('done', {
     request_id: result.requestId,
     conversation_id: result.conversationId,
@@ -2381,6 +2414,43 @@ app.post('/api/drawer', auth, async (req, res) => {
   });
   res.end();
 });
+
+// ---- Hearth house-actions (PHA-2851) ----
+//
+// The same two operations Hearth calls as provider tools, exposed as
+// plain REST so a human, a script, or an installed app can invoke them
+// without a model in the loop. lib/hearth-actions.js owns the
+// permission checks, so the door you come through can't change what
+// you're allowed to do.
+//
+// `set-lights` from the issue is deliberately not here: the porch has no
+// lights integration and the drawer screenshot never promised one. An
+// endpoint that 200s for hardware nobody wired is the failure mode this
+// whole issue exists to fix.
+//
+// Scopes are per-action (lib/scope-display.js) — queueing media and
+// messaging people in the caller's name are different consents. Session
+// users and legacy user-level PATs sail through requireScope with
+// `scopes === null`, exactly like every other first-party route.
+function runHearthAction(actionName, req, res) {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const exec = hearthActions.execute(db, me, actionName, req.body || {});
+  if (!exec.ok) {
+    return res.status(exec.status || 400).json({
+      error: exec.code || 'action_failed',
+      message: exec.error,
+      ...(exec.field ? { field: exec.field } : {}),
+    });
+  }
+  return res.json({ ok: true, ...exec.result });
+}
+
+app.post('/api/actions/enqueue-media', auth, requireScope('write:actions:media_queue'),
+  (req, res) => runHearthAction('enqueue_media', req, res));
+
+app.post('/api/actions/mention-user', auth, requireScope('write:actions:mention'),
+  (req, res) => runHearthAction('mention_user', req, res));
 
 // ---- media (PHA-2149) ----
 // General-purpose content-addressed media store. Walls (PHA-2147.2) and
