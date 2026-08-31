@@ -1646,6 +1646,41 @@ function openSvcSheet(id){
   };
 }
 async function delSvc(id){if(confirm('Remove this service?')){await api('DELETE',`/api/services/${id}`);closeSheet();await refresh()}}
+
+// PHA-2643: admin-only reassignment view — every app tile in one place,
+// instead of long-pressing tiles one at a time to find "Whose app?".
+async function openDelegateAppsSheet(){
+  const svcs=await api('GET','/api/services');
+  const rows=svcs.map(s=>`
+    <div class="user-row">
+      <div class="ucolor">${esc(s.icon||'🔗')}</div>
+      <div class="uinfo">
+        <div class="udisp">${esc(s.name)}</div>
+        <div class="uuname">${esc(s.url)}</div>
+      </div>
+    </div>
+    ${userPickerHtml('f-del-'+s.id, s.owner||'all')}
+    <button class="link" data-save="${s.id}" style="margin:2px 0 18px">Save</button>`).join('');
+  openSheet(`<h2>Delegate apps</h2>
+    <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">Assign who each app tile belongs to.</p>
+    <div class="tok-list">${rows || '<div class="empty" style="padding:24px 4px">No apps yet.</div>'}</div>
+    <button class="link" style="margin-top:14px;width:100%;text-align:center" onclick="closeSheet()">Done</button>`);
+  svcs.forEach(s=>segWire('f-del-'+s.id));
+  document.querySelectorAll('[data-save]').forEach(btn=>{
+    btn.onclick=async()=>{
+      const id=btn.dataset.save;
+      const owner=segVal('f-del-'+id)||'all';
+      const label=btn.textContent;
+      btn.textContent='Saving…';
+      try{
+        await api('PUT',`/api/admin/services/${id}/owner`,{owner});
+        btn.textContent='Saved';
+        setTimeout(()=>{btn.textContent=label},1200);
+        await refresh();
+      }catch(e){btn.textContent=(e&&e.error)||'Failed';setTimeout(()=>{btn.textContent=label},1500)}
+    };
+  });
+}
 $('#addSvc').onclick=()=>openSvcSheet();
 
 // PHA-2586: lists page "+ New list" — defers to createListFlow, which
@@ -1668,6 +1703,7 @@ $('#avatarBtn').onclick=()=>{
     ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-settings">⚙️ Settings · manage household</button>`:''}
     ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-walls">🧱 Walls · manage walls</button>`:''}
     ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-invites">✉️ Invites · manage porch codes</button>`:''}
+    ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-delegate-apps">🗂️ Delegate apps · assign tiles to users</button>`:''}
     <h3>Push notifications</h3>
     <p style="font-size:13px;color:var(--muted);margin:-4px 0 10px">Get reminders for chores due today and your turn to take a rotating chore.</p>
     <div id="install-chip-host"></div>
@@ -1683,6 +1719,7 @@ $('#avatarBtn').onclick=()=>{
     $('#f-settings').onclick=()=>openSettingsSheet();
     $('#f-walls').onclick=()=>openWallsAdminSheet();
     $('#f-invites').onclick=()=>{window.location.href='/invites.html'};
+    $('#f-delegate-apps').onclick=()=>openDelegateAppsSheet();
   }
   $('#f-calendar-sources').onclick=()=>openCalendarSourcesSheet();
   $('#f-connected-agents').onclick=()=>openConnectedAgentsSheet();

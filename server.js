@@ -3119,6 +3119,18 @@ app.delete('/api/services/:id', auth, (req, res) => {
   if (healthCheckerHandle) healthCheckerHandle.refresh();
   res.json({ ok: true });
 });
+// PHA-2643: admin-only "delegate apps to users" — reassigns a tile's owner
+// without the admin-tightened path also blocking the existing self-serve
+// add/edit sheet, which every user still uses to create their own tiles.
+app.put('/api/admin/services/:id/owner', auth, requireAdmin, (req, res) => {
+  const s = db.prepare('SELECT * FROM services WHERE id = ?').get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'not found' });
+  const { owner } = req.body || {};
+  if (!userModel.validateAssignee(db, owner)) return res.status(400).json({ error: 'unknown owner' });
+  db.prepare('UPDATE services SET owner=? WHERE id=?').run(owner, s.id);
+  const row = db.prepare('SELECT * FROM services WHERE id = ?').get(s.id);
+  res.json(withHealth([row])[0]);
+});
 
 // ---- Entity-graph sync admin endpoints (PHA-1624 Phase B-1, PHA-1873) ----
 //
