@@ -156,6 +156,12 @@ const EXCLUDE_FILES = new Set([
   // excluded from the audit by convention.
   'verify-out/',
   'verify-out/smoke-2704-db-shape.json',
+  // PHA-2852 house-rooms acceptance test: asserts which modules
+  // declare the new optional `room_kinds` field, which means naming
+  // 'calendar'/'chores'/'lists' and naming 'wall' as the counter-
+  // example that omits it. Same category as the sibling acceptance
+  // tests above — the literals ARE the assertion, not a render branch.
+  'scripts/test-2852-house-rooms.js',
 ]);
 
 const SCAN_EXTS = new Set([
