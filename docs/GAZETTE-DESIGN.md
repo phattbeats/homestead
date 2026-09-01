@@ -1,10 +1,22 @@
 # The Homestead Gazette — design note (PHA-2659)
 
-Status: design note only, no implementation yet. Sequenced after the
-Porch-agents children (PHA-2644/2645/2646/2648 — PRs #78/#84/#85/#86)
-because the edition generator consumes the same context-assembly
-plumbing those PRs are building. As of this note none of the four are
-merged to `main`, so this issue stays blocked on that landing.
+Status: **IMPLEMENTED** (2026-08-30). The four Porch-agents
+dependencies (PHA-2644/2645/2646/2648 — PRs #78/#84/#85/#86) all landed
+on `main`, which unblocked this. The note below is kept as the design
+record; where the build diverged from it, the "As built" section at the
+end says so and why.
+
+Shipped surface:
+
+| Piece | Where |
+|---|---|
+| Registry entry (`open_mode: 'sheet'`) | `lib/modules.js` |
+| `user_modules` CHECK rebuild | `lib/user-model.js` (`migrate`) |
+| Context, prompt, cache, edition schema | `lib/gazette.js` |
+| Provider call | `lib/agent-runtime.js` (`composeGazette`) |
+| Route | `server.js` — `GET /api/me/gazette/today` |
+| Launcher + sheet | `public/index.html` (`sheets[]` → `renderGazetteSheet`) |
+| Acceptance tests | `scripts/test-2659-gazette.js` |
 
 ## What exists today vs. what the canon assumes
 
@@ -166,3 +178,83 @@ second migration.
 3. Whether the masthead/launcher belongs on the agent-drawer FAB
    cluster or the home grid — a call for whoever builds the sheet,
    informed by user testing, not this note.
+
+---
+
+# As built (2026-08-30)
+
+## The three open questions, answered
+
+1. **Route** — `GET /api/me/gazette/today`, exactly as sketched. One
+   endpoint is the whole API surface. `?refresh=1` re-mints the same
+   day's edition; it exists because a harness that was briefly broken
+   would otherwise leave the reader with a dead sheet until midnight.
+2. **Tile health** — the note was wrong that this isn't modelled. It
+   is, under a different name: `lib/health-checker.js` keeps
+   `service_health_state` per service and `listAll()` reads it.
+   `gazette.tileHealth()` uses it, filtered to `down`/`degraded` only —
+   an all-green house has nothing to report, which is the thin-edition
+   rule doing its job rather than a gap.
+3. **Launcher** — docked next to the drawer FAB in the header, not the
+   home grid. Reason: it's the only cluster that already holds
+   non-nav, always-reachable affordances, so the Gazette didn't need a
+   new nav concept invented for it. The `#sheetLaunchers` container is
+   generic — a second `open_mode: 'sheet'` module appears there with no
+   further layout work.
+
+## Divergences from the note
+
+* **`sheets[]`, not a boolean.** The note suggested following
+  `agentDrawer`'s per-key boolean. `computeLayout` emits a `sheets`
+  ARRAY of `{key, icon, label}` instead, derived from `open_mode`. A
+  boolean would have hardcoded "gazette" into the layout contract and
+  into `applyLayout`; the array means the SPA loop never names a module
+  key, which keeps the PHA-2209 Amendment 3 audit passing on the
+  production code (only the acceptance test is allow-listed).
+* **The CHECK constraint is now derived, not typed.** The note framed
+  the rebuild as a one-off migration for `gazette`. It's written as a
+  general repair instead: the CHECK list is generated from
+  `modules.MODULE_KEYS`, and `migrate()` compares the stored CHECK
+  against the registry on every boot and rebuilds when they disagree.
+  The hardcoded six-key literal WAS the drift the constraint existed to
+  prevent; the next module to land needs no migration work at all.
+* **The edition is JSON, not HTML.** The harness returns a structured
+  object that `public/index.html` renders through `esc()`. Letting a
+  model's prose reach `innerHTML` would make the edition an injection
+  vector into the user's own session.
+* **Homestead writes exactly one sentence.** `THIN_NOTE`, used when
+  every context slice is empty. Paying the harness to say "nothing
+  happened" is the one case where agent-authoring buys nothing, and the
+  route skips the provider call entirely on a quiet day — verified by
+  the acceptance test, which asserts the fake provider is never
+  contacted.
+* **No Hearth character prompt.** `composeGazette` does NOT prepend
+  `SOUL.md` the way `dispatchHearth` / `draftPorchCandidate` do. Per
+  VOICE.md Rule 2 the edition is the house voice, not a character
+  speaking — `lib/gazette.js` hands the harness the VOICE.md rules
+  directly.
+
+## Failure states
+
+The edition cache is deliberately three-valued (`published` / `thin` /
+`unavailable`) rather than present-or-absent. A failed generation is
+CACHED for the day so a missing model key doesn't re-dial the provider
+on every sheet open, but it is served with `retryable: true` so the
+sheet can explain itself and offer the re-run instead of rendering
+blank.
+
+## Still open
+
+* **Overnight window vs. edition date.** `overnightSince()` runs from
+  the previous edition (clamped to 7 days), not from literal midnight,
+  so activity between two editions is never silently skipped. This is
+  a deliberate reading of "overnight" that the note didn't specify.
+* **BYOK per user.** The route calls `composeGazette` without a
+  `byokKey`, so it resolves the server-staged key exactly like the
+  drawer's current default (`server.js` passes `byokKey: ''` there too,
+  per PHA-2827.C). When per-user BYOK key storage lands, both call
+  sites want the same one-line change.
+* **Token accounting.** `dispatchHearth` records analytics per
+  dispatch; `composeGazette` does not. "Token spend is the soul" argues
+  the Gazette should be counted too — worth a follow-up once there's a
+  surface that shows the number.

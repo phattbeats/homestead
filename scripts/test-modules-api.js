@@ -95,7 +95,10 @@ const NOAUTH = (urlPath) => fetch('http://127.0.0.1:3191' + urlPath);
     const layout = await (await GET('/api/me/layout')).json();
     assertEq(layout.layout, 'meadow', 'layout === "meadow" (6 enabled)');
     assertEq(layout.defaultRoute, '/porch.html', 'defaultRoute === "/porch.html"');
-    assertEq(layout.addRoomVisible, false, 'addRoomVisible === false (all enabled)');
+    // PHA-2659: the grandfather backfill grants the six pre-modularity
+    // modules, but Gazette registered after it — so there IS still a
+    // room this user could add, and the pill must stay visible.
+    assertEq(layout.addRoomVisible, true, 'addRoomVisible === true (gazette still addable)');
     assertEq(layout.agentDrawer, true, 'agentDrawer === true (agent is enabled)');
     assertEq(layout.tabs.length, 6, 'tabs.length === 6');
     assertEq(layout.tabs[0].key, 'wall', 'tabs[0].key === "wall"');
@@ -179,7 +182,7 @@ const NOAUTH = (urlPath) => fetch('http://127.0.0.1:3191' + urlPath);
   {
     const reg = await (await GET('/api/modules')).json();
     assert(Array.isArray(reg), 'response is an array');
-    assertEq(reg.map(m => m.key), ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent'], 'all six built-ins in registry order');
+    assertEq(reg.map(m => m.key), ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent', 'gazette'], 'all built-ins in registry order');
     // Spot-check shape: every entry has the 16 manifest fields.
     for (const m of reg) {
       assert(m.key && m.name && m.icon && m.url !== undefined && m.open_mode && Array.isArray(m.requires), `entry ${m.key} has full manifest shape`);

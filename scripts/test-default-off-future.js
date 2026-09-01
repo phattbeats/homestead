@@ -103,7 +103,11 @@ const SYNTHETIC_ORDER = [...modules.REGISTRY_ORDER, 'recipes'];
   assert(r.default_enabled === false, 'recipes.default_enabled === false');
   assertEq(r.requires, [], 'recipes has no requires[]');
   assertEq(r.key, 'recipes', 'recipes.key === "recipes"');
-  assertEq(SYNTHETIC_ORDER.length, 7, 'synthetic order has 7 entries');
+  // Derived, not a frozen count: this test simulates adding ONE more
+  // module to whatever the registry currently holds, so it must not
+  // re-break every time a real module lands (PHA-2659 added gazette).
+  assertEq(SYNTHETIC_ORDER.length, modules.REGISTRY_ORDER.length + 1,
+    'synthetic order is the live registry plus one');
 }
 
 // -----------------------------------------------------------------------------
@@ -136,8 +140,8 @@ const SYNTHETIC_ORDER = [...modules.REGISTRY_ORDER, 'recipes'];
     userModel.enableModule(db, u.id, k);
   }
   const beforeKeys = userModel.getEnabledModules(db, u.id).map(e => e.key);
-  assertEq(beforeKeys, ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent'],
-    'existing user has all 6 built-ins enabled');
+  assertEq(beforeKeys, modules.REGISTRY_ORDER.slice(),
+    'existing user has all built-ins enabled');
 
   // "Add recipes" — in this simulation, we just verify the DB has
   // no row for 'recipes' yet (it doesn't, because no migration
@@ -156,14 +160,18 @@ const SYNTHETIC_ORDER = [...modules.REGISTRY_ORDER, 'recipes'];
   // rows back so we don't lose the data the user had pre-migration.
   const existingRows = db.prepare('SELECT module_key, enabled_at FROM user_modules WHERE user_id = ?').all(u.id);
   db.exec(`DROP TABLE user_modules`);
+  // The extended CHECK is the live registry plus the synthetic key —
+  // spelling out a fixed list here would drop rows for any module added
+  // since this test was written.
+  const syntheticCheck = SYNTHETIC_ORDER.map(k => `'${k}'`).join(',');
   db.exec(`CREATE TABLE user_modules (
     user_id      INTEGER NOT NULL,
-    module_key   TEXT    NOT NULL CHECK (module_key IN ('wall','lists','calendar','chores','apps','agent','recipes')),
+    module_key   TEXT    NOT NULL CHECK (module_key IN (${syntheticCheck})),
     enabled_at   TEXT,
     PRIMARY KEY (user_id, module_key),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   )`);
-  // Re-seed the existing rows so the user keeps their 6 modules.
+  // Re-seed the existing rows so the user keeps every module they had.
   const ins = db.prepare(`INSERT INTO user_modules (user_id, module_key, enabled_at) VALUES (?, ?, ?)`);
   for (const r of existingRows) ins.run(u.id, r.module_key, r.enabled_at);
   // Now simulate user opt-in to 'recipes'.
@@ -177,15 +185,15 @@ const SYNTHETIC_ORDER = [...modules.REGISTRY_ORDER, 'recipes'];
   // Pre-registry-addition: getEnabledModules (with live registry
   // that lacks 'recipes') skips the unknown row but keeps the 6.
   const preKeys = userModel.getEnabledModules(db, u.id).map(e => e.key);
-  assertEq(preKeys, ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent'],
-    'pre-registry-addition: getEnabledModules skips unknown recipes row, keeps existing 6');
+  assertEq(preKeys, modules.REGISTRY_ORDER.slice(),
+    'pre-registry-addition: getEnabledModules skips unknown recipes row, keeps the registered ones');
 
   // Post-registry-addition (simulated by reading raw rows and
   // appending 'recipes' to the end of the registry order):
   const postKeys = userModel.getEnabledModules(db, u.id)
     .map(e => e.key)
     .concat(['recipes']);
-  assertEq(postKeys, ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent', 'recipes'],
+  assertEq(postKeys, SYNTHETIC_ORDER,
     'post-registry-addition (simulated): recipes appended last in registry order');
 }
 
