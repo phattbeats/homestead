@@ -1877,6 +1877,7 @@ $('#avatarBtn').onclick=()=>{
   const isAdmin=!!(ME&&ME.isAdmin);
   openSheet(`<h2>${esc(ME.display)}</h2>
     <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-calendar-sources">📅 Calendar sources</button>
+    <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-connect-agent">🤝 Connect an agent</button>
     <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-connected-agents">🔌 Connected agents</button>
     <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-agent-endpoints">🛰️ Agent endpoints</button>
     <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-apps">📦 Apps</button>
@@ -1902,6 +1903,7 @@ $('#avatarBtn').onclick=()=>{
     $('#f-delegate-apps').onclick=()=>openDelegateAppsSheet();
   }
   $('#f-calendar-sources').onclick=()=>openCalendarSourcesSheet();
+  $('#f-connect-agent').onclick=()=>openConnectAgentWizardSheet();
   $('#f-connected-agents').onclick=()=>openConnectedAgentsSheet();
   $('#f-agent-endpoints').onclick=()=>openAgentEndpointsListSheet();
   $('#f-apps').onclick=()=>openAppsSheet();
@@ -2720,6 +2722,216 @@ function openAgentEndpointSheet(defaultKind, afterCreate){
       $('#ep-err').textContent = (e && e.error) || 'Failed to create endpoint';
     }
   };
+}
+
+/* ---- Connect an agent wizard (PHA-2882 / PHA-2855 phase 3) ----
+   Companion-mediated counterpart to the agent-endpoints/agent-tokens
+   sheets above. Three sheets:
+     1. openConnectAgentWizardSheet() — provider tiles (OpenClaw, Claude
+        Code, Codex) + a "Manage connections" link + an Advanced
+        disclosure that reuses openAgentEndpointSheet() unchanged (the
+        generic-webhook path from PHA-2813 is untouched by this feature).
+     2. openAgentConnectionPairSheet(provider, providerLabel) — mints a
+        pairing code (POST /api/agent-connections/pair), shows the code
+        + a copy-paste companion command, and polls GET
+        /api/agent-connections every 3s until this connection flips to
+        'active' (the companion redeemed it) or the sheet is closed.
+     3. openAgentConnectionsListSheet() — list/rename/revoke, mirroring
+        the PHA-2201 app-consent revoke UX and the tok-row list pattern
+        used by Connected agents / Agent endpoints above. */
+const CONNECT_AGENT_PROVIDERS = [
+  { key: 'openclaw', icon: '🦾', label: 'OpenClaw' },
+  { key: 'claude_code', icon: '🌀', label: 'Claude Code' },
+  { key: 'codex', icon: '🤖', label: 'Codex' },
+];
+
+function connectAgentProviderLabel(key){
+  const p = CONNECT_AGENT_PROVIDERS.find(p => p.key === key);
+  return p ? p.label : key;
+}
+
+function openConnectAgentWizardSheet(){
+  const tiles = CONNECT_AGENT_PROVIDERS.map(p => `
+    <button class="link connect-agent-tile" data-provider="${esc(p.key)}"
+      style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)">
+      <span aria-hidden="true" style="font-size:22px">${p.icon}</span>
+      <span>
+        <div style="font-weight:600">${esc(p.label)}</div>
+        <div style="font-size:12px;color:var(--muted)">Pair with a ${esc(p.label)} companion running on your own machine</div>
+      </span>
+    </button>`).join('');
+
+  openSheet(`<h2>Connect an agent</h2>
+    <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">Pick the kind of agent you're connecting. Homestead mints a short-lived pairing code &mdash; run one command in your companion and it's linked.</p>
+    ${tiles}
+    <button class="link" id="connect-agent-manage" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)">📋 Manage connections</button>
+    <details style="margin-top:14px">
+      <summary style="cursor:pointer;color:var(--muted);font-size:13px">Advanced &mdash; generic webhook</summary>
+      <p style="font-size:13px;color:var(--muted);margin:8px 0">No pairing code, no polling &mdash; you provide the URL and Homestead hands you an HMAC secret directly. This is the existing agent-endpoints path.</p>
+      <button class="btn btn-secondary" id="connect-agent-advanced">Add a generic webhook endpoint</button>
+    </details>
+    <button class="link" style="margin-top:14px;width:100%;text-align:center" onclick="closeSheet()">Cancel</button>`);
+
+  document.querySelectorAll('.connect-agent-tile').forEach(btn => {
+    btn.onclick = () => {
+      const key = btn.dataset.provider;
+      openAgentConnectionPairSheet(key, connectAgentProviderLabel(key));
+    };
+  });
+  $('#connect-agent-manage').onclick = () => openAgentConnectionsListSheet();
+  $('#connect-agent-advanced').onclick = () => openAgentEndpointSheet('events');
+}
+
+function openAgentConnectionPairSheet(provider, providerLabel){
+  let pollTimer = null;
+  let closed = false;
+
+  const stopPolling = () => { if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } };
+  const origClose = window.closeSheet;
+  const wrappedClose = () => { closed = true; stopPolling(); origClose(); };
+
+  openSheet(`<h2>Connect ${esc(providerLabel)}</h2>
+    <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">Minting a pairing code&hellip;</p>
+    <div class="err" id="pair-err"></div>
+    <button class="link" style="margin-top:14px;width:100%;text-align:center" id="pair-cancel">Cancel</button>`);
+  $('#pair-cancel').onclick = wrappedClose;
+
+  (async () => {
+    let minted;
+    try {
+      minted = await api('POST', '/api/agent-connections/pair', { provider, label: providerLabel, scopes: [] });
+    } catch (e) {
+      if (closed) return;
+      $('#pair-err').textContent = (e && e.error) || 'Failed to mint a pairing code';
+      return;
+    }
+    if (closed) return;
+
+    const origin = window.location.origin;
+    const command = `curl -X POST ${origin}/api/agent-connections/redeem-pairing-code \\\n  -H "Authorization: Bearer <YOUR_HOMESTEAD_TOKEN>" \\\n  -H "Content-Type: application/json" \\\n  -d '{"code":"${minted.pairing_code}"}'`;
+
+    openSheet(`<h2>Connect ${esc(providerLabel)}</h2>
+      <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">On the machine running your ${esc(providerLabel)} companion, run the command below. It needs a Homestead personal access token &mdash; mint one under <b>Connected agents</b> first if you don't have one yet.</p>
+      <div class="secret-card" style="text-align:center;font-size:28px;letter-spacing:4px;padding:14px">${esc(minted.pairing_code)}</div>
+      <p style="font-size:12px;color:var(--muted);margin:8px 0">Expires in ${esc(String(agentConnectionsTtlMinutes(minted)))} minutes &mdash; single use.</p>
+      <div class="secret-card" id="pair-cmd">
+        <div id="pair-cmd-text" style="white-space:pre-wrap;font-size:12px">${esc(command)}</div>
+        <div class="copy-row">
+          <span class="copied" id="pair-copied">✓ Copied</span>
+          <button class="link" id="pair-copy" type="button">Copy</button>
+        </div>
+      </div>
+      <p style="font-size:13px;color:var(--muted);margin:14px 0 0" id="pair-status">Waiting for the companion to redeem this code&hellip;</p>
+      <button class="link" style="margin-top:14px;width:100%;text-align:center" id="pair-cancel-2">Cancel</button>`);
+
+    $('#pair-copy').onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(command);
+        const el = $('#pair-copied');
+        el.classList.add('on');
+        setTimeout(() => el.classList.remove('on'), 2200);
+      } catch (e) {
+        alert('Clipboard write blocked — please select the text manually.');
+      }
+    };
+    $('#pair-cancel-2').onclick = wrappedClose;
+
+    const poll = async () => {
+      if (closed) return;
+      try {
+        const conns = await api('GET', '/api/agent-connections');
+        const row = conns.find(c => c.id === minted.id);
+        if (closed) return;
+        if (row && row.status === 'active') {
+          stopPolling();
+          openAgentConnectionsListSheet();
+          return;
+        }
+        if (row && row.status === 'revoked') {
+          stopPolling();
+          const el = $('#pair-status');
+          if (el) el.textContent = 'This pairing code was cancelled — start over to try again.';
+          return;
+        }
+      } catch (e) {
+        // transient — keep polling silently
+      }
+      if (!closed) pollTimer = setTimeout(poll, 3000);
+    };
+    pollTimer = setTimeout(poll, 3000);
+  })();
+}
+
+function agentConnectionsTtlMinutes(minted){
+  if (!minted || !minted.pairing_code_expires_at) return 10;
+  const ms = new Date(minted.pairing_code_expires_at + 'Z').getTime() - Date.now();
+  return Math.max(1, Math.round(ms / 60000));
+}
+
+async function openAgentConnectionsListSheet(){
+  const conns = await api('GET', '/api/agent-connections');
+  openAgentConnectionsListSheetWith(conns);
+}
+
+function openAgentConnectionsListSheetWith(conns){
+  const providerIcon = { openclaw: '🦾', claude_code: '🌀', codex: '🤖' };
+  const rows = conns.map(c => {
+    const stateChip = c.status === 'revoked'
+      ? '<span class="pill" style="background:var(--muted)">revoked</span>'
+      : c.status === 'pending'
+        ? '<span class="pill" style="background:#a78b3a">pending</span>'
+        : '<span class="pill" style="background:#7c9a72">active</span>';
+    const lastUsed = c.last_used_at
+      ? `last used ${esc(new Date(c.last_used_at + 'Z').toLocaleString())}`
+      : 'never used';
+    const label = c.label || connectAgentProviderLabel(c.provider);
+    return `<div class="tok-row" data-id="${esc(c.id)}">
+      <div class="tok-mark" aria-hidden="true">${providerIcon[c.provider] || '🔌'}</div>
+      <div class="tok-info">
+        <div class="tok-label">${esc(label)}${stateChip}</div>
+        <div class="tok-meta">${esc(connectAgentProviderLabel(c.provider))} · created ${c.created_at ? esc(new Date(c.created_at + 'Z').toLocaleDateString()) : ''}</div>
+        <div class="tok-meta">${lastUsed}</div>
+      </div>
+      <div class="tok-actions">
+        ${c.status !== 'revoked' ? `<button class="link" data-act="rename">Rename</button><button class="link danger" data-act="revoke">Revoke</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  openSheet(`<h2>Connections</h2>
+    <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">Agents paired through the "Connect an agent" wizard. Revoking is immediate.</p>
+    <div class="tok-list">${rows || '<div class="empty" style="padding:24px 4px">No connections yet.</div>'}</div>
+    <button class="btn" id="conn-add" style="margin-top:14px">+ Connect an agent</button>
+    <button class="link" style="margin-top:14px;width:100%;text-align:center" onclick="closeSheet()">Done</button>`);
+
+  document.querySelectorAll('.tok-row').forEach(row => {
+    const id = row.dataset.id;
+    const conn = conns.find(x => String(x.id) === id);
+    if (!conn) return;
+    const renameBtn = row.querySelector('[data-act="rename"]');
+    if (renameBtn) renameBtn.onclick = async () => {
+      const next = prompt('Rename connection', conn.label || connectAgentProviderLabel(conn.provider));
+      if (next == null) return;
+      try {
+        await api('PATCH', `/api/agent-connections/${id}`, { label: next });
+        await openAgentConnectionsListSheet();
+      } catch (e) {
+        alert((e && e.error) || 'Rename failed');
+      }
+    };
+    const revokeBtn = row.querySelector('[data-act="revoke"]');
+    if (revokeBtn) revokeBtn.onclick = async () => {
+      if (!confirm(`Revoke "${conn.label || connectAgentProviderLabel(conn.provider)}"?\n\nThis agent will lose access immediately. This cannot be undone.`)) return;
+      try {
+        await api('PATCH', `/api/agent-connections/${id}`, { revoke: true });
+        await openAgentConnectionsListSheet();
+      } catch (e) {
+        alert((e && e.error) || 'Revoke failed');
+      }
+    };
+  });
+
+  $('#conn-add').onclick = () => openConnectAgentWizardSheet();
 }
 
 /* ---- Settings → Apps (PHA-2201.4 / PHA-2232) ----
