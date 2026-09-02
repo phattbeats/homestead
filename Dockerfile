@@ -46,7 +46,12 @@ COPY server.js ./
 # `Error: Cannot find module './lib/user-model'` (PHA-2001).
 COPY lib ./lib
 COPY public ./public
-ENV DATA_DIR=/data PORT=3080 NODE_ENV=production
+# PHA-2971: release.yml passes --build-arg COMMIT_SHA so /api/version
+# (PHA-1706) reports the real deployed commit instead of null. A build-arg
+# alone isn't visible to the running process -- it must be promoted to an
+# ENV to survive into the container's runtime environment.
+ARG COMMIT_SHA
+ENV DATA_DIR=/data PORT=3080 NODE_ENV=production COMMIT_SHA=$COMMIT_SHA
 VOLUME /data
 EXPOSE 3080
 CMD ["node", "server.js"]
