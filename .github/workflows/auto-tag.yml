@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,3 +44,13 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "${{ steps.next.outputs.next }}" -m "Auto-tag on merge to main (${{ github.sha }})"
           git push origin "${{ steps.next.outputs.next }}"
+
+      # A push made with GITHUB_TOKEN never fires other workflows' tag
+      # triggers (GitHub's anti-recursion rule), so release.yml would
+      # never see this tag land. Dispatch it directly instead — that
+      # API call is not a "push" and IS allowed for GITHUB_TOKEN.
+      - name: Dispatch release workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run release.yml --ref main -f tag="${{ steps.next.outputs.next }}"
