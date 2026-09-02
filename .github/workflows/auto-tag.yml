@@ -1,0 +1,45 @@
+name: auto-tag
+
+# PHA-2971: continuous deployment. Every merge to main gets a fresh
+# vX.Y.Z tag (PATCH auto-increments) so release.yml publishes a new
+# image automatically. MAJOR/MINOR bumps stay manual via a PR that
+# tags itself before merging (this job only ever bumps PATCH).
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next patch version
+        id: next
+        run: |
+          latest=$(git tag --list 'v*' --sort=-v:refname | head -n1)
+          if [ -z "$latest" ]; then
+            latest="v0.0.0"
+          fi
+          ver="${latest#v}"
+          major=$(echo "$ver" | cut -d. -f1)
+          minor=$(echo "$ver" | cut -d. -f2)
+          patch=$(echo "$ver" | cut -d. -f3)
+          next="v${major}.${minor}.$((patch + 1))"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Push tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.next.outputs.next }}" -m "Auto-tag on merge to main (${{ github.sha }})"
+          git push origin "${{ steps.next.outputs.next }}"
