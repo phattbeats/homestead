@@ -138,10 +138,18 @@ environment — that tradeoff is accepted, not an oversight.
 
 **Versioning policy.** `.github/workflows/auto-tag.yml` fires on every push
 to `main`. It reads the latest `vX.Y.Z` git tag, bumps **PATCH** by one, and
-pushes the new tag as `github-actions[bot]`. That tag push triggers the
-existing `.github/workflows/release.yml`, which builds the image and
-publishes it to `ghcr.io/phattbeats/homestead:<tag>` and `:latest`, then
-cuts a GitHub release.
+pushes the new tag as `github-actions[bot]`. A tag pushed with the default
+`GITHUB_TOKEN` does **not** trigger other workflows' `push: tags:` filters
+(GitHub's anti-recursion rule) — confirmed live when v0.5.11 tagged cleanly
+but `release.yml` never fired. `auto-tag.yml` works around this by calling
+the `workflow_dispatch` API on `.github/workflows/release.yml` directly
+right after pushing the tag (an API dispatch is not a "push", so it isn't
+subject to the same restriction), then polls for the resulting run and
+retries once before failing the job loudly if neither dispatch produces one
+(also observed live: two dispatches ~3 minutes apart, GitHub silently
+dropped one). `release.yml` builds the image and publishes it to
+`ghcr.io/phattbeats/homestead:<tag>` and `:latest`, then cuts a GitHub
+release.
 
 - MAJOR/MINOR bumps stay manual: tag `vX.Y.0` (or `vX.0.0`) yourself before
   merging if a change warrants it, and the next merge-to-main patch-bumps
