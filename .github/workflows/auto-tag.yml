@@ -49,8 +49,41 @@ jobs:
       # triggers (GitHub's anti-recursion rule), so release.yml would
       # never see this tag land. Dispatch it directly instead — that
       # API call is not a "push" and IS allowed for GITHUB_TOKEN.
-      - name: Dispatch release workflow
+      #
+      # Observed live during PHA-2971 rollout: two dispatch calls fired
+      # ~3 minutes apart and GitHub silently dropped one (no run, no
+      # error) -- so we verify a run actually shows up and retry once
+      # before failing loudly.
+      - name: Dispatch release workflow (with verify + retry)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.next.outputs.next }}
         run: |
-          gh workflow run release.yml --ref main -f tag="${{ steps.next.outputs.next }}"
+          verify() {
+            for i in $(seq 1 6); do
+              sleep 5
+              found=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/release.yml/runs?event=workflow_dispatch&per_page=10" \
+                --jq ".workflow_runs[] | select(.created_at > \"${dispatched_at}\") | .id" | head -n1)
+              if [ -n "$found" ]; then
+                echo "Confirmed release run $found for $TAG"
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          dispatched_at=$(date -u +%Y-%m-%dT%H:%M:%S)
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/release.yml/dispatches" -f ref=main -f "inputs[tag]=${TAG}"
+          if verify; then
+            exit 0
+          fi
+
+          echo "::warning::No release.yml run appeared for $TAG after first dispatch, retrying once"
+          dispatched_at=$(date -u +%Y-%m-%dT%H:%M:%S)
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/release.yml/dispatches" -f ref=main -f "inputs[tag]=${TAG}"
+          if verify; then
+            exit 0
+          fi
+
+          echo "::error::release.yml never picked up dispatch for $TAG after 2 attempts"
+          exit 1
