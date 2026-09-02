@@ -133,30 +133,41 @@ full policy and pre-push audit command.
 ## Continuous deployment (PHA-2971)
 
 Brandon's directive (2026-09-02): every merge to `main` should reach prod as
-a new `x.x.x` version with no manual step. There is currently no staging
+a new `x.x.x` version, tested live. There is currently no staging
 environment — that tradeoff is accepted, not an oversight.
 
-**Versioning policy.** `.github/workflows/auto-tag.yml` fires on every push
-to `main`. It reads the latest `vX.Y.Z` git tag, bumps **PATCH** by one, and
-pushes the new tag as `github-actions[bot]`. A tag pushed with the default
-`GITHUB_TOKEN` does **not** trigger other workflows' `push: tags:` filters
-(GitHub's anti-recursion rule) — confirmed live when v0.5.11 tagged cleanly
-but `release.yml` never fired. `auto-tag.yml` works around this by calling
-the `workflow_dispatch` API on `.github/workflows/release.yml` directly
-right after pushing the tag (an API dispatch is not a "push", so it isn't
-subject to the same restriction), then polls for the resulting run and
-retries once before failing the job loudly if neither dispatch produces one
-(also observed live: two dispatches ~3 minutes apart, GitHub silently
-dropped one). `release.yml` builds the image and publishes it to
-`ghcr.io/phattbeats/homestead:<tag>` and `:latest`, then cuts a GitHub
+Correction (2026-09-02, same day): the first cut of this automated tagging
+in CI (`auto-tag.yml`, since removed). That workflow fired on every push to
+`main` and needed a verify+retry `workflow_dispatch` dance to work around
+GitHub's anti-recursion rule (a tag pushed with the default `GITHUB_TOKEN`
+doesn't trigger other workflows' `push: tags:` filters) — two extra Actions
+runs, with polling loops, on every merge. Brandon flagged that as
+overengineered for a repo with no paid Actions budget to spend. **Tagging
+is now a manual step an agent takes as part of merging to `main`**, not a
+CI job.
+
+**Versioning policy.** After merging a PR to `main`, tag it yourself and
+push the tag:
+
+```bash
+git fetch --tags
+latest=$(git tag --list 'v*' --sort=-v:refname | head -n1)
+# bump PATCH, e.g. v0.5.14 -> v0.5.15
+git tag -a vX.Y.Z -m "vX.Y.Z"
+git push origin vX.Y.Z
+```
+
+Because this is a real push (your own credentials, not the Actions bot's
+`GITHUB_TOKEN`), `release.yml`'s ordinary `push: tags:` trigger fires with
+no extra plumbing — it builds the image, publishes it to
+`ghcr.io/phattbeats/homestead:<tag>` and `:latest`, and cuts a GitHub
 release.
 
-- MAJOR/MINOR bumps stay manual: tag `vX.Y.0` (or `vX.0.0`) yourself before
-  merging if a change warrants it, and the next merge-to-main patch-bumps
-  from there.
-- `package.json`'s `"version"` field is not auto-bumped by this workflow —
-  it drifts intentionally; the git tag is the source of truth for what's
-  deployed. Bump it by hand in a PR when it matters for a release note.
+- MAJOR/MINOR bumps stay manual too: tag `vX.Y.0` (or `vX.0.0`) instead of
+  a PATCH bump if a change warrants it.
+- `package.json`'s `"version"` field is not auto-bumped — it drifts
+  intentionally; the git tag is the source of truth for what's deployed.
+  Bump it by hand in a PR when it matters for a release note.
 
 **Deploy mechanism.** A `watchtower-homestead` container runs on the Unraid
 host (`root@10.0.0.100`), scoped by container name to `homestead` only
@@ -188,7 +199,6 @@ curl -s http://10.0.0.100:3081/api/version   # confirm COMMIT_SHA matches origin
 - `docs/DEFINITION-OF-DONE.md` — extended rationale and policy history
 - `.github/workflows/test.yml` — CI smoke gate
 - `.github/workflows/authorship-check.yml` — author-identity gate
-- `.github/workflows/auto-tag.yml` — auto-tag on merge to `main` (PHA-2971)
-- `.github/workflows/release.yml` — build + publish + GitHub release on tag push
+- `.github/workflows/release.yml` — build + publish + GitHub release on tag push (tag it yourself after merging to `main`, see above)
 - `scripts/verify.sh` — one-shot local verification
 - `scripts/smoke-postlogin-screenshot.js` — 390px post-login screenshot smoke
