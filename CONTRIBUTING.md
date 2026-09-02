@@ -130,6 +130,49 @@ full policy and pre-push audit command.
    comment in the WHAT / SHA / EVIDENCE shape, and the SHA actually in
    `main`.
 
+## Continuous deployment (PHA-2971)
+
+Brandon's directive (2026-09-02): every merge to `main` should reach prod as
+a new `x.x.x` version with no manual step. There is currently no staging
+environment — that tradeoff is accepted, not an oversight.
+
+**Versioning policy.** `.github/workflows/auto-tag.yml` fires on every push
+to `main`. It reads the latest `vX.Y.Z` git tag, bumps **PATCH** by one, and
+pushes the new tag as `github-actions[bot]`. That tag push triggers the
+existing `.github/workflows/release.yml`, which builds the image and
+publishes it to `ghcr.io/phattbeats/homestead:<tag>` and `:latest`, then
+cuts a GitHub release.
+
+- MAJOR/MINOR bumps stay manual: tag `vX.Y.0` (or `vX.0.0`) yourself before
+  merging if a change warrants it, and the next merge-to-main patch-bumps
+  from there.
+- `package.json`'s `"version"` field is not auto-bumped by this workflow —
+  it drifts intentionally; the git tag is the source of truth for what's
+  deployed. Bump it by hand in a PR when it matters for a release note.
+
+**Deploy mechanism.** A `watchtower-homestead` container runs on the Unraid
+host (`root@10.0.0.100`), scoped by container name to `homestead` only
+(no label, no blast radius to other containers on the box). It polls GHCR
+every 300s and recreates the `homestead` container when the `:latest`
+digest changes, keeping the existing bind mount (`/mnt/user/appdata/homestead`
+→ `/data`) and port mapping (`3081:3080`) via `--cleanup` recreation. No
+GitHub Actions SSH secret is required — this was the reason Watchtower was
+chosen over an SSH-based `deploy.yml`, since no deploy credentials exist in
+the repo today.
+
+**End-to-end timing.** merge → tag push (~10s) → image build+publish
+(~2-4 min) → Watchtower picks up new digest (next poll, ≤5 min) → container
+recreated. Budget ~5-9 minutes worst case from merge to live.
+
+**Smoke recipe** (run after any merge-triggered deploy, from outside):
+
+```bash
+curl -sf http://10.0.0.100:3081/api/health
+curl -sfo /dev/null -w '%{http_code}\n' http://10.0.0.100:3081/favicon.svg
+curl -sfo /dev/null -w '%{http_code}\n' http://10.0.0.100:3081/sw.js
+curl -s http://10.0.0.100:3081/api/version   # confirm COMMIT_SHA matches origin/main HEAD
+```
+
 ## Related
 
 - `docs/GLOSSARY.md` — canonical names for every Homestead surface (PHA-2635)
@@ -137,5 +180,7 @@ full policy and pre-push audit command.
 - `docs/DEFINITION-OF-DONE.md` — extended rationale and policy history
 - `.github/workflows/test.yml` — CI smoke gate
 - `.github/workflows/authorship-check.yml` — author-identity gate
+- `.github/workflows/auto-tag.yml` — auto-tag on merge to `main` (PHA-2971)
+- `.github/workflows/release.yml` — build + publish + GitHub release on tag push
 - `scripts/verify.sh` — one-shot local verification
 - `scripts/smoke-postlogin-screenshot.js` — 390px post-login screenshot smoke
