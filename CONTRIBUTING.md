@@ -130,6 +130,68 @@ full policy and pre-push audit command.
    comment in the WHAT / SHA / EVIDENCE shape, and the SHA actually in
    `main`.
 
+## Continuous deployment (PHA-2971)
+
+Brandon's directive (2026-09-02): every merge to `main` should reach prod as
+a new `x.x.x` version, tested live. There is currently no staging
+environment — that tradeoff is accepted, not an oversight.
+
+Correction (2026-09-02, same day): the first cut of this automated tagging
+in CI (`auto-tag.yml`, since removed). That workflow fired on every push to
+`main` and needed a verify+retry `workflow_dispatch` dance to work around
+GitHub's anti-recursion rule (a tag pushed with the default `GITHUB_TOKEN`
+doesn't trigger other workflows' `push: tags:` filters) — two extra Actions
+runs, with polling loops, on every merge. Brandon flagged that as
+overengineered for a repo with no paid Actions budget to spend. **Tagging
+is now a manual step an agent takes as part of merging to `main`**, not a
+CI job.
+
+**Versioning policy.** After merging a PR to `main`, tag it yourself and
+push the tag:
+
+```bash
+git fetch --tags
+latest=$(git tag --list 'v*' --sort=-v:refname | head -n1)
+# bump PATCH, e.g. v0.5.14 -> v0.5.15
+git tag -a vX.Y.Z -m "vX.Y.Z"
+git push origin vX.Y.Z
+```
+
+Because this is a real push (your own credentials, not the Actions bot's
+`GITHUB_TOKEN`), `release.yml`'s ordinary `push: tags:` trigger fires with
+no extra plumbing — it builds the image, publishes it to
+`ghcr.io/phattbeats/homestead:<tag>` and `:latest`, and cuts a GitHub
+release.
+
+- MAJOR/MINOR bumps stay manual too: tag `vX.Y.0` (or `vX.0.0`) instead of
+  a PATCH bump if a change warrants it.
+- `package.json`'s `"version"` field is not auto-bumped — it drifts
+  intentionally; the git tag is the source of truth for what's deployed.
+  Bump it by hand in a PR when it matters for a release note.
+
+**Deploy mechanism.** A `watchtower-homestead` container runs on the Unraid
+host (`root@10.0.0.100`), scoped by container name to `homestead` only
+(no label, no blast radius to other containers on the box). It polls GHCR
+every 300s and recreates the `homestead` container when the `:latest`
+digest changes, keeping the existing bind mount (`/mnt/user/appdata/homestead`
+→ `/data`) and port mapping (`3081:3080`) via `--cleanup` recreation. No
+GitHub Actions SSH secret is required — this was the reason Watchtower was
+chosen over an SSH-based `deploy.yml`, since no deploy credentials exist in
+the repo today.
+
+**End-to-end timing.** merge → tag push (~10s) → image build+publish
+(~2-4 min) → Watchtower picks up new digest (next poll, ≤5 min) → container
+recreated. Budget ~5-9 minutes worst case from merge to live.
+
+**Smoke recipe** (run after any merge-triggered deploy, from outside):
+
+```bash
+curl -sf http://10.0.0.100:3081/api/health
+curl -sfo /dev/null -w '%{http_code}\n' http://10.0.0.100:3081/favicon.svg
+curl -sfo /dev/null -w '%{http_code}\n' http://10.0.0.100:3081/sw.js
+curl -s http://10.0.0.100:3081/api/version   # confirm COMMIT_SHA matches origin/main HEAD
+```
+
 ## Related
 
 - `docs/GLOSSARY.md` — canonical names for every Homestead surface (PHA-2635)
@@ -137,5 +199,6 @@ full policy and pre-push audit command.
 - `docs/DEFINITION-OF-DONE.md` — extended rationale and policy history
 - `.github/workflows/test.yml` — CI smoke gate
 - `.github/workflows/authorship-check.yml` — author-identity gate
+- `.github/workflows/release.yml` — build + publish + GitHub release on tag push (tag it yourself after merging to `main`, see above)
 - `scripts/verify.sh` — one-shot local verification
 - `scripts/smoke-postlogin-screenshot.js` — 390px post-login screenshot smoke
