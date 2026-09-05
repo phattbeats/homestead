@@ -171,6 +171,12 @@ const EXCLUDE_FILES = new Set([
   // example that omits it. Same category as the sibling acceptance
   // tests above — the literals ARE the assertion, not a render branch.
   'scripts/test-2852-house-rooms.js',
+  // PHA-2853 Gazette rework: the daily cron job queries
+  // `user_modules WHERE module_key = 'gazette'` to find which users
+  // have the module on — a data-query argument, not a render-time
+  // branch. Same category as lib/app-install.js's allow-listed
+  // setUserModule('apps', ...) calls above.
+  'jobs/gazette-daily.js',
 ]);
 
 const SCAN_EXTS = new Set([
@@ -257,6 +263,12 @@ const ALLOWED_LEGITIMATE = [
   // selects which key's membership to test, same pattern as
   // lib/app-install.js's allow-listed setUserModule('apps', ...) calls.
   { file: 'public/index.html', literal: "'chores'" },
+  // PHA-2853: public/gazette.html's app-nav script tag carries
+  // `data-active="gazette"` — same pattern as porch.html's
+  // `data-active="porch"` (a page-identity attribute the shared nav
+  // component reads to highlight the current page), not a registry
+  // module-key branch.
+  { file: 'public/gazette.html', literal: '"gazette"' },
 ];
 
 function isAllowedLegitimate(file, match) {

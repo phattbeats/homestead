@@ -101,7 +101,10 @@ console.log('PHA-2659 Gazette tests\n');
   assert(!!g, 'gazette is registered');
   assertEq(g.open_mode, 'sheet', "open_mode === 'sheet'");
   assertEq(g.room, null, 'room === null (claims no nav tab)');
-  assertEq(g.requires, ['agent'], "requires === ['agent'] (no harness, no edition)");
+  // PHA-2853 rework widened this: the typed issue pipeline reads wall
+  // activity and merged calendar events directly, so those became hard
+  // dependencies alongside the harness.
+  assertEq(g.requires, ['agent', 'wall', 'calendar'], "requires === ['agent','wall','calendar']");
   assertEq(g.default_enabled, false, 'default_enabled === false');
   assert(modules.isModuleKey('gazette'), 'isModuleKey("gazette") === true');
   // The registry is the intake path for the DB whitelist too.
