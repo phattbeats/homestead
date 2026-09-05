@@ -53,6 +53,35 @@
 - **Teasers (durable).** `docs/brand/teasers/teaser-out-now.png` and `docs/brand/teasers/teaser-add-rooms.png` placed in a versioned brand path with descriptive names.
 - **Asset index.** `docs/brand/ASSETS.md` written — single source of truth for which brand file is canonical and where it is consumed.
 
+## v0.5.17 (2026-09-05) — Wire POST /api/agent-connections/:id/events (PHA-3116)
+
+- **`server.js`** — PHA-3116: new route `POST /api/agent-connections/:id/events`
+  authenticates the inbound companion CLI's `relay-one-event` calls via
+  `agentConnections.verifySignature()` (HMAC-SHA256 over
+  `timestamp + "." + rawBody`, same header trio as `agent-endpoints.js`'s
+  outbound dispatch). On success, hands the event to `lib/porch/mailbox.postMessage`
+  with the connection's scoped appId — preserving the mailbox isolation
+  guarantee (one app only sees its own threads). Adds the
+  `express.json({ verify })` hook to capture rawBody for the signature
+  check; routes that don't read `req.rawBody` are unaffected.
+- **`lib/agent-connections.js`** — `get()` now accepts `includeSecretPlaintext: true`
+  (matching the existing `toPublic` option). The events route is the
+  only caller in steady state that needs the raw signing secret;
+  the value never leaves the route handler.
+- **`server.js` exports** — `module.exports = { app, db }` so in-process
+  tests can access the module-local db for setup. Production callers
+  read `require('./server.js')` to get the app (the `.app` property is
+  forward-compatible).
+- **`scripts/test-3116-events-route.js`** — 39 assertions across 9 tests:
+  happy path lands in mailbox with provider-scoped appId; tampered body,
+  stale timestamp, missing headers, bogus secret all 401; unknown /
+  invalid / revoked connections return 404 / 400 / 410; missing or blank
+  threadKey / topic / body fields return 400. Hits the real route against
+  a real server.js, signs requests with `lib/agent-endpoints.js`'s
+  `signPayload` exactly as the companion CLI does.
+- **`package.json`** — version bumped to 0.5.17; new test wired into
+  `npm test` immediately after `test-agent-connections.js`.
+
 ## v0.5.7 (2026-08-30) — Porch wall live-updates via SSE
 
 **PHA-2821:** first real two-human usage caught the wall not behaving like a

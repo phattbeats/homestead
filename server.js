@@ -245,7 +245,19 @@ CREATE INDEX IF NOT EXISTS idx_install_funnel_step ON install_funnel_events(step
 
 const app = express();
 app.set('trust proxy', 1);
-app.use(express.json());
+// PHA-3116: capture the raw request body bytes onto req.rawBody so that
+// signed-body routes (POST /api/agent-connections/:id/events) can verify
+// the HMAC over the exact bytes the client signed. The express.json()
+// verify hook runs once per request; when the body is a Buffer (raw
+// bytes) we stash the UTF-8 string before letting json() parse it.
+// Routes that don't read req.rawBody are unaffected.
+app.use(express.json({
+  verify: (req, _res, buf) => {
+    if (Buffer.isBuffer(buf) && buf.length > 0) {
+      req.rawBody = buf.toString('utf8');
+    }
+  },
+}));
 app.use(session({
   secret: process.env.SESSION_SECRET || 'life-app-secret-change-me',
   resave: false,
@@ -2245,6 +2257,106 @@ app.patch('/api/agent-connections/:id', auth, (req, res) => {
     res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// PHA-3116: POST /api/agent-connections/:id/events — the inbound route
+// the Homestead companion CLI's `relay-one-event` posts to. Each
+// companion holds a per-connection plaintext secret returned once at
+// pairing-redemption time; every event body is signed with
+//   X-Homestead-Signature: sha256=HMAC_SHA256(secret, ts + "." + rawBody)
+// (same HMAC construction as lib/agent-endpoints.js's signPayload,
+// verified via lib/agent-connections.js's verifySignature with a 5-min
+// replay window).
+//
+// The route is NOT session-authenticated — the companion runs on the
+// user's machine, may run while no Homestead session is active, and
+// the wire signature is the auth. We trust the connection's stored
+// secret (rotation invalidates all events signed with the old secret).
+//
+// The event body is handed to lib/porch/mailbox.postMessage as
+//   { appId, localUserId, threadKey, topic, body, direction: 'inbound' }
+// where appId = connection.provider (one of openclaw / claude_code /
+// codex) so mailbox isolation is preserved. The companion never sees
+// or stores OAuth cookies for the harness; only the companion secret
+// stays in the user-side companion state. Homestead never persists
+// any cookie/token alongside the event.
+app.post('/api/agent-connections/:id/events', (req, res) => {
+  const connectionId = Number(req.params.id);
+  if (!Number.isInteger(connectionId) || connectionId <= 0) {
+    return res.status(400).json({ error: 'invalid_connection_id' });
+  }
+  const requestId = req.get('X-Homestead-Request-Id');
+  const timestamp = req.get('X-Homestead-Timestamp');
+  const signature = req.get('X-Homestead-Signature');
+  if (!requestId || !timestamp || !signature) {
+    return res.status(401).json({
+      error: 'missing_signature_headers',
+      required: ['X-Homestead-Request-Id', 'X-Homestead-Timestamp', 'X-Homestead-Signature'],
+    });
+  }
+  // The PHA-3116 events route is the ONLY path that reads the stored
+  // signing secret in steady state (mint/redeem/rotate are the other
+  // three). Pass includeSecretPlaintext=true so toPublic surfaces
+  // `secret_plaintext` for the signature check below; the value is
+  // never sent back to the client — it lives only in this handler's
+  // local scope for the duration of one request. ownerUserId is set
+  // to the connection's actual owner so the existing toPublic owner
+  // gate (which only releases the secret to the connection's owner)
+  // passes; the secret never leaves this handler.
+  const firstRow = db.prepare('SELECT user_id FROM agent_connections WHERE id = ?').get(connectionId);
+  if (!firstRow) return res.status(404).json({ error: 'not_found' });
+  const connection = agentConnections.get(db, connectionId, { ownerUserId: firstRow.user_id, includeSecretPlaintext: true });
+  if (!connection) return res.status(404).json({ error: 'not_found' });
+  if (connection.status === agentConnections.STATUS_REVOKED) {
+    return res.status(410).json({ error: 'connection_revoked' });
+  }
+  if (connection.status !== agentConnections.STATUS_ACTIVE) {
+    return res.status(409).json({ error: 'connection_not_active', status: connection.status });
+  }
+  // verifySignature expects the raw bytes the client signed; the
+  // express.json({ verify }) hook captured them onto req.rawBody as
+  // UTF-8. Fall back to JSON.stringify for clients that POST without
+  // a real Content-Type — verifySignature hashes byte-equal payloads.
+  const rawBody = req.rawBody != null ? req.rawBody : JSON.stringify(req.body || {});
+  if (!agentConnections.verifySignature(connection.secret_plaintext, timestamp, rawBody, signature)) {
+    return res.status(401).json({ error: 'bad_signature' });
+  }
+  const { threadKey, topic, body, wallSlug } = req.body || {};
+  if (typeof threadKey !== 'string' || !threadKey) {
+    return res.status(400).json({ error: 'threadKey_required' });
+  }
+  if (typeof topic !== 'string' || !topic) {
+    return res.status(400).json({ error: 'topic_required' });
+  }
+  if (typeof body !== 'string' || !body.trim()) {
+    return res.status(400).json({ error: 'body_required' });
+  }
+  try {
+    // appId = connection.provider so the mailbox isolation guarantee
+    // (one app can only read/write its own threads) is preserved
+    // without a separate provider<->app_id mapping table.
+    const message = mailbox.postMessage(db, {
+      appId: connection.provider,
+      localUserId: connection.user_id,
+      threadKey,
+      topic,
+      body,
+      direction: 'inbound',
+      fromIdentity: connection.label || connection.provider,
+      wallSlug: typeof wallSlug === 'string' ? wallSlug : undefined,
+    });
+    // Bookkeeping: stamp last_used_at + last_status_code so future
+    // diagnostics can see the connection is actively firing.
+    try {
+      agentConnections.recordDispatch(db, connection.id, { statusCode: 200 });
+    } catch (_) { void _; }  // best-effort: swallow bookkeeping error
+    res.status(202).json({ accepted: true, requestId, messageId: message.id });
+  } catch (e) {
+    try {
+      agentConnections.recordDispatch(db, connection.id, { statusCode: 500, error: String(e && e.message || e) });
+    } catch (_) { void _; }  // best-effort: swallow bookkeeping error
+    res.status(500).json({ error: 'mailbox_post_failed' });
   }
 });
 
@@ -4730,4 +4842,10 @@ if (require.main === module) {
   startPorchSweep();
   app.listen(PORT, () => console.log(`Homestead on :${PORT}`));
 }
+// PHA-3116: tests need direct db access for setup (e.g. seeding
+// installed_apps before exercising routes that FK to it). Attach db
+// to the app object so existing tests using
+// `const app = require('../server.js'); app.listen(...)` keep
+// working — `app.db` is the in-process database handle.
+app.db = db;
 module.exports = app;
