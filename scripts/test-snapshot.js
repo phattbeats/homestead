@@ -34,6 +34,7 @@ const userModel = require('../lib/user-model');
 const calendarSources = require('../lib/calendar-sources');
 const secretBox = require('../lib/secret-box');
 const snapshot = require('../lib/snapshot');
+const houseRooms = require('../lib/house-rooms');
 
 let pass = 0;
 let fail = 0;
@@ -56,6 +57,7 @@ function freshDb() {
   db.pragma('foreign_keys = ON');
   userModel.migrate(db);
   calendarSources.migrate(db);
+  houseRooms.migrate(db);
   return { db, tmpDir };
 }
 
@@ -219,6 +221,22 @@ function freshDb() {
   assertEq(origins, ['native', 'provider:caldav_nextcloud'], 'merged feed has native + provider');
   assert(merged.some(e => e.title === 'Standup'), 'native event surfaced');
   assert(merged.some(e => e.title === 'Provider event'), 'provider event surfaced');
+  const standup = merged.find(e => e.title === 'Standup');
+  assertEq(standup.room, null, 'untagged native event has room === null');
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+})();
+
+(function testMergedEventsForRoomTagged() {
+  console.log('Test 6b: native events tagged to a house room surface room label');
+  const { db, tmpDir } = freshDb();
+  const brandon = db.prepare("SELECT id FROM users WHERE username = 'brandon'").get();
+  const room = houseRooms.createRoom(db, brandon.id, { label: 'Kitchen' });
+  db.prepare(`INSERT INTO events (title, date, time, notes, owner, created_by, room_id)
+              VALUES (?, ?, ?, ?, ?, 'brandon', ?)`)
+    .run('Dinner', '2026-08-12', '18:00', null, 'brandon', room.id);
+  const merged = snapshot.mergedEventsFor(db, '2026-08-12', '2026-08-12');
+  const dinner = merged.find(e => e.title === 'Dinner');
+  assertEq(dinner.room, 'Kitchen', 'room-tagged event surfaces the room label');
   fs.rmSync(tmpDir, { recursive: true, force: true });
 })();
 
