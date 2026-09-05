@@ -45,6 +45,7 @@ COPY server.js ./
 # the runtime stage leaves the container unable to start with
 # `Error: Cannot find module './lib/user-model'` (PHA-2001).
 COPY lib ./lib
+COPY jobs ./jobs
 COPY public ./public
 # PHA-2971: release.yml passes --build-arg COMMIT_SHA so /api/version
 # (PHA-1706) reports the real deployed commit instead of null. A build-arg

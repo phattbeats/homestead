@@ -1,3 +1,7 @@
+## v0.5.20 (2026-09-05) — fix missing jobs/ in runtime image (PHA-2853)
+
+**PHA-2853 follow-up:** v0.5.19 shipped `require('./jobs/gazette-daily')` in `server.js` but the Dockerfile's runtime stage never `COPY`'d the new `jobs/` directory, so the container crash-looped on boot (`Cannot find module './jobs/gazette-daily'`) the moment it was deployed. Caught while getting a live screenshot for PHA-2853's own acceptance criteria — the fix is one line: `COPY jobs ./jobs` alongside the existing `lib`/`public` copies.
+
 ## v0.5.19 (2026-09-05) — Gazette typed cron+back-issue design (PHA-2853)
 
 **PHA-2853:** ships PR #133 — the typed `gazette_issues` pipeline, `jobs/gazette-daily.js` cron, `GET /api/gazette/today` and `/api/gazette/:date`, `POST /api/gazette/ask`, and the standalone `public/gazette.html` page (masthead, Rotation Desk, Arts & Media, The Porch, Today's Listings). Sits alongside the existing PHA-2659 agent-authored `/api/me/gazette/today` sheet rather than replacing it. Feature-gated behind the `gazette` module (`default_enabled: false`) for internal dogfooding before wider rollout.
