@@ -1,3 +1,7 @@
+## v0.5.19 (2026-09-05) — Gazette typed cron+back-issue design (PHA-2853)
+
+**PHA-2853:** ships PR #133 — the typed `gazette_issues` pipeline, `jobs/gazette-daily.js` cron, `GET /api/gazette/today` and `/api/gazette/:date`, `POST /api/gazette/ask`, and the standalone `public/gazette.html` page (masthead, Rotation Desk, Arts & Media, The Porch, Today's Listings). Sits alongside the existing PHA-2659 agent-authored `/api/me/gazette/today` sheet rather than replacing it. Feature-gated behind the `gazette` module (`default_enabled: false`) for internal dogfooding before wider rollout.
+
 ## v0.5.18 (2026-09-05) — CD recipe, companion CLI, Gazette room listings (PHA-3083)
 
 **PHA-3083:** first tagged deploy since v0.5.8 went live. Merges: PR #130 (PHA-2971, simplified CD — drop auto-tag CI workflow, tag manually), PR #124 (PHA-2881, companion-side pairing protocol + reference CLI), and PR #132 (PHA-2853, Gazette listings keyed by house room). Also rolls up the accumulated Hearth actions, Gazette, and visual-asset work below that was sitting unreleased.
