@@ -197,17 +197,28 @@ console.log('PHA-2202 user-modules tests\n');
   fs.rmSync(tmpDir, { recursive: true, force: true });
 }
 
-// ---- Test 7: getUserModules returns predictable shape for all 6 keys ----
+// ---- Test 7: getUserModules returns predictable shape for every registry key ----
 {
   console.log('\nTest 7: getUserModules returns full { module_key, enabled_at, enabled } map');
   const { db, tmpDir } = freshDb();
   const brandonId = db.prepare(`SELECT id FROM users WHERE username = 'brandon'`).get().id;
   const mods = userModel.getUserModules(db, brandonId);
-  assertEq(Object.keys(mods).sort(), MODULES.slice().sort(), 'all 6 module keys present');
+  // The map spans the CURRENT registry (7 keys as of PHA-2659), while
+  // the grandfather backfill only ever granted the six pre-modularity
+  // modules. Modules registered after that backfill shipped are present
+  // in the map but disabled — which is the shape the SPA relies on to
+  // render an add-a-room entry for them.
+  assertEq(Object.keys(mods).sort(), modules.MODULE_KEYS.slice().sort(),
+    'every registry key present in the map');
   for (const k of MODULES) {
     assertEq(mods[k].module_key, k, `${k}: module_key echoed`);
     assertEq(mods[k].enabled, true, `${k}: enabled by default`);
     assert(!!mods[k].enabled_at, `${k}: enabled_at set`);
+  }
+  for (const k of modules.MODULE_KEYS.filter(k => !MODULES.includes(k))) {
+    assertEq(mods[k].module_key, k, `${k}: module_key echoed`);
+    assertEq(mods[k].enabled, false, `${k}: post-grandfather module is NOT enabled by default`);
+    assertEq(mods[k].enabled_at, null, `${k}: enabled_at null`);
   }
   fs.rmSync(tmpDir, { recursive: true, force: true });
 }

@@ -46,6 +46,11 @@
           // it already has its own fab/avatar/nav chrome.
           primaryFab: true,
           utilityChip: true,
+          // PHA-2822: this standalone shell is the wall-only funnel's
+          // landing room — the only place a new user can discover that
+          // other rooms exist. Opt-in so the index.html #page-wall mount
+          // (which already has its own "+ Add rooms" pill) is unaffected.
+          addRoomPill: true,
         });
       }
     }
@@ -56,6 +61,9 @@
     }
   })();
 </script>
+
+<!-- PHA-2823: persistent cross-page nav (wall/porch/rooms/invites/connectors) -->
+<script src="/components/app-nav.js" data-active="porch"></script>
 
 </body>
 </html>

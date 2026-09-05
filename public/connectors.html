@@ -16,4 +16,7 @@
 <fieldset><legend>Who can see its tile and card?</legend><label class="check"><input type="radio" name="visibility" value="private" checked> Just me</label><label class="check"><input type="radio" name="visibility" value="group"> Share with one of my groups</label><select id="groupId" disabled><option value="">Choose a group</option></select></fieldset>
 <div id="validation" class="validation" aria-live="polite"></div><button class="btn" type="submit">Review connection</button></form></section>
 <section id="reviewStep" hidden><button class="text-btn back" data-back="details">← Edit details</button><h2>Review what will happen</h2><p id="reviewIntro" class="lead"></p><div id="consentSummary" class="consent"></div><div class="review-block"><h3>Endpoints to poll</h3><div id="endpoints"></div></div><div class="review-block"><h3>Visible surfaces</h3><ul id="surfaces"></ul></div><p class="quiet">This connector is read-only. Redirects, write requests, unsafe URLs, inline secrets, and unsupported JSONPath are rejected before anything is saved.</p><button id="installBtn" class="btn">Install connector</button><div id="installResult" class="validation" aria-live="polite"></div></section>
-</main><script src="/connectors.js"></script></body></html>
+</main><script src="/connectors.js"></script>
+<!-- PHA-2823: persistent cross-page nav (wall/porch/rooms/invites/connectors) -->
+<script src="/components/app-nav.js" data-active="connectors"></script>
+</body></html>

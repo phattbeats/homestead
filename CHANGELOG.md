@@ -1,3 +1,87 @@
+## Unreleased — Hearth can act, not just talk (PHA-2851)
+
+**PHA-2851:** the drawer demo promised Hearth could take real action across the house ("queue Part Two", "tell him the meme was mid"), but the server-side runtime (PHA-2830) shipped text-only — no tool calls, nothing behind the promise. Hearth now has an inbound action surface.
+
+- **Two house-actions.** `lib/hearth-actions.js` — `enqueue_media` (writes a `media_queue` row and announces it on the caller's default wall) and `mention_user` (posts an `@`-mention on a wall the two share, through the existing mention/notification machinery). Not an MCP server host: these are Hearth's own first-party actions, and third-party tool registration stays out of scope.
+- **`set_lights` deliberately not shipped.** The porch has no lights integration and the screenshot never promised one. An endpoint that returns `ok` for hardware nobody wired is the exact failure this issue exists to fix.
+- **Provider tool loop.** `lib/agent-runtime.js`'s `createProvider` accepts a `tools` block and reassembles streamed `tool_calls` deltas (providers fragment the `arguments` JSON across chunks). `dispatchHearth` runs at most two rounds — one that may call tools, one to narrate the outcome — so the loop is bounded by construction.
+- **Tool-result chips.** Outcomes flow back through the existing SSE pipe as `event: tool_result` (and `tool_results` on the JSON path), rendered in the drawer as `(✓ queued Part Two)`. A separate event from the prose on purpose: a claim the server stands behind is not the same kind of thing as the model's narration, and the model can't fake one by typing it.
+- **Same functions behind REST.** `POST /api/actions/enqueue-media` and `POST /api/actions/mention-user`, auth-gated, with per-action scopes (`write:actions:media_queue`, `write:actions:mention`) — queueing media and messaging people in your name are different consents.
+- **Honest failure.** Refused permissions, unknown users, malformed arguments and unparseable tool arguments all surface as visible failed chips with a typed code; the existing "Hearth needs a model key" reply is unchanged. `delivered` is the real count of notification rows written — a muted wall reports 0 rather than claiming a ping that never fired.
+- **Not shipped: email.** The issue's acceptance mentions "notification row + email". This repo has no mail transport — no SMTP config, no sender identity. The wired delivery surface is the notification row plus web-push. Adding a mailer is its own issue, not a no-op that reports "sent".
+- Analytics gains `hearth_action_invoked` / `hearth_action_failed` (closed enum, now 25 kinds). Acceptance: `scripts/test-2851-hearth-actions.js` (77 assertions).
+
+## Unreleased — Homestead visual asset pack + canonical opening-door repair (PHA-2846)
+
+**PHA-2846 follow-up:** Brandon reopened PHA-2846 (`live on prod?` then `its not fixed everywehre`) pointing out that the persistent bottom-nav across `/` and `/porch.html` still rendered emoji literals (`🏠 ✓ 📝 📅 🛰️ 📸`) and that the favicon needed to land on the canonical icon. v0.5.9 (PR #115) shipped the canonical opening-door + Add Rooms SVG icons but left the bottom-nav on its emoji defaults because that nav predated PHA-2209's no-hardcoded-keys audit. v0.5.10 layers the bottom-nav onto the same canonical asset set without re-shipping any module icon.
+
+- **Bottom-nav icon migration.** `public/index.html` replaces the six emoji `<span class="ico">🏠</span>` literals with `<span class="ico"><img src="/icon.svg" alt="" width="22" height="22"></span>` (and one of the six built-in module SVGs for each module-backed tab). Mapping: `home` → `/icon.svg` (canonical opening-door, same file `/favicon.svg` serves), `tasks` → `/modules/chores.svg`, `r-lists` → `/modules/lists.svg`, `r-calendar` → `/modules/calendar.svg`, `svc` → `/modules/apps.svg`, `porch` → `/modules/porch.svg`. No new assets for those tabs — the SVGs already shipped in v0.5.9.
+- **Nav CSS rule update.** `public/index.html` line 184 adds `nav .ico{display:inline-flex;align-items:center;justify-content:center;line-height:1;width:24px;height:24px}` and `nav .ico img{display:block;width:22px;height:22px;object-fit:contain}` so the SVG renders at the same visual size the emoji (font-size:20px) used. `gap:3px` between icon and label is preserved.
+- **Favicon alternate PNG.** `public/favicon-32.png` (32×32 PNG, MD5 `1b94b09d…`) generated from `public/icon.svg` via `rsvg-convert` for browsers that ask `/favicon.ico` before `/favicon.svg`. `public/index.html` `<head>` adds `<link rel="alternate icon" href="/favicon-32.png" type="image/png" sizes="32x32">` and `<link rel="apple-touch-icon" href="/icon-512.png">` so iOS Safari's home-screen install path (which doesn't accept SVG) also shows the canonical mark.
+- **Service worker cache bump.** `public/sw.js` bumps from `homestead-v5` to `homestead-v6`. v5 is dropped on `activate`, which guarantees a returning PWA user doesn't keep the emoji tab bar offline. New asset `/favicon-32.png` added to `PRECACHE_URLS`.
+
+## Unreleased — bottom-nav icon migration to canonical opening-door + module SVGs (PHA-2846 / v0.5.10)
+
+**PHA-2846 follow-up:** Brandon reopened PHA-2846 (`live on prod?` then `its not fixed everywehre`) pointing out that the persistent bottom-nav across `/` and `/porch.html` still rendered emoji literals (`🏠 ✓ 📝 📅 🛰️ 📸`) and that the favicon needed to land on the canonical icon. v0.5.9 (PR #115) shipped the canonical opening-door + Add Rooms SVG icons but left the bottom-nav on its emoji defaults because that nav predated PHA-2209's no-hardcoded-keys audit. v0.5.10 layers the bottom-nav onto the same canonical asset set without re-shipping any module icon.
+
+- **Bottom-nav icon migration.** `public/index.html` replaces the six emoji `<span class="ico">🏠</span>` literals with `<span class="ico"><img src="/icon.svg" alt="" width="22" height="22"></span>` (and one of the six built-in module SVGs for each module-backed tab). Mapping: `home` → `/icon.svg` (canonical opening-door, same file `/favicon.svg` serves), `tasks` → `/modules/chores.svg`, `r-lists` → `/modules/lists.svg`, `r-calendar` → `/modules/calendar.svg`, `svc` → `/modules/apps.svg`, `porch` → `/modules/porch.svg`. No new assets for those tabs — the SVGs already shipped in v0.5.9.
+- **Nav CSS rule update.** `public/index.html` line 184 adds `nav .ico{display:inline-flex;align-items:center;justify-content:center;line-height:1;width:24px;height:24px}` and `nav .ico img{display:block;width:22px;height:22px;object-fit:contain}` so the SVG renders at the same visual size the emoji (font-size:20px) used. `gap:3px` between icon and label is preserved.
+- **Favicon alternate PNG.** `public/favicon-32.png` (32×32 PNG, MD5 `1b94b09d…`) generated from `public/icon.svg` via `rsvg-convert` for browsers that ask `/favicon.ico` before `/favicon.svg`. `public/index.html` `<head>` adds `<link rel="alternate icon" href="/favicon-32.png" type="image/png" sizes="32x32">` and `<link rel="apple-touch-icon" href="/icon-512.png">` so iOS Safari's home-screen install path (which doesn't accept SVG) also shows the canonical mark.
+- **Service worker cache bump.** `public/sw.js` bumps from `homestead-v5` to `homestead-v6`. v5 is dropped on `activate`, which guarantees a returning PWA user doesn't keep the emoji tab bar offline. New asset `/favicon-32.png` added to `PRECACHE_URLS`.
+
+## Unreleased — The Homestead Gazette (PHA-2659)
+
+**PHA-2659:** the Gazette was on the teaser but had zero code in the repo — the product now catches up to its own advertising. A morning edition the user's own BYOK harness writes from what actually happened in the house, opened from a launcher beside the chat FAB, generated on the first open of the day and cached per user. Design record and divergences: `docs/GAZETTE-DESIGN.md`.
+
+- **Gazette is a module, not a perk.** Own registry key (`lib/modules.js`), own `user_modules` row, own add-a-room toggle — per the "users can add / remove it as a module just like everything else" instruction, which overrode the original "module-gated by `agent`" framing. It declares `requires: ['agent']` (no harness, no edition), so disabling the agent module while the Gazette is on trips the existing `dependents_active` 409 — a new edge in the existing dependency graph, no new cascade logic.
+- **New `open_mode: 'sheet'`.** Full-screen, non-nav, opened on demand. None of `frame`/`drawer`/`tab` fit. `computeLayout` emits enabled sheet modules in a new `sheets[]` array (derived from `open_mode`, never from a key literal) and the SPA renders one launcher per entry — a second sheet module needs no layout change.
+- **The `user_modules` CHECK constraint is now derived from the registry.** The hardcoded six-key literal was itself the drift that constraint existed to prevent. `migrate()` generates the CHECK from `modules.MODULE_KEYS`, compares it against the stored DDL on every boot, and does a table rebuild (SQLite cannot ALTER a CHECK in place) when they disagree — preserving rows, `enabled_at` semantics, and the index. Idempotent; the next module to land needs no migration work.
+- **Agent-authored, never templated.** `lib/gazette.js` assembles the context (the PHA-1902 snapshot plus overnight Porch activity, entity arrivals, and degraded tile health from `lib/health-checker.js`) and hands the VOICE.md rules to the harness directly — no separate editor persona, per VOICE.md Rule 2. `lib/agent-runtime.js` gains `composeGazette`, reusing the same provider wire as the drawer rather than opening a second LLM path.
+- **Thin-edition rule, enforced on both sides.** Sections with an empty context slice are never offered to the harness, and a brief the harness invents for one is dropped on parse. A day where nothing happened prints one line and never calls the provider at all. The layout reserves no space for absent sections.
+- **Editions are structured JSON, rendered through `esc()`.** Harness prose never reaches `innerHTML`. A failed generation caches as `unavailable` for the day (so a missing key doesn't re-dial the provider on every open) but is served `retryable` so the sheet explains itself and offers a re-run.
+- `GET /api/me/gazette/today` (`?refresh=1` to re-mint), gated by `requireModuleEnabled` — the same gate PHA-2811 put on `POST /api/tasks`.
+- `scripts/test-2659-gazette.js`: 73 assertions covering the registry entry, the layout payload, the CHECK rebuild against a downgraded pre-PHA-2659 database, section availability, parse-time whitelisting, and the route end-to-end (gate → cascade 409 → thin day → generate → cache hit → broken-harness recovery) against a fake SSE provider.
+
+## Unreleased — Homestead visual asset pack + canonical opening-door repair (PHA-2846 / v0.5.9)
+
+**PHA-2846:** the live header icon was a flat closed-arch mark that didn't match the canonical opening-door brand asset. The app also shipped inconsistent emoji icons in the Add Rooms picker and the Settings → Apps sheet for built-in modules. Brandon attached the canonical source art (the OUT NOW poster, two teasers, Hearth's avatar + corrected six-frame animation sheet, six module SVGs, the live-icon-mismatch screenshot).
+
+- **Canonical opening-door mark.** `public/icon.svg`, `public/favicon.svg`, `public/icon-192.png`, `public/icon-512.png`, `public/icon-maskable.svg`, `public/icon-maskable-512.png` now derive from one canonical SVG (`public/icon.svg`). Composition: arched doorway reveal on the viewer-left, sage door slab hinged at the right jamb and swung open toward viewer-right, brass handle on the free right edge, warm amber hearth glow visible inside, dark olive rounded-square background. Maskable variant is scaled to fit the 70% safe-zone.
+- **Built-in module icons.** Six new SVGs under `public/modules/` (porch, lists, calendar, chores, apps, agent) — same brand palette (`#4b4624`, `#6d7b59`, `#f6e4c3`, `#ad5c05`, `#d49a40`) so they read as one household vocabulary. `lib/modules.js` registry's `icon` field is now a path string (`/modules/{key}.svg`); the 16-field contract is preserved (icon is still a non-empty string). The Add Rooms picker (`public/modules.html`) and the Settings → Apps sheet + App detail header (`public/index.html`) detect the `/modules/` prefix and render an `<img>`; third-party manifests still ship emoji strings and pass through as escaped text.
+- **Service worker cache bump.** `public/sw.js` bumped from `homestead-v4` to `homestead-v5`; the old cache is dropped on `activate` so no stale closed-arch icon remains reachable offline.
+- **Hearth art (durable).** `docs/brand/hearth/avatar.png` (Hearth's lantern static avatar) and `docs/brand/hearth/animation-frames.png` (six-frame sheet, 2×3 grid, read left-to-right then top-to-bottom; only flame/wisps/sparks/glow animate, ember-orb body and eyes stay fixed). Source art preserved as supplied — no auto-conversion to GIF.
+- **Teasers (durable).** `docs/brand/teasers/teaser-out-now.png` and `docs/brand/teasers/teaser-add-rooms.png` placed in a versioned brand path with descriptive names.
+- **Asset index.** `docs/brand/ASSETS.md` written — single source of truth for which brand file is canonical and where it is consumed.
+
+## v0.5.7 (2026-08-30) — Porch wall live-updates via SSE
+
+**PHA-2821:** first real two-human usage caught the wall not behaving like a
+shared room — Tyler posted, Brandon's open session showed nothing until a
+manual reload. Adds `GET /api/walls/:slug/events`, a long-lived SSE stream
+keyed per wall (`lib/wall-events.js`), reusing the wire format PHA-1899
+established for the drawer rather than a second realtime mechanism.
+`walls.createPost`/`walls.createComment` publish after a successful write;
+`feed.js` opens a native `EventSource` per mounted wall, prepends new posts,
+updates comment counts, closes the connection on hidden tabs, and falls back
+to reload-on-focus once reconnection looks dead. Reactions are explicitly
+out of scope for the live path (see issue for why). Typing indicators,
+presence, and read receipts remain out of scope entirely.
+
+## v0.5.6 (2026-08-30) — Discoverable add-a-room affordance on the wall-only funnel
+
+**PHA-2822:** first outside tester (Brandon + Tyler on PHA-2804) landed on the
+wall-only `/porch.html` shell and had no way to find or enable any other
+module — the door to `/modules.html` (already built, already wired to
+`/api/me/modules/:key/enable` via PHA-2205) only existed inside the SPA's
+`#page-wall` mount, which a brand-new single-module user never reaches
+because `boot()` redirects straight to the standalone shell. Adds a quiet
+"+ Add a room" text pill to that shell (`public/porch.html`,
+`public/porch.css`, `public/components/feed.js`), opt-in via
+`cfg.addRoomPill`, placed less prominently than the compose FAB so posting
+stays the obvious first move. Once a 2nd module is enabled, `computeLayout()`
+routes into the SPA's existing tab/pill layout, so the standalone shell only
+ever needs to cover the single-module case.
+
 ## v0.5.5 (2026-08-30) — Brand system + BYOK modal fix + chore-module gate + wall notify wiring
 
 Rolls up everything landed on `main` since v0.5.4 for the real-usage feedback

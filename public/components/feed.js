@@ -114,29 +114,40 @@
     }).join('')}</div>`;
   }
 
-  // PHA-2648: honest-identity badge + one-click opt-out for Porch agents.
-  // isAgent is derived server-side from a live agent_tokens row (never a
-  // self-reported flag) — see lib/walls.js's userView(). Used for BOTH
-  // post authors and comment authors: an agent's actual Porch output is
-  // most often a comment/reaction on someone else's post (PHA-2645's
-  // participation contract), not a post of its own.
-  function authorBadgeHtml(author) {
-    if (!author || !author.isAgent) return '';
-    const username = esc(author.username || '');
-    return `<span class="agent-badge" title="This account posts as a Porch agent">🤖 Agent</span>
-      <button type="button" class="agent-vote-off" data-username="${username}"
-        title="Vote this agent off the porch">Vote off</button>`;
+  // PHA-2647: honest-identity badge + admin-only vote-off, shared markup.
+  // PHA-2827.D: `kind === 'built-in'` (Hearth) gets its own label — he's
+  // not an installed third-party character, so the generic "[agent]"
+  // badge would undersell/misrepresent him.
+  function agentBadgeHtml(kind) {
+    if (kind === 'built-in') {
+      return `<span class="agent-badge" title="Hearth — the house's built-in agent">[hearth]</span>`;
+    }
+    return `<span class="agent-badge" title="Posted by an agent, not a household member">[agent]</span>`;
   }
 
-  function postHtml(p) {
+  function voteOffHtml(username) {
+    return `<button type="button" class="vote-off" data-username="${esc(username)}">Vote off the porch</button>`;
+  }
+
+  function postHtml(p, isAdmin, meUsername) {
+    const isAgent = !!(p.author && p.author.isAgent);
     const author = (p.author && (p.author.display || p.author.username)) || 'Someone';
-    return `<div class="post${p._pending ? ' pending' : ''}" data-id="${esc(p.id)}">
+    const username = (p.author && p.author.username) || '';
+    const isMine = !!(meUsername && p.author && p.author.username === meUsername);
+    const deleteHtml = isMine
+      ? `<button type="button" class="post-delete" data-post="${esc(p.id)}" title="Delete post" aria-label="Delete post">🗑</button>`
+      : '';
+    return `<div class="post${p._pending ? ' pending' : ''}${isAgent ? ' agent-post' : ''}" data-id="${esc(p.id)}">
       <div class="post-head">
-        <div class="post-author">${esc(author)}${authorBadgeHtml(p.author)}</div>
-        <div class="post-time">${esc(fmtTime(p.createdAt))}</div>
+        <div class="post-author">${esc(author)}${isAgent ? agentBadgeHtml(p.author && p.author.kind) : ''}</div>
+        <div class="post-head-right">
+          <div class="post-time">${esc(fmtTime(p.createdAt))}</div>
+          ${deleteHtml}
+        </div>
       </div>
       ${postMediaHtml(p)}
       ${reactionsHtml(p)}
+      ${isAgent && isAdmin ? `<div class="post-tools">${voteOffHtml(username)}</div>` : ''}
       <div class="comments-toggle" data-post="${esc(p.id)}">
         <span class="arrow">›</span> Comments${p.commentCount ? ` (${p.commentCount})` : ''}
       </div>
@@ -175,6 +186,12 @@
     let aborter = null;        // AbortController for boot fetches so
                                // unmount can cancel an early-boot fetch.
     const disposers = [];      // [{el, evt, fn, opts}] for addEventListener cleanup.
+
+    // ---- live updates (PHA-2821): one EventSource per mounted wall.
+    let sse = null;
+    let sseErrorStreak = 0;
+    let sseGaveUp = false;
+    const SSE_GIVE_UP_THRESHOLD = 4;
 
     // Scope-bound helpers.
     const $  = (s, el) => (el || root).querySelector(s);
@@ -284,6 +301,13 @@
       // has its own fab/avatar/nav chrome) is unaffected.
       const utilChipHtml = cfg.utilityChip ? `<button type="button" id="utilChip" class="util-chip" aria-label="Profile and settings">⋯</button>` : '';
       const composerWrapOpen = cfg.primaryFab ? '' : ' on';
+      // PHA-2822: the standalone wall-only shell is a starting room, not
+      // the whole house — but until now nothing on it said so. A quiet
+      // pill (not a pill row, not a tab strip) is the one door out.
+      // Only rendered when the caller passes addRoomPill (porch.html);
+      // the index.html #page-wall mount already has its own "+ Add
+      // rooms" pill wired to the same /modules.html sheet.
+      const addRoomPillHtml = cfg.addRoomPill ? `<a href="/modules.html" id="addRoomPill" class="add-room-pill">+ Add a room</a>` : '';
 
       root.innerHTML = `
   <header>
@@ -300,6 +324,7 @@
     </div>
   </main>
   ${cfg.primaryFab ? `<button type="button" id="composeFab" class="compose-fab" aria-label="New post">+</button>` : ''}
+  ${addRoomPillHtml}
   ${cfg.utilityChip ? `
   <div id="utilSheet" class="util-overlay">
     <div class="util-sheet">
@@ -370,6 +395,58 @@
       wireOlder();
       if (cfg.primaryFab) wireComposeFab();
       if (cfg.utilityChip) wireUtilChip();
+
+      connectLive();
+      on(document, 'visibilitychange', onVisibilityChange);
+    }
+
+    // Reactions omitted: broadcasting needs a per-viewer myReactions diff.
+    function connectLive() {
+      closeLive();
+      if (typeof EventSource === 'undefined' || !WALL || document.hidden) return;
+      sseGaveUp = false;
+      sse = new EventSource(url(`/walls/${encodeURIComponent(WALL)}/events`));
+      sse.addEventListener('post', (e) => {
+        sseErrorStreak = 0;
+        let post;
+        try { post = JSON.parse(e.data); } catch (_) { return; }
+        if (!post || POSTS.some((p) => p.id === post.id)) return;
+        POSTS.unshift(post);
+        renderFeed();
+      });
+      sse.addEventListener('comment', (e) => {
+        sseErrorStreak = 0;
+        let comment;
+        try { comment = JSON.parse(e.data); } catch (_) { return; }
+        if (!comment || !comment.postId) return;
+        const post = POSTS.find((p) => p.id === comment.postId);
+        if (!post) return;
+        post.commentCount = (post.commentCount || 0) + 1;
+        const toggle = $(`.comments-toggle[data-post="${cssEsc(post.id)}"]`, root);
+        if (toggle) toggle.innerHTML = `<span class="arrow">›</span> Comments (${post.commentCount})`;
+        const panel = $(`.comments[data-post="${cssEsc(post.id)}"]`, root);
+        if (panel && panel.classList.contains('on')) loadComments(post.id, panel);
+      });
+      sse.onerror = () => {
+        sseErrorStreak += 1;
+        if (sseErrorStreak >= SSE_GIVE_UP_THRESHOLD && !sseGaveUp) {
+          sseGaveUp = true;
+          closeLive();
+        }
+      };
+    }
+
+    function closeLive() {
+      if (sse) { try { sse.close(); } catch (_) {} sse = null; }
+    }
+
+    function onVisibilityChange() {
+      if (document.hidden) {
+        closeLive();
+        return;
+      }
+      if (sseGaveUp) loadPosts(true);
+      connectLive();
     }
 
     // PHA-2727: centered FAB toggles the composer card open/closed instead
@@ -456,6 +533,7 @@
         $('#wallName', root).textContent = (w && w.name) || WALL;
         await loadPosts(true);
         await refreshNotifyLevel();
+        connectLive();
       });
     }
 
@@ -532,7 +610,8 @@
         feed.innerHTML = '<div class="empty">No posts yet. Be the first!</div>';
         return;
       }
-      feed.innerHTML = POSTS.map(postHtml).join('');
+      const isAdmin = !!(ME && ME.isAdmin);
+      feed.innerHTML = POSTS.map((p) => postHtml(p, isAdmin, ME && ME.username)).join('');
       wireFeedEvents();
     }
 
@@ -547,8 +626,8 @@
       $$('.comments-toggle', root).forEach((el) => {
         on(el, 'click', () => onCommentsToggle(el));
       });
-      $$('.agent-vote-off', root).forEach((btn) => {
-        on(btn, 'click', () => onVoteOffClick(btn));
+      $$('.post-delete', root).forEach((btn) => {
+        on(btn, 'click', () => onDeleteClick(btn));
       });
       if (cfg.canComment) {
         $$('.comment-form', root).forEach((f) => {
@@ -556,6 +635,30 @@
         });
       } else {
         $$('.comment-form', root).forEach((f) => { f.style.display = 'none'; });
+      }
+      wireVoteOffButtons(root);
+    }
+
+    // PHA-2647: wired after renderFeed() + each renderComments() re-render.
+    function wireVoteOffButtons(scopeEl) {
+      Array.from((scopeEl || root).querySelectorAll('.vote-off')).forEach((btn) => {
+        on(btn, 'click', () => onVoteOffClick(btn));
+      });
+    }
+
+    // PHA-2647: reversible per-wall opt-out; reload from the server.
+    async function onVoteOffClick(btn) {
+      const username = btn.dataset.username;
+      if (!username) return;
+      if (!window.confirm(`Hide ${username} from this wall?`)) return;
+      btn.disabled = true;
+      try {
+        await api('POST', `/walls/${encodeURIComponent(WALL)}/agents/${encodeURIComponent(username)}/opt-out`, {});
+        toast(`${username} hidden from this wall`);
+        await loadPosts(true);
+      } catch (e) {
+        btn.disabled = false;
+        toast((e.body && e.body.error) || 'Could not hide agent', true);
       }
     }
 
@@ -588,16 +691,18 @@
       }
     }
 
-    async function onVoteOffClick(btn) {
-      const username = btn.dataset.username;
+    async function onDeleteClick(btn) {
+      const postId = btn.dataset.post;
+      if (!confirm('Delete this post? This cannot be undone.')) return;
       btn.disabled = true;
       try {
-        await api('POST', `/walls/${encodeURIComponent(WALL)}/agents/${encodeURIComponent(username)}/opt-out`, {});
-        btn.textContent = 'Voted off';
-        toast(`${username} won't post here anymore`);
+        await api('DELETE', `/walls/${encodeURIComponent(WALL)}/posts/${encodeURIComponent(postId)}`);
+        POSTS = POSTS.filter((p) => p.id !== postId);
+        renderFeed();
+        toast('Post deleted');
       } catch (_) {
         btn.disabled = false;
-        toast('Vote off failed', true);
+        toast('Delete failed', true);
       }
     }
 
@@ -626,13 +731,14 @@
 
     function renderComments(list, comments) {
       if (!comments.length) { list.innerHTML = '<div class="empty" style="padding:6px 0">No comments yet</div>'; return; }
+      const isAdmin = !!(ME && ME.isAdmin);
       list.innerHTML = comments.map((c) => {
+        const isAgent = !!(c.author && c.author.isAgent);
         const author = (c.author && (c.author.display || c.author.username)) || 'Someone';
-        return `<div class="comment"><b>${esc(author)}:</b>${authorBadgeHtml(c.author)} ${esc(c.body)}</div>`;
+        const username = (c.author && c.author.username) || '';
+        return `<div class="comment${isAgent ? ' agent-comment' : ''}"><b>${esc(author)}</b>${isAgent ? agentBadgeHtml(c.author && c.author.kind) : ''}: ${esc(c.body)}${isAgent && isAdmin ? ` ${voteOffHtml(username)}` : ''}</div>`;
       }).join('');
-      $$('.agent-vote-off', list).forEach((btn) => {
-        on(btn, 'click', () => onVoteOffClick(btn));
-      });
+      wireVoteOffButtons(list);
     }
 
     async function onCommentSubmit(e, form) {
@@ -846,8 +952,13 @@
       renderFeed();
       try {
         const created = await api('POST', `/walls/${encodeURIComponent(WALL)}/posts`, body);
+        // The live-update SSE event for this same post can land before
+        // this response does, already inserting `created.id` — drop that
+        // copy so replacing the optimistic placeholder doesn't double it.
+        POSTS = POSTS.filter((p) => p.id !== created.id);
         const idx = POSTS.findIndex((p) => p.id === tempId);
         if (idx !== -1) POSTS[idx] = created;
+        else POSTS.unshift(created);
         renderFeed();
         return created;
       } catch (e) {
@@ -861,6 +972,7 @@
     // ---- disposal ----
 
     function dispose() {
+      closeLive();
       if (aborter) {
         try { aborter.abort(); } catch (_) {}
       }
@@ -879,7 +991,7 @@
       dispose,
       root,
       boot,
-      setWall(slug) { WALL = slug; return loadPosts(true); },
+      setWall(slug) { WALL = slug; connectLive(); return loadPosts(true); },
     };
   }
 
@@ -935,6 +1047,8 @@
       _postMediaHtml: postMediaHtml,
       _reactionsHtml: reactionsHtml,
       _postHtml: postHtml,
+      _agentBadgeHtml: agentBadgeHtml,
+      _voteOffHtml: voteOffHtml,
       _REACTIONS: REACTIONS,
     };
   }

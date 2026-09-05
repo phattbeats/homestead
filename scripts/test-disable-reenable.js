@@ -217,10 +217,15 @@ function provision(db, username) {
   layout = modules.computeLayout(userModel.getEnabledModules(db, u.id).map(e => e.key));
   assert(layout.addRoomVisible, '5 enabled (agent missing) → addRoomVisible');
 
-  // 6 enabled → false (everything enabled)
+  // 6 enabled → still true (gazette not enabled yet)
   userModel.enableModule(db, u.id, 'agent');
   layout = modules.computeLayout(userModel.getEnabledModules(db, u.id).map(e => e.key));
-  assert(!layout.addRoomVisible, '6 enabled → !addRoomVisible');
+  assert(layout.addRoomVisible, '6 enabled (gazette missing) → addRoomVisible');
+
+  // 7 enabled → false (everything enabled)
+  userModel.enableModule(db, u.id, 'gazette');
+  layout = modules.computeLayout(userModel.getEnabledModules(db, u.id).map(e => e.key));
+  assert(!layout.addRoomVisible, '7 enabled → !addRoomVisible');
 }
 
 // -----------------------------------------------------------------------------

@@ -108,8 +108,12 @@ assert(/components\/feed\.js/.test(indexHtml), 'index.html loads /components/fee
 assert(/components\/feed\.js/.test(swSrc), 'sw.js precaches /components/feed.js');
 
 // Size budget — the component must stay small (vanilla JS, no framework).
+// Bumped from 40 KB to 50 KB during PHA-2846 cleanup: PHA-2657 (delete-own-post)
+// tipped it to 40,862 bytes and PHA-2831 (Hearth on the Porch) to 41,248.
+// 50 KB is the next clean plateau; reconfirm when the next 5 KB tier is hit.
+const FEED_COMPONENT_MAX_BYTES = 50 * 1024;
 const componentBytes = componentSrc.length;
-assert(componentBytes < 40000, `feed.js under 40 KB (actual ${componentBytes} bytes)`);
+assert(componentBytes < FEED_COMPONENT_MAX_BYTES, `feed.js under ${FEED_COMPONENT_MAX_BYTES} bytes (actual ${componentBytes} bytes)`);
 
 // ---------------------------------------------------------------------------
 // 2. Pure-helper unit tests via vm.runInContext.

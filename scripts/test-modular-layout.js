@@ -113,7 +113,10 @@ const GET = (urlPath) => fetch('http://127.0.0.1:3192' + urlPath, { headers: HEA
   // Start from all-6 → meadow.
   let layout = (await (await GET('/api/me/layout')).json());
   assertEq(layout.layout, 'meadow', 'all 6 enabled → meadow');
-  assertEq(layout.addRoomVisible, false, 'all enabled → !addRoomVisible');
+  // PHA-2659: this baseline enables the six pre-Gazette modules, so the
+  // pill correctly stays visible — gazette is still addable. Test 5
+  // below covers the genuinely-everything-on case.
+  assertEq(layout.addRoomVisible, true, 'six enabled → addRoomVisible (gazette still addable)');
   assertEq(layout.agentDrawer, true, 'agent enabled → agentDrawer');
   assertEq(layout.defaultRoute, '/porch.html', 'defaultRoute is porch');
   assertEq(layout.tabs.length, 6, '6 tabs');
@@ -191,7 +194,9 @@ const GET = (urlPath) => fetch('http://127.0.0.1:3192' + urlPath, { headers: HEA
   const agentTile = layout.tabs.find(t => t.key === 'agent');
   assert(agentTile, 'agent tile present');
   assertEq(agentTile.route, null, 'agent (drawer mode) has route null — opens FAB, not route');
-  assertEq(agentTile.icon, '💬', 'agent tile icon');
+  // PHA-2846: built-in icons are SVG paths under /modules/ (see
+  // public/modules.html + public/index.html for the dispatch rule).
+  assertEq(agentTile.icon, '/modules/agent.svg', 'agent tile icon');
   assertEq(agentTile.label, 'Agent', 'agent tile label');
   assertEq(layout.agentDrawer, true, 'agentDrawer flag is true');
   // Disable agent → tile disappears, agentDrawer false.
@@ -231,36 +236,40 @@ const GET = (urlPath) => fetch('http://127.0.0.1:3192' + urlPath, { headers: HEA
   await enable('chores');
   await enable('apps');
   await enable('agent');
+  await enable('gazette');
   layout = (await (await GET('/api/me/layout')).json());
-  assertEq(layout.addRoomVisible, false, 'all 6 enabled → !addRoomVisible');
+  assertEq(layout.addRoomVisible, false, 'all 7 enabled → !addRoomVisible');
 
-  // Disable agent → addRoomVisible true (1 module available).
-  await disable('agent');
+  // Disable gazette → addRoomVisible true (1 module available). It has
+  // to go before agent: gazette `requires` agent, so disabling agent
+  // first would trip the dependents_active 409 instead.
+  await disable('gazette');
   layout = (await (await GET('/api/me/layout')).json());
-  assertEq(layout.addRoomVisible, true, '5 enabled → addRoomVisible (agent available)');
+  assertEq(layout.addRoomVisible, true, '6 enabled → addRoomVisible (gazette available)');
 
   // Disable another → still addRoomVisible.
-  await disable('apps');
+  await disable('agent');
   layout = (await (await GET('/api/me/layout')).json());
-  assertEq(layout.addRoomVisible, true, '4 enabled → addRoomVisible (2 modules available)');
+  assertEq(layout.addRoomVisible, true, '5 enabled → addRoomVisible (2 modules available)');
 
-  // Re-enable apps → still addRoomVisible (agent missing).
-  await enable('apps');
-  layout = (await (await GET('/api/me/layout')).json());
-  assertEq(layout.addRoomVisible, true, '5 enabled (apps back) → addRoomVisible (agent available)');
-
-  // Re-enable agent → false again.
+  // Re-enable agent → still addRoomVisible (gazette missing).
   await enable('agent');
   layout = (await (await GET('/api/me/layout')).json());
-  assertEq(layout.addRoomVisible, false, 'all 6 re-enabled → !addRoomVisible');
+  assertEq(layout.addRoomVisible, true, '6 enabled (agent back) → addRoomVisible (gazette available)');
+
+  // Re-enable gazette → false again.
+  await enable('gazette');
+  layout = (await (await GET('/api/me/layout')).json());
+  assertEq(layout.addRoomVisible, false, 'all 7 re-enabled → !addRoomVisible');
 
   // -----------------------------------------------------------------------------
   // 6. GET /api/me extended envelope — sanity check the parent endpoint.
   // -----------------------------------------------------------------------------
   console.log('\nTest 6: /api/me extended envelope');
   me = (await (await GET('/api/me')).json());
-  assertEq(me.enabled_modules, ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent'],
-    '/api/me.enabled_modules === all 6 (registry order)');
+  // Test 5 left every module enabled, gazette included.
+  assertEq(me.enabled_modules, ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent', 'gazette'],
+    '/api/me.enabled_modules === all 7 (registry order)');
   assertEq(me.default_route, '/porch.html', '/api/me.default_route === "/porch.html"');
   assert(!me.user || !('password' in me.user), '/api/me.user does NOT include pass_hash');
   assert(!('pass_hash' in me), '/api/me does NOT include top-level pass_hash');
@@ -270,8 +279,8 @@ const GET = (urlPath) => fetch('http://127.0.0.1:3192' + urlPath, { headers: HEA
   // -----------------------------------------------------------------------------
   console.log('\nTest 7: GET /api/me/modules');
   const keys = (await (await GET('/api/me/modules')).json());
-  assertEq(keys, ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent'],
-    '/api/me/modules returns all 6 keys in registry order');
+  assertEq(keys, ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent', 'gazette'],
+    '/api/me/modules returns all 7 keys in registry order');
 
   // -----------------------------------------------------------------------------
   // 8. GET /api/modules — full registry for the add-a-room sheet.
@@ -279,9 +288,10 @@ const GET = (urlPath) => fetch('http://127.0.0.1:3192' + urlPath, { headers: HEA
   console.log('\nTest 8: GET /api/modules');
   const reg = (await (await GET('/api/modules')).json());
   assert(Array.isArray(reg), '/api/modules is an array');
-  assertEq(reg.length, 6, '/api/modules has 6 entries');
+  assertEq(reg.length, 7, '/api/modules has 7 entries');
   assertEq(reg[0].key, 'wall', '/api/modules[0] is wall');
   assertEq(reg[5].key, 'agent', '/api/modules[5] is agent');
+  assertEq(reg[6].key, 'gazette', '/api/modules[6] is gazette');
   // Every entry has the 16 manifest fields.
   for (const entry of reg) {
     assert(entry.key && entry.name && entry.icon && entry.room !== undefined,

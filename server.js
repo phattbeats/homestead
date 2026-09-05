@@ -38,6 +38,7 @@ const plexSync = require('./lib/sync/plex');
 const kavitaSync = require('./lib/sync/kavita');
 const agentTokens = require('./lib/agent-tokens');
 const agentEndpoints = require('./lib/agent-endpoints');
+const agentConnections = require('./lib/agent-connections');
 const appApiLog = require('./lib/app-api-log');
 const appInstall = require('./lib/app-install');
 const connectorInstall = require('./lib/connector-install');
@@ -49,19 +50,36 @@ const dedupMatcher = require('./lib/dedup/matcher');
 const calendarSources = require('./lib/calendar-sources');
 const secretBox = require('./lib/secret-box');
 const snapshot = require('./lib/snapshot');
+const gazette = require('./lib/gazette');
 const drawerDispatch = require('./lib/drawer-dispatch');
 const eventsDispatch = require('./lib/events-dispatch');
 const media = require('./lib/media');
 const walls = require('./lib/walls');
+const wallEvents = require('./lib/wall-events');
 const lists = require('./lib/lists');
+const houseRooms = require('./lib/house-rooms');
 const notifications = require('./lib/notifications');
 const analytics = require('./lib/analytics');
 const invites = require('./lib/invites');
 const wallMembers = require('./lib/wall-members');
 const porchSweep = require('./lib/porch/sweep');
 const porchContract = require('./lib/porch/participation-contract');
+const porchComprehension = require('./lib/porch/comprehension');
 const oidcLink = require('./lib/oidc-link');
 const mailbox = require('./lib/porch/mailbox');
+
+const hearthCharacters = require('./lib/hearth-characters');
+// PHA-2851: Hearth's inbound action surface — the house-actions the
+// drawer demo promised ("queue Part Two", "tell him the meme was mid").
+// Exposed twice on purpose: as provider tools inside lib/agent-runtime.js,
+// and as the plain REST routes below, both landing on the same
+// permission-checked functions.
+const hearthActions = require('./lib/hearth-actions');
+// PHA-2827.C: server-side Hearth runtime. Short-circuits the external
+// drawer POST when the user's character is `hearth` and a model key is
+// configured. See lib/agent-runtime.js for the provider adapter + SOUL.md
+// system prompt loader.
+const agentRuntime = require('./lib/agent-runtime');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -97,6 +115,10 @@ connectorWizard.migrate(db);
 // migrated after userModel so the FK resolves, same pattern as
 // agent_tokens / calendar_sources.
 agentEndpoints.migrate(db);
+// PHA-2880 (PHA-2855 phase 1): agent_connections — companion-mediated
+// pairing flow, separate table from agent_endpoints above (that path
+// stays untouched). Migrated after userModel for the same FK reason.
+agentConnections.migrate(db);
 // PHA-1620: calendar_sources + calendar_event_cache schema. Migrated
 // last so the FK to users(id) resolves, same boot-migration pattern.
 calendarSources.migrate(db);
@@ -120,6 +142,26 @@ porchContract.migrate(db);
 // after both agentTokens.migrate and walls.migrate.
 mailbox.migrate(db);
 analytics.migrate(db);
+// PHA-2829: Hearth character table + per-user seed from agents/hearth/SOUL.md.
+// FKs to users(id), so it runs after userModel.migrate (same pattern as
+// the other primitives above). The seed fires lazily on first agent
+// module enable — not at boot — so a fresh install doesn't create a
+// character row until the user actually wants Hearth.
+hearthCharacters.migrate(db);
+// PHA-2831 (PHA-2827.D): Hearth is a Porch citizen, not just a drawer
+// companion — ensure his built-in system account exists (or already
+// does) and is backfilled into every wall's membership, so
+// lib/porch/sweep.js's listAgentUserIds() and lib/walls.js's identity
+// UI (badge + vote-off) see him alongside any user-installed agent
+// characters. Idempotent; runs after walls.migrate() so there's
+// something to back-fill, and self-heals walls created since the last
+// boot on every restart.
+hearthCharacters.ensureBuiltinAgentUser(db);
+// PHA-2851: media_queue, the table behind Hearth's enqueue_media action.
+// FKs to users(id); its wall_post_id is a soft reference (see the module
+// header for why), so ordering against walls.migrate() is a courtesy
+// rather than a constraint — it still runs after it.
+hearthActions.migrate(db);
 // PHA-2207 (PHA-2200.6): invite codes. FKs to walls(slug), so it
 // runs after walls.migrate().
 invites.migrate(db);
@@ -130,6 +172,21 @@ invites.migrate(db);
 // primitive end-to-end.
 lists.migrate(db);
 lists.seed(db);
+// PHA-2852: house_rooms + house_room_members — rooms as LOCATIONS of
+// the house (HALL / DEN / KITCHEN), distinct from the `room` nav
+// discriminator in lib/modules.js. FK to users(id) so it runs after
+// userModel.migrate; it also adds the additive `events.room_id`
+// column, whose FK target is house_rooms, so it must run after the
+// events table exists (userModel.migrate) too. No seed() — the three
+// default rooms are PROPOSALS the first-run tutorial offers, and
+// nothing is written until the user accepts them.
+houseRooms.migrate(db);
+
+// PHA-2659: gazette_editions (the per-user, per-day edition cache).
+// FK to users(id), so it runs after userModel.migrate — same
+// boot-migration pattern as the other primitives. No seed: an edition
+// only exists once its reader has opened the sheet that day.
+gazette.migrate(db);
 
 // v0.1.0: web push subscriptions (PHA-1619)
 db.exec(`
@@ -669,6 +726,98 @@ app.get('/api/me/snapshot', auth, (req, res) => {
     res.status(500).json({ error: 'snapshot_build_failed' });
   }
 });
+
+// ---- PHA-2659: The Homestead Gazette ----
+//
+// GET /api/me/gazette/today — serve today's edition, minting it on the
+// first open of the day. This is the whole Gazette API surface;
+// docs/GAZETTE-DESIGN.md open question 1 (route naming) resolves here.
+//
+// Generation is lazy and per-user by design: the edition is NOT pushed
+// and NOT cron-generated, so a user who never opens the sheet never
+// spends a token. `?refresh=1` forces a re-mint for the same day —
+// the escape hatch for an edition that failed against a
+// temporarily-broken harness.
+//
+// The module toggle is the only thing that decides whether this route
+// answers — same `requireModuleEnabled` gate PHA-2811 put on
+// POST /api/tasks. The registry's `requires` edge means enabling
+// Gazette already pulled in the harness module it needs.
+app.get('/api/me/gazette/today', auth, requireModuleEnabled('gazette'), async (req, res) => {
+  const username = req.session.user && req.session.user.username;
+  if (!username) return res.status(401).json({ error: 'unauthorized' });
+  const me = userModel.getMe(db, username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+
+  const tz = snapshot.resolveTz(req);
+  const refresh = req.query.refresh === '1';
+
+  let ctx;
+  try {
+    ctx = gazette.assembleContext(db, username, { tz });
+  } catch (err) {
+    console.error('[gazette] context assembly failed', err);
+    return res.status(500).json({ error: 'gazette_context_failed' });
+  }
+
+  // Cache hit — the day's edition is already written. An 'unavailable'
+  // row is also a hit (a broken harness shouldn't be retried on every
+  // open) but is served with `retryable` so the sheet can offer the
+  // refresh instead of silently looking empty.
+  if (!refresh) {
+    const cached = gazette.getEdition(db, me.id, ctx.date);
+    if (cached) {
+      return res.json({ ...cached, retryable: cached.status === 'unavailable' });
+    }
+  }
+
+  // Thin-edition floor: nothing happened at all. Print the one line
+  // Homestead itself owns rather than paying the harness to say
+  // "nothing happened" in more words.
+  const sections = gazette.availableSections(ctx);
+  if (sections.length === 0) {
+    const thin = gazette.putEdition(db, me.id, ctx.date, {
+      tz,
+      status: 'thin',
+      edition: { lede: { headline: 'Quiet', body: gazette.THIN_NOTE }, briefs: [], editors_note: null },
+    });
+    return res.json({ ...thin, cached: false, retryable: false });
+  }
+
+  const { system, user } = gazette.buildPrompt(ctx);
+  const result = await agentRuntime.composeGazette({ system, user });
+
+  if (!result.ok) {
+    // Cache the failure for the day so a missing key doesn't re-dial
+    // the provider on every sheet open, but keep it retryable.
+    const failed = gazette.putEdition(db, me.id, ctx.date, {
+      tz,
+      status: 'unavailable',
+      edition: {},
+      error: result.status === 'no_key' ? 'no_key' : (result.lastError || result.status),
+    });
+    return res.status(200).json({ ...failed, cached: false, retryable: true });
+  }
+
+  let edition;
+  try {
+    edition = gazette.parseEdition(result.text, sections);
+  } catch (err) {
+    console.error('[gazette] unparseable harness output', err.message);
+    const failed = gazette.putEdition(db, me.id, ctx.date, {
+      tz, status: 'unavailable', edition: {}, error: err.message,
+    });
+    return res.status(200).json({ ...failed, cached: false, retryable: true });
+  }
+
+  const stored = gazette.putEdition(db, me.id, ctx.date, {
+    tz,
+    status: edition.briefs.length === 0 ? 'thin' : 'published',
+    edition,
+  });
+  res.json({ ...stored, cached: false, retryable: false });
+});
+
 // ---- PHA-2204 (PHA-2200.3): module / layout API surface ----
 //
 // Four read endpoints + two write endpoints:
@@ -729,6 +878,30 @@ app.post('/api/me/modules/:key/enable', auth, (req, res) => {
   const withRequirements = !!(req.body && req.body.withRequirements === true);
   try {
     const result = userModel.enableModule(db, u.id, key, { withRequirements });
+
+    // PHA-2829: when the agent module is first enabled for a user, seed
+    // the default Hearth character row from agents/hearth/SOUL.md +
+    // agents/hearth/IDENTITY.md. Idempotent — re-enabling the agent
+    // module does NOT clobber per-user edits (the seed function
+    // short-circuits if a row already exists). Fires the
+    // `module_first_enable` analytics event on the transition from
+    // "no character row" → "seeded row"; subsequent enables emit
+    // `module_enabled`. Uses the character row's absence as the
+    // first-enable signal so we don't need a separate ledger.
+    if (key === 'agent' && result.enabled) {
+      const hadHearthBefore = !!hearthCharacters.getCharacter(
+        db, u.id, hearthCharacters.CHARACTER_KEY_HEARTH);
+      hearthCharacters.seedDefaultHearthCharacter(db, u.id);
+      const isFirstEnable = !hadHearthBefore;
+      analytics.logEvent(db, {
+        kind: isFirstEnable ? 'module_first_enable' : 'module_enabled',
+        userId: u.id,
+        subjectType: 'module',
+        subjectId: key,
+        meta: { character: 'hearth' },
+      });
+    }
+
     res.json({
       enabled: result.enabled,
       also_enabled: result.also_enabled,
@@ -2004,6 +2177,105 @@ app.delete('/api/users/:username/agent-endpoints/:id', auth, requireAdmin, (req,
   res.json({ ok: true });
 });
 
+// ---- PHA-2880 (PHA-2855 phase 1): agent_connections — companion-mediated
+// pairing flow (OpenClaw / Claude Code / Codex tiles). Separate from the
+// agent-endpoints routes above; the Advanced/generic-webhook path is
+// untouched.
+//
+// GET /api/agent-connections — own connections, or (admin + ?user=)
+// another user's.
+app.get('/api/agent-connections', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  if (req.query.user) {
+    if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
+    const target = db.prepare('SELECT id FROM users WHERE username = ?').get(userModel.validateUsername(req.query.user) || '');
+    if (!target) return res.status(404).json({ error: 'not found' });
+    return res.json(agentConnections.list(db, target.id));
+  }
+  res.json(agentConnections.list(db, me.id));
+});
+// POST /api/agent-connections/pair — mint a pairing code for a provider
+// tile. Returns the connection row plus the one-time pairing code and
+// its expiry.
+app.post('/api/agent-connections/pair', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { provider, label = '', scopes = [] } = req.body || {};
+  try {
+    const minted = agentConnections.mintPairingCode(db, me.id, { provider, label, scopes });
+    res.json(minted);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+// POST /api/agent-connections/redeem-pairing-code — the local companion
+// redeems a code while session-authenticated as the SAME user who
+// minted it. Single-use, 10 min TTL. Returns the connection plus the
+// one-time plaintext secret on success.
+app.post('/api/agent-connections/redeem-pairing-code', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { code } = req.body || {};
+  const redeemed = agentConnections.redeemPairingCode(db, code, { userId: me.id });
+  if (!redeemed) return res.status(400).json({ error: 'invalid_or_expired_code' });
+  res.json(redeemed);
+});
+// PATCH /api/agent-connections/:id — rename (label only), or
+// rotate_secret=true / revoke=true for the corresponding action.
+// rotate and revoke are mutually exclusive with a plain rename in one
+// call — each PATCH performs exactly one of rename/rotate/revoke so the
+// one-time secret reveal semantics stay unambiguous.
+app.patch('/api/agent-connections/:id', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const { label, rotate_secret = false, revoke = false } = req.body || {};
+  try {
+    let updated;
+    if (revoke) {
+      updated = agentConnections.revoke(db, req.params.id, { ownerUserId: me.id });
+    } else if (rotate_secret) {
+      updated = agentConnections.rotateSecret(db, req.params.id, { ownerUserId: me.id });
+    } else if (label !== undefined) {
+      updated = agentConnections.rename(db, req.params.id, label, { ownerUserId: me.id });
+    } else {
+      return res.status(400).json({ error: 'nothing to update' });
+    }
+    if (!updated) return res.status(404).json({ error: 'not found' });
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ---- PHA-2829: Hearth first-open intro path ----
+// When a user opens the drawer for the first time after enabling the
+// Agent module, the server returns the seeded Hearth intro text
+// directly from the characters row (no external POST, no LLM call).
+// The SPA calls this on drawer open if it doesn't yet have a
+// `drawer_intro_seen` flag in localStorage.
+//
+// Idempotent — calling it twice returns the same text. Returns 404
+// if the user has no character row (i.e., hasn't enabled the Agent
+// module or has a custom character not named `hearth`). The SPA
+// uses a 404 here to know to fall back to whatever it was going to
+// do before Hearth existed.
+app.get('/api/drawer/intro', auth, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const character = hearthCharacters.getDefaultCharacter(db, me.id);
+  if (!character || character.character_key !== hearthCharacters.CHARACTER_KEY_HEARTH) {
+    return res.status(404).json({ error: 'no_default_character' });
+  }
+  res.json({
+    character: character.character_key,
+    intro_text: character.intro_text,
+    soul_source_sha: character.soul_source_sha,
+    identity_source_sha: character.identity_source_sha,
+    is_default: !!character.is_default,
+  });
+});
+
 // ---- PHA-1617.6: drawer backend — outbound POST + SSE consumer + retry/circuit breaker ----
 // Design doc §6.2–6.5. The drawer UI (PHA-1617.5) POSTs here with
 // {message, endpoint_id, conversation_id}; this route signs and forwards
@@ -2050,19 +2322,46 @@ app.post('/api/drawer', auth, async (req, res) => {
   // persistent record of recent dispatch health.
   const streakMap = (req.app && req.app.locals && req.app.locals.drawerStreakMap) || null;
 
+  // PHA-2827.C: log drawer_call_started BEFORE the dispatch so the
+  // analytics timeline matches the existing closed-enum contract
+  // (started → completed|failed). Subject is the endpoint row; the
+  // completed/failed event records whether the call took the server-
+  // runtime (Hearth) path or the external-POST path.
+  analytics.logEvent(db, {
+    userId: me.id,
+    kind: 'drawer_call_started',
+    subjectType: 'agent_endpoint',
+    subjectId: endpointId,
+    meta: {
+      conversation_id: conversationId,
+      hearth: false,
+    },
+  });
+
   const result = await drawerDispatch.dispatchDrawer(db, me, {
     message,
     endpointId,
     conversationId,
+    // byokKey: PHA-2827.C ships with server-staged env as the default
+    // (HEARTH_*_KEY). A future per-user BYOK column on `agent_endpoints`
+    // would feed through here; out of scope for C (tracked separately).
+    byokKey: '',
   });
+
   analytics.logEvent(db, {
     userId: me.id,
     kind: result.ok ? 'drawer_call_completed' : 'drawer_call_failed',
     subjectType: 'agent_endpoint',
     subjectId: endpointId,
     durationSeconds: Math.round((result.durationMs || 0) / 1000),
-    meta: { status_code: result.lastStatus || null, request_id: result.requestId || null,
-      conversation_id: conversationId, error: result.lastError || null },
+    meta: {
+      status_code: result.lastStatus || null,
+      request_id: result.requestId || null,
+      conversation_id: conversationId,
+      error: result.lastError || null,
+      hearth: !!result.hearth,
+      route: result.hearth ? 'server_runtime' : 'external_post',
+    },
   });
 
   // Update the streak after dispatch.
@@ -2097,6 +2396,34 @@ app.post('/api/drawer', auth, async (req, res) => {
   if (result.status === 'endpoint_not_found') {
     return res.status(404).json({ error: 'endpoint_not_found' });
   }
+  // PHA-2827.C: Hearth short-circuit fallbacks.
+  if (result.status === 'hearth_no_key') {
+    // No BYOK or server-staged key configured for the default Hearth
+    // character. Render the in-drawer prompt that points the user at the
+    // settings page (issue acceptance: negative case 3). 200 because the
+    // drawer UI is still alive; the message body explains.
+    return res.json({
+      request_id: result.requestId,
+      conversation_id: result.conversationId,
+      text: "Hearth needs a model key before I can answer. Add one in Settings → Agent, or ask your server admin to set HEARTH_LITELLM_KEY (or HEARTH_ANTHROPIC_PROXY_KEY / HEARTH_OPENAI_KEY).",
+      actions: [{ kind: 'open_settings', label: 'Open Settings', url: '/settings/agent' }],
+      duration_ms: 0,
+      hearth_no_key: true,
+    });
+  }
+  if (result.status === 'hearth_provider_error') {
+    // The provider rejected the call. Surface a graceful message and
+    // don't auto-trip the circuit breaker on the user's external
+    // endpoint (we never tried it).
+    return res.status(502).json({
+      error: 'hearth_provider_error',
+      message: 'Hearth reached its model provider but the call failed; try again or check provider status.',
+      last_status: result.lastStatus || null,
+      last_error: result.lastError || null,
+      request_id: result.requestId,
+      conversation_id: result.conversationId,
+    });
+  }
   if (result.status === 'endpoint_offline') {
     return res.status(502).json({
       error: 'endpoint_offline',
@@ -2120,6 +2447,13 @@ app.post('/api/drawer', auth, async (req, res) => {
       conversation_id: result.conversationId,
       text: result.text || '',
       ...(result.actions ? { actions: result.actions } : {}),
+      // PHA-2851: same payload the SSE path emits as `tool_result`
+      // events, for the Accept: application/json consumer.
+      ...(result.toolResults && result.toolResults.length
+        ? { tool_results: result.toolResults.map(tr => ({
+            action: tr.action, ok: !!tr.ok, chip: tr.chip || '', code: tr.code || null,
+          })) }
+        : {}),
       ...(typeof result.tokensIn === 'number' ? { tokens_in: result.tokensIn } : {}),
       ...(typeof result.tokensOut === 'number' ? { tokens_out: result.tokensOut } : {}),
       duration_ms: result.durationMs,
@@ -2155,6 +2489,21 @@ app.post('/api/drawer', auth, async (req, res) => {
     if (i > 0) await new Promise(r => setTimeout(r, 30));
     writeSse('chunk', { text: chunkList[i] });
   }
+  // PHA-2851: one `tool_result` event per house-action Hearth ran, after
+  // the prose and before `done`. A separate event rather than more
+  // `chunk` text so the drawer can render it as a chip — a claim the
+  // server stands behind ("this row exists") is a different kind of
+  // thing from the model's narration, and it should not be possible for
+  // the model to fake one by typing it.
+  for (const tr of (result.toolResults || [])) {
+    if (res.writableEnded) break;
+    writeSse('tool_result', {
+      action: tr.action,
+      ok: !!tr.ok,
+      chip: tr.chip || '',
+      code: tr.code || null,
+    });
+  }
   writeSse('done', {
     request_id: result.requestId,
     conversation_id: result.conversationId,
@@ -2164,6 +2513,43 @@ app.post('/api/drawer', auth, async (req, res) => {
   });
   res.end();
 });
+
+// ---- Hearth house-actions (PHA-2851) ----
+//
+// The same two operations Hearth calls as provider tools, exposed as
+// plain REST so a human, a script, or an installed app can invoke them
+// without a model in the loop. lib/hearth-actions.js owns the
+// permission checks, so the door you come through can't change what
+// you're allowed to do.
+//
+// `set-lights` from the issue is deliberately not here: the porch has no
+// lights integration and the drawer screenshot never promised one. An
+// endpoint that 200s for hardware nobody wired is the failure mode this
+// whole issue exists to fix.
+//
+// Scopes are per-action (lib/scope-display.js) — queueing media and
+// messaging people in the caller's name are different consents. Session
+// users and legacy user-level PATs sail through requireScope with
+// `scopes === null`, exactly like every other first-party route.
+function runHearthAction(actionName, req, res) {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const exec = hearthActions.execute(db, me, actionName, req.body || {});
+  if (!exec.ok) {
+    return res.status(exec.status || 400).json({
+      error: exec.code || 'action_failed',
+      message: exec.error,
+      ...(exec.field ? { field: exec.field } : {}),
+    });
+  }
+  return res.json({ ok: true, ...exec.result });
+}
+
+app.post('/api/actions/enqueue-media', auth, requireScope('write:actions:media_queue'),
+  (req, res) => runHearthAction('enqueue_media', req, res));
+
+app.post('/api/actions/mention-user', auth, requireScope('write:actions:mention'),
+  (req, res) => runHearthAction('mention_user', req, res));
 
 // ---- media (PHA-2149) ----
 // General-purpose content-addressed media store. Walls (PHA-2147.2) and
@@ -2253,8 +2639,51 @@ app.post('/api/walls/:slug/posts', auth, requireScope('write:walls:post'), (req,
   const me = userModel.getMe(db, req.session.user.username);
   if (!me) return res.status(401).json({ error: 'unknown_user' });
   try {
-    res.json(walls.createPost(req.params.slug, me.id, req.body || {}));
+    const post = walls.createPost(req.params.slug, me.id, req.body || {});
+    wallEvents.publish(req.params.slug, 'post', post);
+    res.json(post);
   } catch (e) { wallsErr(res, e); }
+});
+// PHA-2821: long-lived SSE stream so a wall live-updates for every member
+// who has it open — reuses the SSE wire format PHA-1899 established for
+// the drawer rather than standing up a second realtime transport. Unlike
+// the drawer's one-shot request/reply stream, this connection stays open
+// for the tab's lifetime; events are pushed in from wallEvents.publish()
+// at the write sites (post/comment create) instead of being generated
+// inline here.
+app.get('/api/walls/:slug/events', auth, requireWallReadScope, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  const slug = req.params.slug;
+  try { walls.assertMember(slug, me.id); } catch (e) { return wallsErr(res, e); }
+
+  res.status(200);
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders && res.flushHeaders();
+  // Tell the browser's native EventSource reconnect backoff, and send an
+  // immediate comment so proxies flush headers before the first real event.
+  res.write('retry: 3000\n');
+  res.write(': connected\n\n');
+
+  const unsubscribe = wallEvents.subscribe(slug, ({ event, data }) => {
+    if (res.writableEnded) return;
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  });
+  // Keepalive comment ping so idle proxies/load balancers don't time the
+  // connection out during quiet walls.
+  const heartbeat = setInterval(() => {
+    if (res.writableEnded) return;
+    res.write(': ping\n\n');
+  }, 25000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+  });
 });
 app.delete('/api/walls/:slug/posts/:postId', auth, (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
@@ -2288,7 +2717,9 @@ app.post('/api/walls/posts/:postId/comments', auth, (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
   if (!me) return res.status(401).json({ error: 'unknown_user' });
   try {
-    res.json(walls.createComment(req.params.postId, me.id, req.body && req.body.body));
+    const comment = walls.createComment(req.params.postId, me.id, req.body && req.body.body);
+    wallEvents.publish(comment.wallSlug, 'comment', comment);
+    res.json(comment);
   } catch (e) { wallsErr(res, e); }
 });
 
@@ -2360,35 +2791,6 @@ app.post('/api/mailbox/messages', auth, requireScope('write:mailbox'), (req, res
         })();
     res.json(mailbox.postMessage(db, params));
   } catch (e) { mailboxErr(res, e); }
-});
-
-// ---- Porch agent opt-out ("vote this agent off the porch", PHA-2645/2648) ----
-// Any wall member can toggle it — same "one-click, self-service" spirit as
-// a reaction, not an admin-gated moderation action. lib/porch/participation-
-// contract.js's isWallOptedOut() short-circuits every gate for that
-// (wall, agent) pair the instant this is set; POST/DELETE map to
-// setWallOptOut(bannedUntil=null i.e. indefinite)/clearWallOptOut.
-app.post('/api/walls/:slug/agents/:username/opt-out', auth, (req, res) => {
-  const me = userModel.getMe(db, req.session.user.username);
-  if (!me) return res.status(401).json({ error: 'unknown_user' });
-  try {
-    const { wall } = walls.assertMember(req.params.slug, me.id);
-    const target = userModel.getMe(db, req.params.username);
-    if (!target) return res.status(404).json({ error: 'not_found' });
-    porchContract.setWallOptOut(db, wall.id, target.id, null, new Date());
-    res.json({ ok: true });
-  } catch (e) { wallsErr(res, e); }
-});
-app.delete('/api/walls/:slug/agents/:username/opt-out', auth, (req, res) => {
-  const me = userModel.getMe(db, req.session.user.username);
-  if (!me) return res.status(401).json({ error: 'unknown_user' });
-  try {
-    const { wall } = walls.assertMember(req.params.slug, me.id);
-    const target = userModel.getMe(db, req.params.username);
-    if (!target) return res.status(404).json({ error: 'not_found' });
-    porchContract.clearWallOptOut(db, wall.id, target.id);
-    res.json({ ok: true });
-  } catch (e) { wallsErr(res, e); }
 });
 
 // ---- notification prefs + mentions (PHA-2218) ----
@@ -2487,6 +2889,44 @@ app.delete('/api/walls/:slug/members/:username', auth, requireAdmin, (req, res) 
     return res.status(500).json({ error: 'internal_error', detail: e && e.message });
   }
 });
+
+// ---- PHA-2647: Porch agent identity — "vote off the porch" wall opt-out ----
+// Admin-only, same tier as the wall CRUD/member routes above. Both the
+// per-post button and the wall-settings "Agents" toggle hit these same
+// two mutating routes — there's exactly one piece of state
+// (porch_wall_settings, via lib/porch/participation-contract.js) behind
+// both surfaces, so toggling one always shows up in the other.
+app.get('/api/walls/:slug/agents', auth, requireAdmin, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json({ agents: walls.listWallAgents(db, req.params.slug) });
+  } catch (e) {
+    if (e && e.status) return res.status(e.status).json({ error: e.code || 'error', message: e.message });
+    return res.status(500).json({ error: 'internal_error', detail: e && e.message });
+  }
+});
+app.post('/api/walls/:slug/agents/:username/opt-out', auth, requireAdmin, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json(walls.setAgentWallVisibility(db, req.params.slug, req.params.username, false));
+  } catch (e) {
+    if (e && e.status) return res.status(e.status).json({ error: e.code || 'error', message: e.message });
+    return res.status(500).json({ error: 'internal_error', detail: e && e.message });
+  }
+});
+app.post('/api/walls/:slug/agents/:username/opt-in', auth, requireAdmin, (req, res) => {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  try {
+    res.json(walls.setAgentWallVisibility(db, req.params.slug, req.params.username, true));
+  } catch (e) {
+    if (e && e.status) return res.status(e.status).json({ error: e.code || 'error', message: e.message });
+    return res.status(500).json({ error: 'internal_error', detail: e && e.message });
+  }
+});
+
 // GET /api/groups — admin-only list of group names so the wall-create UI
 // can populate its visibility='group' picker without a hardcoded list.
 // Returns the same set lib/user-model.js seeds (household / family /
@@ -2769,20 +3209,191 @@ app.delete('/api/list-items/:itemId', auth, requireScope('write:lists'), (req, r
   }
 });
 
+// ---- house rooms (PHA-2852) ----
+// Rooms as LOCATIONS of the house — HALL, DEN, KITCHEN. See
+// lib/house-rooms.js for why this is not the same thing as the `room`
+// nav discriminator in lib/modules.js.
+//
+// Auth posture: `auth` only, no requireScope(). These live under
+// /api/me/* and follow the same posture as /api/me/modules and
+// /api/me/layout — they are user-scoped by construction (every query
+// is keyed to the caller's own user id), and adding a `read:rooms` /
+// `write:rooms` pair would mean extending the LOCKED PHA-2201 §3
+// scope vocabulary in lib/scope-display.js. That's a deliberate
+// follow-up, not a thing to do quietly: until then an installed
+// third-party app inherits its user's room access, exactly as it
+// already does for /api/me/modules.
+//
+// Route order note: /api/me/rooms/proposals is declared BEFORE
+// /api/me/rooms/:slug, since Express matches in declaration order and
+// "proposals" is a syntactically valid slug. lib/house-rooms.js also
+// reserves that slug so nobody can create an unreachable room.
+
+// _roomsCaller — resolves the session user to a row, or writes the
+// 401 and returns null. Every room route starts with this.
+function _roomsCaller(req, res) {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) {
+    res.status(401).json({ error: 'unknown_user' });
+    return null;
+  }
+  return me;
+}
+
+function _roomsError(res, e, fallback) {
+  res.status(e.status || 500).json({ error: e.code || fallback });
+}
+
+app.get('/api/me/rooms', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    const includeArchived = req.query.include_archived === '1' || req.query.include_archived === 'true';
+    res.json({ rooms: houseRooms.listRooms(db, me.id, { includeArchived }) });
+  } catch (e) { _roomsError(res, e, 'rooms_failed'); }
+});
+
+// GET /api/me/rooms/proposals — the first-run tutorial's three stubs,
+// each flagged with whether the caller already has that slug live.
+app.get('/api/me/rooms/proposals', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    res.json(houseRooms.listProposals(db, me.id));
+  } catch (e) { _roomsError(res, e, 'proposals_failed'); }
+});
+
+// POST /api/me/rooms/proposals — accept-all-or-edit-and-accept. Body
+// omitted (or `{}`) accepts all three as proposed; `{ rooms: [...] }`
+// accepts an edited set. Idempotent: already-live slugs are reported
+// under `skipped` rather than rejected, so a half-finished tutorial
+// can be re-run.
+app.post('/api/me/rooms/proposals', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    const body = req.body || {};
+    const rooms = Object.prototype.hasOwnProperty.call(body, 'rooms') ? body.rooms : undefined;
+    res.status(201).json(houseRooms.acceptProposals(db, me.id, rooms));
+  } catch (e) { _roomsError(res, e, 'proposals_failed'); }
+});
+
+app.post('/api/me/rooms', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    res.status(201).json(houseRooms.createRoom(db, me.id, req.body || {}));
+  } catch (e) { _roomsError(res, e, 'room_failed'); }
+});
+
+app.get('/api/me/rooms/:slug', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    res.json(houseRooms.getRoom(db, me.id, req.params.slug));
+  } catch (e) { _roomsError(res, e, 'room_failed'); }
+});
+
+app.patch('/api/me/rooms/:slug', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    res.json(houseRooms.updateRoom(db, me.id, req.params.slug, req.body || {}));
+  } catch (e) { _roomsError(res, e, 'room_failed'); }
+});
+
+// DELETE is a SOFT delete — stamps archived_at. The row and any
+// events tagged to it survive; PATCH { archived: false } restores.
+app.delete('/api/me/rooms/:slug', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    res.json(houseRooms.archiveRoom(db, me.id, req.params.slug));
+  } catch (e) { _roomsError(res, e, 'room_failed'); }
+});
+
+// GET /api/me/rooms/:slug/events — the acceptance query, "events
+// happening in HALL today": ?from=2026-08-30&to=2026-08-30. Rows come
+// back with room_slug/room_label joined on as columns so the Gazette
+// can print "6:00 — Blake call — HALL" from a single request.
+app.get('/api/me/rooms/:slug/events', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit, 10) : undefined;
+    res.json({
+      events: houseRooms.listEventsInRoom(db, me.id, req.params.slug, {
+        from: req.query.from,
+        to: req.query.to,
+        limit,
+      }),
+    });
+  } catch (e) { _roomsError(res, e, 'room_events_failed'); }
+});
+
+// Members: owner manages, members read (the whole ACL — richer
+// per-room grants are the v2 conversation PHA-2852 defers).
+app.get('/api/me/rooms/:slug/members', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    res.json({ members: houseRooms.listMembers(db, me.id, req.params.slug) });
+  } catch (e) { _roomsError(res, e, 'room_members_failed'); }
+});
+
+app.post('/api/me/rooms/:slug/members', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    res.status(201).json({ members: houseRooms.addMember(db, me.id, req.params.slug, req.body || {}) });
+  } catch (e) { _roomsError(res, e, 'room_members_failed'); }
+});
+
+app.delete('/api/me/rooms/:slug/members/:userId', auth, (req, res) => {
+  const me = _roomsCaller(req, res);
+  if (!me) return;
+  try {
+    res.json({ members: houseRooms.removeMember(db, me.id, req.params.slug, req.params.userId) });
+  } catch (e) { _roomsError(res, e, 'room_members_failed'); }
+});
+
 // ---- events ----
+// PHA-2852: events can be tagged with a house room. `room_id` accepts
+// either a room id or a slug on write and is stored as the id; reads
+// decorate every row with room_slug/room_label/room_icon, left null
+// for rooms the caller can't see rather than leaking another user's
+// labels. `?room=` filters ("events happening in HALL today").
 app.get('/api/events', auth, (req, res) => {
   const { from, to } = req.query;
-  if (from && to) {
-    return res.json(db.prepare('SELECT * FROM events WHERE date >= ? AND date <= ? ORDER BY date, time').all(from, to));
+  const roomRef = req.query.room || req.query.room_id;
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  if (roomRef) {
+    try {
+      return res.json(houseRooms.listEventsInRoom(db, me.id, String(roomRef), { from, to }));
+    } catch (e) {
+      return res.status(e.status || 500).json({ error: e.code || 'events_failed' });
+    }
   }
-  res.json(db.prepare('SELECT * FROM events ORDER BY date, time').all());
+  const rows = (from && to)
+    ? db.prepare('SELECT * FROM events WHERE date >= ? AND date <= ? ORDER BY date, time').all(from, to)
+    : db.prepare('SELECT * FROM events ORDER BY date, time').all();
+  res.json(houseRooms.joinRoomColumns(db, me.id, rows));
 });
 app.post('/api/events', auth, (req, res) => {
   const { title, date, time = '', notes = '', owner = 'all' } = req.body || {};
   if (!title || !date) return res.status(400).json({ error: 'title and date required' });
   if (!userModel.validateAssignee(db, owner)) return res.status(400).json({ error: 'unknown owner' });
-  const r = db.prepare('INSERT INTO events (title,date,time,notes,owner,created_by) VALUES (?,?,?,?,?,?)')
-    .run(title, date, time, notes, owner, req.session.user.username);
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  let roomId;
+  try {
+    roomId = houseRooms.resolveRoomIdForWrite(db, me.id, (req.body || {}).room_id);
+  } catch (e) {
+    return res.status(e.status || 500).json({ error: e.code || 'invalid_room' });
+  }
+  const r = db.prepare('INSERT INTO events (title,date,time,notes,owner,created_by,room_id) VALUES (?,?,?,?,?,?,?)')
+    .run(title, date, time, notes, owner, req.session.user.username, roomId);
   const created = db.prepare('SELECT * FROM events WHERE id = ?').get(r.lastInsertRowid);
   // PHA-1617.7: fire-and-forget events webhook fan-out (see /api/tasks).
   eventsDispatch.dispatchEventForAssignee(db, app.locals.eventsStreakMap, owner, 'event_created', { event: created }).catch(() => {});
@@ -2793,8 +3404,21 @@ app.put('/api/events/:id', auth, (req, res) => {
   if (!e) return res.status(404).json({ error: 'not found' });
   const b = { ...e, ...req.body };
   if (!userModel.validateAssignee(db, b.owner)) return res.status(400).json({ error: 'unknown owner' });
-  db.prepare('UPDATE events SET title=?,date=?,time=?,notes=?,owner=? WHERE id=?')
-    .run(b.title, b.date, b.time, b.notes, b.owner, e.id);
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+  // Only re-resolve when the caller actually sent room_id — an
+  // untouched tag must survive a PUT that doesn't mention it, even if
+  // this caller can't see that room.
+  let roomId = e.room_id;
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'room_id')) {
+    try {
+      roomId = houseRooms.resolveRoomIdForWrite(db, me.id, req.body.room_id);
+    } catch (err) {
+      return res.status(err.status || 500).json({ error: err.code || 'invalid_room' });
+    }
+  }
+  db.prepare('UPDATE events SET title=?,date=?,time=?,notes=?,owner=?,room_id=? WHERE id=?')
+    .run(b.title, b.date, b.time, b.notes, b.owner, roomId, e.id);
   res.json(db.prepare('SELECT * FROM events WHERE id = ?').get(e.id));
 });
 app.delete('/api/events/:id', auth, (req, res) => {
@@ -2857,6 +3481,18 @@ app.delete('/api/services/:id', auth, (req, res) => {
   // FK ON DELETE CASCADE on service_health_state handles the cleanup.
   if (healthCheckerHandle) healthCheckerHandle.refresh();
   res.json({ ok: true });
+});
+// PHA-2643: admin-only "delegate apps to users" — reassigns a tile's owner
+// without the admin-tightened path also blocking the existing self-serve
+// add/edit sheet, which every user still uses to create their own tiles.
+app.put('/api/admin/services/:id/owner', auth, requireAdmin, (req, res) => {
+  const s = db.prepare('SELECT * FROM services WHERE id = ?').get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'not found' });
+  const { owner } = req.body || {};
+  if (!userModel.validateAssignee(db, owner)) return res.status(400).json({ error: 'unknown owner' });
+  db.prepare('UPDATE services SET owner=? WHERE id=?').run(owner, s.id);
+  const row = db.prepare('SELECT * FROM services WHERE id = ?').get(s.id);
+  res.json(withHealth([row])[0]);
 });
 
 // ---- Entity-graph sync admin endpoints (PHA-1624 Phase B-1, PHA-1873) ----
@@ -3865,23 +4501,86 @@ function startHealthChecker() {
   });
 }
 
-// ---- Porch sweep scheduler boot (PHA-2646) ----
+// ---- Porch sweep scheduler boot (PHA-2646 / PHA-2844) ----
 // Same independent-setInterval pattern as startHealthChecker above.
-// onDecision is left at lib/porch/sweep.js's default (log-only) stub.
-// The participation contract (PHA-2645, lib/porch/participation-contract.js)
-// has landed, but nothing yet produces the candidate comment text per
-// register it gates — that needs the media-comprehension package + a
-// per-register LLM draft (still PHA-2636). Once that exists, onDecision
-// here becomes: build {character, comprehension, candidates} for the
-// decision, call porchContract.decide(db, ...), and on a 'post'/'riff'
-// action actually create the reaction/comment + call
-// porchSweep.recordAction(). Until then this loop only ever decides
-// WHEN an agent should consider a post, never whether it reacts.
+//
+// onDecision closes the loop PHA-2827.D left open: sweep.js decides
+// WHEN an agent (Hearth or any installed character) should consider a
+// post; from here we resolve who they are (porchContract.resolveCharacter),
+// build what they'd see (porchComprehension.buildComprehension), draft
+// what they might say per allowed register (agentRuntime.draftPorchCandidate),
+// and hand all of it to porchContract.decide() — the anti-lame gate
+// that decides whether any of it actually goes out. A 'post'/'riff'
+// verdict creates a real comment through lib/walls.js (same path a
+// human comment takes) and calls porchSweep.recordAction() so the
+// daily budget/cooldown ledger stays honest; 'silent' does nothing.
+//
+// An agent with no `characters` row (resolveCharacter returns null —
+// an installed agent nobody has wired a character for yet) falls back
+// to the pre-PHA-2844 log-only behavior rather than erroring: sweep
+// proposing a decision for an agent doesn't guarantee that agent has
+// anything to say yet.
+async function porchOnDecision(decision, log) {
+  const character = porchContract.resolveCharacter(db, decision.agentUserId);
+  if (!character) {
+    log(`decision skipped, no character row yet: wall=${decision.wallId} post=${decision.postId} agent=${decision.agentUserId}`);
+    return;
+  }
+
+  const post = db.prepare('SELECT * FROM wall_posts WHERE id = ?').get(decision.postId);
+  if (!post) {
+    log(`decision skipped, post gone: wall=${decision.wallId} post=${decision.postId} agent=${decision.agentUserId}`);
+    return;
+  }
+
+  const comprehension = await porchComprehension.buildComprehension(db, {
+    post,
+    agentUserId: decision.agentUserId,
+  });
+
+  const allowed = porchContract.allowedRegisters(character, character.isForeignAgent);
+  const drafts = await Promise.all(allowed.map((register) => agentRuntime.draftPorchCandidate({
+    comprehension,
+    register,
+    postText: post.text_body || '',
+  })));
+  const candidates = drafts
+    .filter((d) => d && d.ok && d.text)
+    .map((d) => ({ register: d.register, text: d.text }));
+
+  const action = porchContract.decide(db, {
+    wallId: decision.wallId,
+    postId: decision.postId,
+    agentUserId: decision.agentUserId,
+    character,
+    comprehension,
+    candidates,
+  });
+
+  if (action.action === 'silent') {
+    log(`silent (${action.reason}): wall=${decision.wallId} post=${decision.postId} agent=${decision.agentUserId}`);
+    return;
+  }
+
+  const comment = walls.createComment(decision.postId, decision.agentUserId, action.text);
+  wallEvents.publish(comment.wallSlug, 'comment', comment);
+  porchSweep.recordAction(db, {
+    wallId: decision.wallId,
+    agentUserId: decision.agentUserId,
+    postId: decision.postId,
+    authorUserId: decision.authorUserId,
+    actionKind: 'comment',
+  });
+  log(`${action.action} (${action.register}): wall=${decision.wallId} post=${decision.postId} agent=${decision.agentUserId} comment=${comment.id}`);
+}
+
 let porchSweepHandle = null;
 function startPorchSweep() {
   if (porchSweepHandle) return;
+  const log = (...args) => console.log('[porch-sweep]', ...args);
   porchSweepHandle = porchSweep.start(db, {
-    log: (...args) => console.log('[porch-sweep]', ...args),
+    log,
+    onDecision: (decision) => porchOnDecision(decision, log),
   });
 }
 if (require.main === module) {

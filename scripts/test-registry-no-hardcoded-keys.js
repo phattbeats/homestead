@@ -48,15 +48,20 @@ const fs = require('fs');
 const path = require('path');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
-const KEYS = ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent'];
+const KEYS = ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent', 'gazette'];
 
 // Strict regex: literal between matching quote boundaries.
-const STRICT_KEY_RE = new RegExp(`(['"\`])(wall|lists|calendar|chores|apps|agent)\\1`, 'g');
+const STRICT_KEY_RE = new RegExp(`(['"\`])(wall|lists|calendar|chores|apps|agent|gazette)\\1`, 'g');
 
 const EXCLUDE_DIRS = new Set([
   'node_modules', '.git', 'data', 'tmp', 'coverage',
   'homestead-data', 'homestead-cache', 'dist', 'build',
   '.cache', '.next', 'worktrees',
+  // Generated smoke-output artifacts under verify-out/ are produced by the
+  // regression smoke (scripts/smoke-*.js) and contain DB schema dumps.
+  // They are NEVER render code; the entire directory should be excluded
+  // from the audit by convention.
+  'verify-out',
 ]);
 
 const EXCLUDE_FILES = new Set([
@@ -135,6 +140,37 @@ const EXCLUDE_FILES = new Set([
   // sibling acceptance tests above — literal keys are test config
   // driving /api/me/modules/:key/enable|disable, not render code.
   'scripts/test-2811-task-module-gate.js',
+  // PHA-2829 first-enable test: drives userModel.enableModule(db, brandon.id, 'agent')
+  // to assert the Hearth first-enable flow. Same category as the sibling
+  // acceptance tests above — literal key is test fixture data, not render code.
+  'scripts/test-2829-first-enable.js',
+  // PHA-2659 Gazette acceptance test: drives the module toggle, the
+  // requires/dependents cascade, and GET /api/me/gazette/today through
+  // literal keys. Same category as the sibling acceptance tests above —
+  // test config, not render code. Note that the Gazette's PRODUCTION
+  // code is deliberately absent from this list: lib/gazette.js, the
+  // applyLayout launcher loop and the sheet renderer all read
+  // `open_mode` / the server-sent `sheets[]` rather than naming a key,
+  // so they pass the audit on their own merits.
+  'scripts/test-2659-gazette.js',
+  // PHA-2823 cross-page bottom-nav component: the `LINKS` array is a separate
+  // navigation namespace (Wall/Porch/Rooms/Invites/Connect), not the registry
+  // namespace. The `'wall'` literal is intentionally kept here as an extra
+  // entry alongside the registry-derived nav; it's a separate concern.
+  // Same as `'agent'` for appendDrawerStreaming('agent') in public/index.html.
+  'public/components/app-nav.js',
+  // Generated smoke-output artifacts under verify-out/ are produced by the
+  // regression smoke (scripts/smoke-*.js) and contain DB schema dumps.
+  // They are NEVER render code; everything under this directory should be
+  // excluded from the audit by convention.
+  'verify-out/',
+  'verify-out/smoke-2704-db-shape.json',
+  // PHA-2852 house-rooms acceptance test: asserts which modules
+  // declare the new optional `room_kinds` field, which means naming
+  // 'calendar'/'chores'/'lists' and naming 'wall' as the counter-
+  // example that omits it. Same category as the sibling acceptance
+  // tests above — the literals ARE the assertion, not a render branch.
+  'scripts/test-2852-house-rooms.js',
 ]);
 
 const SCAN_EXTS = new Set([
