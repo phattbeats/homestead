@@ -73,7 +73,7 @@ console.log('Test 1: factory validation');
   // Valid construction returns the adapter contract shape.
   const src = graphSource.makeGraphSource({
     provider: 'ms365',
-    account_id: 'brandon@phatt.tech',
+    account_id: 'owner@example.com',
     access_token: 'fake-token',
     refresh_token: 'fake-refresh',
     expires_at: '2099-01-01T00:00:00Z',
@@ -136,7 +136,7 @@ console.log('\nTest 2: listEvents with mocked Graph');
 
   const adapter = graphSource.makeGraphSource({
     provider: 'ms365',
-    account_id: 'brandon@phatt.tech',
+    account_id: 'owner@example.com',
     access_token: 'fake-token-xyz',
     refresh_token: 'fake-refresh-xyz',
     expires_at: '2099-01-01T00:00:00Z', // never expires during this test
@@ -334,7 +334,7 @@ console.log('\nTest 6: syncSource through calendar-sources');
   }));
   const r = db.prepare(`INSERT INTO calendar_sources
     (user_id, provider, account_id, calendar_id, base_url, display_name, color, cred_blob, created_by)
-    VALUES (NULL, 'ms365', 'brandon@phatt.tech', 'AAMkAGRiYW5kb24t', NULL, 'MS365 Calendar', '#7c9eb8', ?, 'brandon')`)
+    VALUES (NULL, 'ms365', 'owner@example.com', 'AAMkAGRiYW5kb24t', NULL, 'MS365 Calendar', '#7c9eb8', ?, 'owner')`)
     .run(credBlob);
   const id = r.lastInsertRowid;
 

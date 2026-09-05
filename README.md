@@ -284,7 +284,7 @@ UI lists google in the add-source picker but marks it as
          -b cookies.txt \
          -d '{
            "provider": "ms365",
-           "account_id": "brandon@phatt.vip",
+           "account_id": "owner@example.com",
            "calendar_id": "AAMkAGRiYW5kb24tY2Fs",
            "display_name": "Work",
            "color": "#8a9ec4",

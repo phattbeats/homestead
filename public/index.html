@@ -7,6 +7,10 @@
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#FFFBF5">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<!-- PHA-2846 / v0.5.10: apple-touch-icon falls back to the canonical 512px install icon so iOS Safari / shared-sheet home-screen installs show the same opening-door mark instead of a generic thumbnail. SVG opens aren't supported by Safari's home-screen install path, hence the .png. -->
+<link rel="apple-touch-icon" href="/icon-512.png">
+<!-- Same canonical mark, also as a 32x32 PNG, in case any browser fetches /favicon.ico before /favicon.svg. -->
+<link rel="alternate icon" href="/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="stylesheet" href="/brand.css">
 <!-- PHA-2200.5 / PHA-2206: shared wall feed styles. Same file the
      standalone /porch.html loads, so the in-place mount inside
@@ -177,7 +181,8 @@ nav{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:space-ar
 nav button,nav a{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:600;
   color:var(--muted);padding:4px 14px;border-radius:14px;transition:color .3s var(--ease);text-decoration:none}
 nav button.on{color:var(--accent)}
-nav .ico{font-size:20px}
+nav .ico{font-size:20px;display:inline-flex;align-items:center;justify-content:center;line-height:1;width:24px;height:24px}
+nav .ico img{display:block;width:22px;height:22px;object-fit:contain}
 
 /* ---- PHA-2205 (PHA-2200.4): layout-aware nav + Add rooms pill ---- */
 /* feed-only layout: hide the bottom nav entirely; the Add-rooms pill
@@ -224,6 +229,35 @@ body[data-layout="meadow"] #addRoomPill:active{transform:scale(.96)}
   display:flex;align-items:center;justify-content:center;opacity:.95;flex-shrink:0}
 #drawerFab:active{transform:scale(.92)}
 #drawerFab.off{opacity:0;pointer-events:none;transform:scale(.7)}
+/* PHA-2659: sheet-module launchers, docked beside the chat FAB. Same
+   size and shadow so the header reads as one cluster; lighter fill so
+   the chat FAB stays the primary affordance. Each button carries the
+   module's registry icon. */
+#sheetLaunchers{display:flex;align-items:center;gap:8px}
+#sheetLaunchers:empty{display:none}
+.sheetFab{width:38px;height:38px;border-radius:50%;background:var(--card,#fff);
+  border:1px solid var(--line);box-shadow:0 6px 16px rgba(43,38,34,.18);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;
+  transition:transform .35s var(--ease)}
+.sheetFab:active{transform:scale(.92)}
+.sheetFab img{width:22px;height:22px;display:block}
+/* Gazette sheet: a newspaper column, not a form. Serif body, rules
+   between sections, two-column briefs where there's room. */
+.gz-masthead{text-align:center;border-bottom:2px solid var(--ink);padding-bottom:10px;margin-bottom:4px}
+.gz-masthead h2{font-family:Georgia,'Times New Roman',serif;font-size:30px;letter-spacing:.5px;margin:0}
+.gz-dateline{font-size:11px;letter-spacing:.14em;text-transform:uppercase;opacity:.65;margin-top:6px}
+.gz-body{font-family:Georgia,'Times New Roman',serif;line-height:1.55}
+.gz-lede{border-bottom:1px solid var(--line);padding:14px 0}
+.gz-lede h3{font-size:22px;margin:0 0 6px;font-family:Georgia,'Times New Roman',serif}
+.gz-briefs{display:grid;grid-template-columns:1fr 1fr;gap:0 22px;padding-top:12px}
+@media (max-width:560px){.gz-briefs{grid-template-columns:1fr}}
+.gz-brief{padding:0 0 14px;break-inside:avoid}
+.gz-brief .gz-kicker{font-size:10px;letter-spacing:.16em;text-transform:uppercase;opacity:.6;
+  font-family:system-ui,sans-serif;margin-bottom:4px}
+.gz-brief h4{font-size:16px;margin:0 0 4px;font-family:Georgia,'Times New Roman',serif}
+.gz-brief p{margin:0;font-size:14px}
+.gz-note{border-top:1px solid var(--line);padding-top:10px;margin-top:2px;
+  font-size:13px;font-style:italic;opacity:.8}
 #drawer{position:fixed;top:0;right:0;bottom:0;width:min(420px,100vw);background:var(--bg);
   border-left:1px solid var(--line);box-shadow:-12px 0 40px rgba(0,0,0,.08);
   transform:translateX(100%);transition:transform .42s var(--ease);z-index:80;
@@ -249,6 +283,17 @@ body[data-layout="meadow"] #addRoomPill:active{transform:scale(.96)}
 .drawer-msg.system{align-self:center;background:var(--accent-soft);color:var(--accent);
   font-size:12px;font-weight:600;border-radius:10px;padding:6px 12px}
 .drawer-msg.error{align-self:center;background:#F5E4E4;color:#9B3A3A;font-size:13px;border-radius:10px;padding:8px 12px;border:1px solid #E5C9C9}
+/* PHA-2851: tool-result chip — "(✓ queued Part Two)". Left-aligned with
+   the agent bubble because it belongs to Hearth's turn, but visually
+   quieter than prose: this is a receipt, not something he said. The
+   failed variant borrows the error palette without the full-width
+   treatment, so a refused permission reads as "that didn't happen"
+   rather than "the drawer broke". */
+.drawer-chip{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;
+  max-width:88%;font-size:12px;font-weight:600;line-height:1.35;padding:5px 11px;
+  border-radius:999px;background:var(--accent-soft);color:var(--accent);border:1px solid transparent}
+.drawer-chip .ico{font-size:11px}
+.drawer-chip.failed{background:#F5E4E4;color:#9B3A3A;border-color:#E5C9C9}
 .drawer-typing{display:inline-flex;gap:4px;padding:2px 0;align-items:center}
 .drawer-typing span{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:typeBounce 1.2s infinite}
 .drawer-typing span:nth-child(2){animation-delay:.15s}
@@ -394,7 +439,13 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 .tok-list{display:flex;flex-direction:column;gap:8px}
 .tok-row{display:flex;gap:12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--surface);align-items:center}
 .tok-mark{width:36px;height:36px;border-radius:50%;background:var(--accent-soft);color:var(--accent);flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700}
+  display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;
+  /* PHA-2846: when .tok-mark contains an <img>, fill the disc.
+     Built-in modules ship an /modules/{key}.svg icon; the SPA
+     renders it here for the Apps sheet rows + App detail header.
+     Emoji glyphs ignore these rules and render as text. */
+  overflow:hidden}
+.tok-mark img{display:block;width:28px;height:28px;object-fit:contain}
 .tok-info{flex:1;min-width:0;min-width:0}
 .tok-label{font-weight:700;font-size:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .tok-prefix{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:11px;
@@ -482,6 +533,12 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
            matches them in HTML comments (not stripped), so the
            registry-key guard would flag the word. -->
       <button id="drawerFab" type="button" title="Open chat" aria-label="Open chat drawer">💬</button>
+      <!-- PHA-2659: launchers for open-mode-sheet modules (the Gazette
+           today). Populated by applyLayout() from the layout payload's
+           sheets[] array - one button per enabled sheet module, empty
+           and invisible when the user has none. Sheet modules have no
+           nav room, so this header slot is their only affordance. -->
+      <span id="sheetLaunchers"></span>
     </div>
   </header>
   <main>
@@ -556,11 +613,28 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
          matches each button against the layout payload's `room` field.
          The `home` button is always on (no module backing it — it's
          the always-visible "today + tasks + events" landing page). -->
-    <button data-p="home" class="on"><span class="ico">🏠</span>Home</button>
-    <button data-p="tasks"><span class="ico">✓</span>Tasks</button>
-    <button data-p="r-lists"><span class="ico">📝</span>Lists</button>
-    <button data-p="r-calendar"><span class="ico">📅</span>Calendar</button>
-    <button data-p="svc"><span class="ico">🛰️</span>Apps</button>
+    <!-- PHA-2846 / v0.5.10: bottom-nav icon migration to the canonical
+         brand SVG set. Previous emoji literals (🏠 ✓ 📝 📅 🛰️ 📸)
+         were a documented exception to PHA-2209's audit because the
+         nav predated PHA-2777 (canonical brand system). Each tab now
+         references the matching built-in module's SVG:
+           * Home (always-on landing, no module backing) -> /icon.svg
+             (the canonical opening-door mark — the same one /favicon.svg
+             serves).
+           * Tasks / Lists / Calendar / Apps -> /modules/{chores,lists,
+             calendar,apps}.svg — same files the Add Rooms picker
+             already uses, no new assets shipped.
+           * Porch -> /modules/porch.svg (Hearth lantern).
+         Sized 22px (matches the previous `font-size:20px` emoji cap
+         height at 1.1x line-height) and centred via flex; the nav's
+         existing `gap:3px` between icon and label stays. Emoji font
+         fallback is intentionally absent — if a module SVG is missing
+         the `alt` text shows the label alone. -->
+    <button data-p="home" class="on" aria-label="Home"><span class="ico"><img src="/icon.svg" alt="" width="22" height="22"></span>Home</button>
+    <button data-p="tasks" aria-label="Tasks"><span class="ico"><img src="/modules/chores.svg" alt="" width="22" height="22"></span>Tasks</button>
+    <button data-p="r-lists" aria-label="Lists"><span class="ico"><img src="/modules/lists.svg" alt="" width="22" height="22"></span>Lists</button>
+    <button data-p="r-calendar" aria-label="Calendar"><span class="ico"><img src="/modules/calendar.svg" alt="" width="22" height="22"></span>Calendar</button>
+    <button data-p="svc" aria-label="Apps"><span class="ico"><img src="/modules/apps.svg" alt="" width="22" height="22"></span>Apps</button>
     <!-- PHA-2200.5 / PHA-2206: in-place Porch tab. Replaces the old
          `navPorch` <a> that linked to /porch.html as a separate page;
          now it's a real tab button that switches to #page-wall. Hidden
@@ -569,7 +643,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
          string (matches the page div id, not the module key) so we
          use the room name 'porch' to avoid colliding with the
          PHA-2209 no-hardcoded-keys audit. -->
-    <button data-p="porch" id="navWall" style="display:none"><span class="ico">📸</span>Porch</button>
+    <button data-p="porch" id="navWall" style="display:none" aria-label="Porch"><span class="ico"><img src="/modules/porch.svg" alt="" width="22" height="22"></span>Porch</button>
   </nav>
 
   <!-- PHA-1898 + PHA-2498: meta-agent chat drawer.
@@ -835,6 +909,36 @@ function applyLayout(layout) {
   if (fab) {
     if (layout.agentDrawer === true) fab.classList.remove('off');
     else fab.classList.add('off');
+  }
+
+  // PHA-2659: sheet-module launchers. `layout.sheets` carries one entry
+  // per enabled open-mode-sheet module ({key, icon, label}); the server
+  // derives that list from the registry's open_mode, so this loop never
+  // names a module key and the PHA-2209 Amendment 3 audit stays clean.
+  // Rebuilt wholesale on every applyLayout so a module toggled off in
+  // the add-a-room sheet loses its launcher immediately.
+  const launchers = document.getElementById('sheetLaunchers');
+  if (launchers) {
+    launchers.innerHTML = '';
+    for (const s of (Array.isArray(layout.sheets) ? layout.sheets : [])) {
+      if (!s || !s.key) continue;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'sheetFab';
+      b.dataset.sheet = s.key;
+      b.title = s.label || s.key;
+      b.setAttribute('aria-label', 'Open ' + (s.label || s.key));
+      if (typeof s.icon === 'string' && s.icon.startsWith('/')) {
+        const img = document.createElement('img');
+        img.src = s.icon;
+        img.alt = '';
+        b.appendChild(img);
+      } else {
+        b.textContent = s.icon || '📰';
+      }
+      b.onclick = () => openSheetModule(s.key, s.label || s.key);
+      launchers.appendChild(b);
+    }
   }
 
   // First-active page redirect: if the currently-active page is now
@@ -1481,6 +1585,110 @@ function openSheet(html){$('#sheet').innerHTML=html;$('#modal').classList.add('o
 function closeSheet(){$('#modal').classList.remove('on')}
 $('#modal').onclick=e=>{if(e.target.id==='modal')closeSheet()};
 
+/* PHA-2659: open-mode-sheet module dispatch.
+
+   SHEET_RENDERERS is a registration table, not a branch: a sheet
+   module's key maps to the async renderer that owns its surface. The
+   launcher loop in applyLayout() never reads a key literal - it just
+   hands whatever key the server sent to openSheetModule(), so adding a
+   second sheet module means adding one row here and nothing else. */
+const SHEET_RENDERERS = {
+  gazette: renderGazetteSheet,
+};
+
+async function openSheetModule(key, label){
+  const render = SHEET_RENDERERS[key];
+  if (!render) return;
+  openSheet(`<div class="gz-loading" style="padding:24px 0;text-align:center;opacity:.6">Setting the type…</div>`);
+  try {
+    await render();
+  } catch (_) {
+    openSheet(`<h2>${esc(label)}</h2><p class="muted">Couldn't reach the press. Try again in a moment.</p>
+      <button class="link" onclick="closeSheet()">Close</button>`);
+  }
+}
+
+/* The Gazette sheet. The edition arrives as structured JSON and is
+   rendered here through esc() - harness prose never reaches innerHTML
+   unescaped, so a compromised or confused model can't inject markup
+   into the sheet.
+
+   The three edition states each get a real surface: `published` prints
+   normally, `thin` prints the quiet-day line without empty columns
+   (the thin-edition rule is layout as much as copy - no reserved space
+   for sections that aren't there), and `unavailable` explains itself
+   and offers the refresh instead of showing a blank page. */
+async function renderGazetteSheet(){
+  const r = await fetch('/api/me/gazette/today', {headers:{'X-Homestead-Tz': Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'}});
+  if (!r.ok) {
+    const err = r.status === 403 ? 'The Gazette isn\'t one of your rooms right now.' : 'Couldn\'t reach the press.';
+    openSheet(`<h2>The Homestead Gazette</h2><p class="muted">${esc(err)}</p>
+      <button class="link" onclick="closeSheet()">Close</button>`);
+    return;
+  }
+  const d = await r.json();
+  paintGazette(d);
+}
+
+function paintGazette(d){
+  const ed = (d && d.edition) || {};
+  /* Parse YYYY-MM-DD as a LOCAL date. `new Date('2026-08-30')` is
+     parsed as UTC midnight, which prints as the 29th for any reader
+     west of Greenwich - a morning paper dated yesterday. */
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec((d && d.date) || '');
+  const dateObj = parts ? new Date(+parts[1], +parts[2] - 1, +parts[3]) : new Date();
+  const when = dateObj.toLocaleDateString(undefined,
+    {weekday:'long', month:'long', day:'numeric'});
+
+  const masthead = `<div class="gz-masthead">
+      <h2>The Homestead Gazette</h2>
+      <div class="gz-dateline">${esc(when)} · Published each dawn by Hearth</div>
+    </div>`;
+
+  if (d && d.status === 'unavailable') {
+    const why = d.error === 'no_key'
+      ? 'Your assistant needs a model key before it can write the edition. Add one under Settings.'
+      : 'The edition didn\'t come back from your assistant this morning.';
+    openSheet(`${masthead}<div class="gz-body"><p class="gz-note">${esc(why)}</p></div>
+      <button class="link" onclick="refreshGazette()">Try again</button>
+      <button class="link" onclick="closeSheet()">Close</button>`);
+    return;
+  }
+
+  const lede = ed.lede ? `<div class="gz-lede">
+      <h3>${esc(ed.lede.headline)}</h3>
+      <p>${esc(ed.lede.body)}</p>
+    </div>` : '';
+
+  /* No briefs -> no grid at all. An empty two-column shell is exactly
+     the padded quiet day the thin-edition rule forbids. */
+  const briefs = (Array.isArray(ed.briefs) && ed.briefs.length)
+    ? `<div class="gz-briefs">${ed.briefs.map(b => `<div class="gz-brief">
+          <div class="gz-kicker">${esc(b.title)}</div>
+          <h4>${esc(b.headline)}</h4>
+          <p>${esc(b.body)}</p>
+        </div>`).join('')}</div>`
+    : '';
+
+  const note = ed.editors_note
+    ? `<div class="gz-note">${esc(ed.editors_note)}</div>` : '';
+
+  openSheet(`${masthead}<div class="gz-body">${lede}${briefs}${note}</div>
+    <button class="link" onclick="refreshGazette()">Re-run the press</button>
+    <button class="link" onclick="closeSheet()">Close</button>`);
+}
+
+async function refreshGazette(){
+  openSheet(`<div style="padding:24px 0;text-align:center;opacity:.6">Resetting the type…</div>`);
+  try {
+    const r = await fetch('/api/me/gazette/today?refresh=1', {headers:{'X-Homestead-Tz': Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'}});
+    paintGazette(await r.json());
+  } catch (_) {
+    openSheet(`<h2>The Homestead Gazette</h2><p class="muted">Couldn't reach the press.</p>
+      <button class="link" onclick="closeSheet()">Close</button>`);
+  }
+}
+
 /* Generic user picker: Everyone + every USERS entry, with color dot per option.
    Selection: the picked button's background becomes the user's color. */
 function userPickerHtml(id, sel){
@@ -1618,6 +1826,41 @@ function openSvcSheet(id){
   };
 }
 async function delSvc(id){if(confirm('Remove this service?')){await api('DELETE',`/api/services/${id}`);closeSheet();await refresh()}}
+
+// PHA-2643: admin-only reassignment view — every app tile in one place,
+// instead of long-pressing tiles one at a time to find "Whose app?".
+async function openDelegateAppsSheet(){
+  const svcs=await api('GET','/api/services');
+  const rows=svcs.map(s=>`
+    <div class="user-row">
+      <div class="ucolor">${esc(s.icon||'🔗')}</div>
+      <div class="uinfo">
+        <div class="udisp">${esc(s.name)}</div>
+        <div class="uuname">${esc(s.url)}</div>
+      </div>
+    </div>
+    ${userPickerHtml('f-del-'+s.id, s.owner||'all')}
+    <button class="link" data-save="${s.id}" style="margin:2px 0 18px">Save</button>`).join('');
+  openSheet(`<h2>Delegate apps</h2>
+    <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">Assign who each app tile belongs to.</p>
+    <div class="tok-list">${rows || '<div class="empty" style="padding:24px 4px">No apps yet.</div>'}</div>
+    <button class="link" style="margin-top:14px;width:100%;text-align:center" onclick="closeSheet()">Done</button>`);
+  svcs.forEach(s=>segWire('f-del-'+s.id));
+  document.querySelectorAll('[data-save]').forEach(btn=>{
+    btn.onclick=async()=>{
+      const id=btn.dataset.save;
+      const owner=segVal('f-del-'+id)||'all';
+      const label=btn.textContent;
+      btn.textContent='Saving…';
+      try{
+        await api('PUT',`/api/admin/services/${id}/owner`,{owner});
+        btn.textContent='Saved';
+        setTimeout(()=>{btn.textContent=label},1200);
+        await refresh();
+      }catch(e){btn.textContent=(e&&e.error)||'Failed';setTimeout(()=>{btn.textContent=label},1500)}
+    };
+  });
+}
 $('#addSvc').onclick=()=>openSvcSheet();
 
 // PHA-2586: lists page "+ New list" — defers to createListFlow, which
@@ -1634,12 +1877,14 @@ $('#avatarBtn').onclick=()=>{
   const isAdmin=!!(ME&&ME.isAdmin);
   openSheet(`<h2>${esc(ME.display)}</h2>
     <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-calendar-sources">📅 Calendar sources</button>
+    <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-connect-agent">🤝 Connect an agent</button>
     <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-connected-agents">🔌 Connected agents</button>
     <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-agent-endpoints">🛰️ Agent endpoints</button>
     <button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-apps">📦 Apps</button>
     ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-settings">⚙️ Settings · manage household</button>`:''}
     ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-walls">🧱 Walls · manage walls</button>`:''}
     ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-invites">✉️ Invites · manage porch codes</button>`:''}
+    ${isAdmin?`<button class="link" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)" id="f-delegate-apps">🗂️ Delegate apps · assign tiles to users</button>`:''}
     <h3>Push notifications</h3>
     <p style="font-size:13px;color:var(--muted);margin:-4px 0 10px">Get reminders for chores due today and your turn to take a rotating chore.</p>
     <div id="install-chip-host"></div>
@@ -1655,8 +1900,10 @@ $('#avatarBtn').onclick=()=>{
     $('#f-settings').onclick=()=>openSettingsSheet();
     $('#f-walls').onclick=()=>openWallsAdminSheet();
     $('#f-invites').onclick=()=>{window.location.href='/invites.html'};
+    $('#f-delegate-apps').onclick=()=>openDelegateAppsSheet();
   }
   $('#f-calendar-sources').onclick=()=>openCalendarSourcesSheet();
+  $('#f-connect-agent').onclick=()=>openConnectAgentWizardSheet();
   $('#f-connected-agents').onclick=()=>openConnectedAgentsSheet();
   $('#f-agent-endpoints').onclick=()=>openAgentEndpointsListSheet();
   $('#f-apps').onclick=()=>openAppsSheet();
@@ -2477,6 +2724,216 @@ function openAgentEndpointSheet(defaultKind, afterCreate){
   };
 }
 
+/* ---- Connect an agent wizard (PHA-2882 / PHA-2855 phase 3) ----
+   Companion-mediated counterpart to the agent-endpoints/agent-tokens
+   sheets above. Three sheets:
+     1. openConnectAgentWizardSheet() — provider tiles (OpenClaw, Claude
+        Code, Codex) + a "Manage connections" link + an Advanced
+        disclosure that reuses openAgentEndpointSheet() unchanged (the
+        generic-webhook path from PHA-2813 is untouched by this feature).
+     2. openAgentConnectionPairSheet(provider, providerLabel) — mints a
+        pairing code (POST /api/agent-connections/pair), shows the code
+        + a copy-paste companion command, and polls GET
+        /api/agent-connections every 3s until this connection flips to
+        'active' (the companion redeemed it) or the sheet is closed.
+     3. openAgentConnectionsListSheet() — list/rename/revoke, mirroring
+        the PHA-2201 app-consent revoke UX and the tok-row list pattern
+        used by Connected agents / Agent endpoints above. */
+const CONNECT_AGENT_PROVIDERS = [
+  { key: 'openclaw', icon: '🦾', label: 'OpenClaw' },
+  { key: 'claude_code', icon: '🌀', label: 'Claude Code' },
+  { key: 'codex', icon: '🤖', label: 'Codex' },
+];
+
+function connectAgentProviderLabel(key){
+  const p = CONNECT_AGENT_PROVIDERS.find(p => p.key === key);
+  return p ? p.label : key;
+}
+
+function openConnectAgentWizardSheet(){
+  const tiles = CONNECT_AGENT_PROVIDERS.map(p => `
+    <button class="link connect-agent-tile" data-provider="${esc(p.key)}"
+      style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)">
+      <span aria-hidden="true" style="font-size:22px">${p.icon}</span>
+      <span>
+        <div style="font-weight:600">${esc(p.label)}</div>
+        <div style="font-size:12px;color:var(--muted)">Pair with a ${esc(p.label)} companion running on your own machine</div>
+      </span>
+    </button>`).join('');
+
+  openSheet(`<h2>Connect an agent</h2>
+    <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">Pick the kind of agent you're connecting. Homestead mints a short-lived pairing code &mdash; run one command in your companion and it's linked.</p>
+    ${tiles}
+    <button class="link" id="connect-agent-manage" style="display:block;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--line)">📋 Manage connections</button>
+    <details style="margin-top:14px">
+      <summary style="cursor:pointer;color:var(--muted);font-size:13px">Advanced &mdash; generic webhook</summary>
+      <p style="font-size:13px;color:var(--muted);margin:8px 0">No pairing code, no polling &mdash; you provide the URL and Homestead hands you an HMAC secret directly. This is the existing agent-endpoints path.</p>
+      <button class="btn btn-secondary" id="connect-agent-advanced">Add a generic webhook endpoint</button>
+    </details>
+    <button class="link" style="margin-top:14px;width:100%;text-align:center" onclick="closeSheet()">Cancel</button>`);
+
+  document.querySelectorAll('.connect-agent-tile').forEach(btn => {
+    btn.onclick = () => {
+      const key = btn.dataset.provider;
+      openAgentConnectionPairSheet(key, connectAgentProviderLabel(key));
+    };
+  });
+  $('#connect-agent-manage').onclick = () => openAgentConnectionsListSheet();
+  $('#connect-agent-advanced').onclick = () => openAgentEndpointSheet('events');
+}
+
+function openAgentConnectionPairSheet(provider, providerLabel){
+  let pollTimer = null;
+  let closed = false;
+
+  const stopPolling = () => { if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } };
+  const origClose = window.closeSheet;
+  const wrappedClose = () => { closed = true; stopPolling(); origClose(); };
+
+  openSheet(`<h2>Connect ${esc(providerLabel)}</h2>
+    <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">Minting a pairing code&hellip;</p>
+    <div class="err" id="pair-err"></div>
+    <button class="link" style="margin-top:14px;width:100%;text-align:center" id="pair-cancel">Cancel</button>`);
+  $('#pair-cancel').onclick = wrappedClose;
+
+  (async () => {
+    let minted;
+    try {
+      minted = await api('POST', '/api/agent-connections/pair', { provider, label: providerLabel, scopes: [] });
+    } catch (e) {
+      if (closed) return;
+      $('#pair-err').textContent = (e && e.error) || 'Failed to mint a pairing code';
+      return;
+    }
+    if (closed) return;
+
+    const origin = window.location.origin;
+    const command = `curl -X POST ${origin}/api/agent-connections/redeem-pairing-code \\\n  -H "Authorization: Bearer <YOUR_HOMESTEAD_TOKEN>" \\\n  -H "Content-Type: application/json" \\\n  -d '{"code":"${minted.pairing_code}"}'`;
+
+    openSheet(`<h2>Connect ${esc(providerLabel)}</h2>
+      <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">On the machine running your ${esc(providerLabel)} companion, run the command below. It needs a Homestead personal access token &mdash; mint one under <b>Connected agents</b> first if you don't have one yet.</p>
+      <div class="secret-card" style="text-align:center;font-size:28px;letter-spacing:4px;padding:14px">${esc(minted.pairing_code)}</div>
+      <p style="font-size:12px;color:var(--muted);margin:8px 0">Expires in ${esc(String(agentConnectionsTtlMinutes(minted)))} minutes &mdash; single use.</p>
+      <div class="secret-card" id="pair-cmd">
+        <div id="pair-cmd-text" style="white-space:pre-wrap;font-size:12px">${esc(command)}</div>
+        <div class="copy-row">
+          <span class="copied" id="pair-copied">✓ Copied</span>
+          <button class="link" id="pair-copy" type="button">Copy</button>
+        </div>
+      </div>
+      <p style="font-size:13px;color:var(--muted);margin:14px 0 0" id="pair-status">Waiting for the companion to redeem this code&hellip;</p>
+      <button class="link" style="margin-top:14px;width:100%;text-align:center" id="pair-cancel-2">Cancel</button>`);
+
+    $('#pair-copy').onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(command);
+        const el = $('#pair-copied');
+        el.classList.add('on');
+        setTimeout(() => el.classList.remove('on'), 2200);
+      } catch (e) {
+        alert('Clipboard write blocked — please select the text manually.');
+      }
+    };
+    $('#pair-cancel-2').onclick = wrappedClose;
+
+    const poll = async () => {
+      if (closed) return;
+      try {
+        const conns = await api('GET', '/api/agent-connections');
+        const row = conns.find(c => c.id === minted.id);
+        if (closed) return;
+        if (row && row.status === 'active') {
+          stopPolling();
+          openAgentConnectionsListSheet();
+          return;
+        }
+        if (row && row.status === 'revoked') {
+          stopPolling();
+          const el = $('#pair-status');
+          if (el) el.textContent = 'This pairing code was cancelled — start over to try again.';
+          return;
+        }
+      } catch (e) {
+        // transient — keep polling silently
+      }
+      if (!closed) pollTimer = setTimeout(poll, 3000);
+    };
+    pollTimer = setTimeout(poll, 3000);
+  })();
+}
+
+function agentConnectionsTtlMinutes(minted){
+  if (!minted || !minted.pairing_code_expires_at) return 10;
+  const ms = new Date(minted.pairing_code_expires_at + 'Z').getTime() - Date.now();
+  return Math.max(1, Math.round(ms / 60000));
+}
+
+async function openAgentConnectionsListSheet(){
+  const conns = await api('GET', '/api/agent-connections');
+  openAgentConnectionsListSheetWith(conns);
+}
+
+function openAgentConnectionsListSheetWith(conns){
+  const providerIcon = { openclaw: '🦾', claude_code: '🌀', codex: '🤖' };
+  const rows = conns.map(c => {
+    const stateChip = c.status === 'revoked'
+      ? '<span class="pill" style="background:var(--muted)">revoked</span>'
+      : c.status === 'pending'
+        ? '<span class="pill" style="background:#a78b3a">pending</span>'
+        : '<span class="pill" style="background:#7c9a72">active</span>';
+    const lastUsed = c.last_used_at
+      ? `last used ${esc(new Date(c.last_used_at + 'Z').toLocaleString())}`
+      : 'never used';
+    const label = c.label || connectAgentProviderLabel(c.provider);
+    return `<div class="tok-row" data-id="${esc(c.id)}">
+      <div class="tok-mark" aria-hidden="true">${providerIcon[c.provider] || '🔌'}</div>
+      <div class="tok-info">
+        <div class="tok-label">${esc(label)}${stateChip}</div>
+        <div class="tok-meta">${esc(connectAgentProviderLabel(c.provider))} · created ${c.created_at ? esc(new Date(c.created_at + 'Z').toLocaleDateString()) : ''}</div>
+        <div class="tok-meta">${lastUsed}</div>
+      </div>
+      <div class="tok-actions">
+        ${c.status !== 'revoked' ? `<button class="link" data-act="rename">Rename</button><button class="link danger" data-act="revoke">Revoke</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  openSheet(`<h2>Connections</h2>
+    <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">Agents paired through the "Connect an agent" wizard. Revoking is immediate.</p>
+    <div class="tok-list">${rows || '<div class="empty" style="padding:24px 4px">No connections yet.</div>'}</div>
+    <button class="btn" id="conn-add" style="margin-top:14px">+ Connect an agent</button>
+    <button class="link" style="margin-top:14px;width:100%;text-align:center" onclick="closeSheet()">Done</button>`);
+
+  document.querySelectorAll('.tok-row').forEach(row => {
+    const id = row.dataset.id;
+    const conn = conns.find(x => String(x.id) === id);
+    if (!conn) return;
+    const renameBtn = row.querySelector('[data-act="rename"]');
+    if (renameBtn) renameBtn.onclick = async () => {
+      const next = prompt('Rename connection', conn.label || connectAgentProviderLabel(conn.provider));
+      if (next == null) return;
+      try {
+        await api('PATCH', `/api/agent-connections/${id}`, { label: next });
+        await openAgentConnectionsListSheet();
+      } catch (e) {
+        alert((e && e.error) || 'Rename failed');
+      }
+    };
+    const revokeBtn = row.querySelector('[data-act="revoke"]');
+    if (revokeBtn) revokeBtn.onclick = async () => {
+      if (!confirm(`Revoke "${conn.label || connectAgentProviderLabel(conn.provider)}"?\n\nThis agent will lose access immediately. This cannot be undone.`)) return;
+      try {
+        await api('PATCH', `/api/agent-connections/${id}`, { revoke: true });
+        await openAgentConnectionsListSheet();
+      } catch (e) {
+        alert((e && e.error) || 'Revoke failed');
+      }
+    };
+  });
+
+  $('#conn-add').onclick = () => openConnectAgentWizardSheet();
+}
+
 /* ---- Settings → Apps (PHA-2201.4 / PHA-2232) ----
    Design note PHA-2201 §2 (install flow) / §5 (revoke). Three sheets:
      1. openAppsSheet() — every app the user has on, built-in AND
@@ -2492,6 +2949,19 @@ function openAgentEndpointSheet(defaultKind, afterCreate){
         PHA-2230) inside this sheet, then consent -> install. The
         newly-minted app token is shown exactly once via the existing
         copy-once reveal (openTokenRevealSheet, PHA-1617.3 pattern). */
+// PHA-2846: shared icon renderer for the Apps sheet + App detail
+// header. Built-in modules ship a path-style icon ("/modules/{key}.svg");
+// third-party manifests ship an emoji string. We render <img> for the
+// former, an escaped emoji span for the latter. The registry's icon
+// field stays a string (16-field contract preserved).
+function appIconHtml(icon) {
+  const fallback = '📦';
+  if (typeof icon === 'string' && icon.startsWith('/modules/')) {
+    return `<img src="${esc(icon)}" alt="" aria-hidden="true">`;
+  }
+  return esc(icon || fallback);
+}
+
 async function openAppsSheet(){
   const apps = await api('GET','/api/apps');
   openAppsSheetWith(apps);
@@ -2500,7 +2970,7 @@ async function openAppsSheet(){
 function openAppsSheetWith(apps){
   const rows = apps.map(a=>`
     <div class="tok-row app-row" data-key="${esc(a.key)}">
-      <div class="tok-mark" aria-hidden="true">${esc(a.icon||'📦')}</div>
+      <div class="tok-mark" aria-hidden="true">${appIconHtml(a.icon)}</div>
       <div class="tok-info">
         <div class="tok-label">${esc(a.name)}${a.builtin?' <span class="badge">built-in</span>':''}</div>
         <div class="tok-meta">v${esc(a.version||'?')} · ${esc(a.author||'unknown')}</div>
@@ -2541,7 +3011,7 @@ function openAppDetailSheetWith(app){
     ? `<p style="font-size:12px;color:var(--muted)">Built-in modules aren't tracked in the app activity log — calls go through your own session, not an app-scoped token.</p>`
     : `<div id="app-activity"><p class="empty" style="padding:14px 0">Loading activity…</p></div>`;
 
-  openSheet(`<h2>${esc(app.icon||'📦')} ${esc(app.name)}${app.builtin?' <span class="badge">built-in</span>':''}</h2>
+  openSheet(`<h2>${appIconHtml(app.icon)} ${esc(app.name)}${app.builtin?' <span class="badge">built-in</span>':''}</h2>
     <p style="font-size:13px;color:var(--muted);margin:-10px 0 14px">v${esc(app.version||'?')} · by ${esc(app.author||'unknown')}${app.description?' — '+esc(app.description):''}</p>
     <h3>What this app can do</h3>
     <ul class="scope-list" style="list-style:none;margin-bottom:14px">${scopesHtml}</ul>
@@ -3463,6 +3933,27 @@ function appendDrawerMsg(role, text) {
   return div;
 }
 
+// PHA-2851: render one house-action receipt — "(✓ queued Part Two)".
+// textContent throughout: the chip text is server-authored but it
+// embeds a media title that ultimately came from a synced library, so
+// it gets the same defense-in-depth every other drawer string gets.
+function appendDrawerChip(tr) {
+  const slot = $('#drawerMsgs');
+  const empty = slot.querySelector('.drawer-empty');
+  if (empty) empty.remove();
+  const div = document.createElement('div');
+  div.className = `drawer-chip${tr && tr.ok ? '' : ' failed'}`;
+  const ico = document.createElement('span');
+  ico.className = 'ico';
+  ico.textContent = tr && tr.ok ? '✓' : '✕';
+  const label = document.createElement('span');
+  label.textContent = (tr && tr.chip) || (tr && tr.action) || '';
+  div.append(ico, label);
+  slot.appendChild(div);
+  slot.scrollTop = slot.scrollHeight;
+  return div;
+}
+
 function appendDrawerStreaming(role) {
   const slot = $('#drawerMsgs');
   const empty = slot.querySelector('.drawer-empty');
@@ -3524,7 +4015,15 @@ async function sendDrawerMessage(text) {
       await consumeSseStream(res, streaming, acc);
     } else if (ct.includes('application/json')) {
       const data = await res.json().catch(() => ({}));
-      finalizeStreaming(streaming, data.text || JSON.stringify(data));
+      const jsonText = data.text || '';
+      if (jsonText) finalizeStreaming(streaming, jsonText);
+      else streaming.remove();
+      // PHA-2851: same receipts as the SSE path, for the single-shot
+      // JSON reply.
+      (data.tool_results || []).forEach(appendDrawerChip);
+      if (!jsonText && !(data.tool_results || []).length) {
+        appendDrawerMsg('agent', JSON.stringify(data));
+      }
     } else {
       const raw = await res.text();
       finalizeStreaming(streaming, raw);
@@ -3565,6 +4064,15 @@ async function consumeSseStream(res, el, acc) {
       const ev = parseSseBlock(block);
       if (!ev) continue;
       if (ev.event === 'done') return;
+      // PHA-2851: house-action receipts arrive after the prose and
+      // before `done`. If the model called a tool without narrating,
+      // the streaming bubble is still empty — drop it rather than
+      // leaving three typing dots hanging above the chip forever.
+      if (ev.event === 'tool_result' && ev.data && typeof ev.data === 'object') {
+        if (!text) { el.remove(); }
+        appendDrawerChip(ev.data);
+        continue;
+      }
       if (ev.event === 'chunk' && ev.data && typeof ev.data.text === 'string') {
         text += ev.data.text;
         finalizeStreaming(el, text);

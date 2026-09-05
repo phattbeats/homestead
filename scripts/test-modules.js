@@ -56,7 +56,17 @@ function freshDb() {
   return { db, tmpDir, dbPath };
 }
 
+// The grandfathered six: the pre-modularity modules PHA-2202's
+// one-time backfill grants to users that exist at migration time. This
+// list is HISTORY and does not grow — a module registered after that
+// backfill shipped is never retroactively enabled for anyone.
 const SIX = ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent'];
+
+// The current registry, spelled out on purpose. This is the drift
+// guard: deriving it from modules.MODULE_KEYS would compare the
+// registry to itself and catch nothing. Adding a module means editing
+// this line, which is exactly the point.
+const REGISTERED = [...SIX, 'gazette'];
 
 console.log('PHA-2203 module-registry tests\n');
 
@@ -68,10 +78,10 @@ console.log('PHA-2203 module-registry tests\n');
   assert(typeof modules.REGISTRY === 'object' && modules.REGISTRY !== null, 'modules.REGISTRY is an object');
 
   const keys = Object.keys(modules.REGISTRY);
-  assertEq(keys, SIX, 'REGISTRY has exactly six built-in keys in declared order');
+  assertEq(keys, REGISTERED, 'REGISTRY has exactly the registered keys in declared order');
 
   // Every built-in must have key === registry key (no mismatched fields).
-  for (const k of SIX) {
+  for (const k of REGISTERED) {
     const entry = modules.REGISTRY[k];
     assert(entry && entry.key === k, `registry[${k}].key === "${k}"`);
   }
@@ -79,7 +89,7 @@ console.log('PHA-2203 module-registry tests\n');
   // Amendment 2: only 'wall' is default-enabled for new users.
   assertEq(modules.DEFAULT_ENABLED, ['wall'], "DEFAULT_ENABLED === ['wall']");
   assert(modules.REGISTRY.wall.default_enabled === true, 'wall.default_enabled === true');
-  for (const k of ['lists', 'calendar', 'chores', 'apps', 'agent']) {
+  for (const k of REGISTERED.filter(k => k !== 'wall')) {
     assert(modules.REGISTRY[k].default_enabled === false, `${k}.default_enabled === false`);
   }
 }
@@ -89,7 +99,7 @@ console.log('PHA-2203 module-registry tests\n');
 // -----------------------------------------------------------------------------
 {
   console.log('\nTest 2: every built-in has all 16 required fields with correct types');
-  for (const k of SIX) {
+  for (const k of REGISTERED) {
     const entry = modules.REGISTRY[k];
     const err = validator.validateEntryShape(entry);
     assert(err === null, `${k} passes manifest-shape validator`, err ? err.message : '');
@@ -130,7 +140,7 @@ console.log('PHA-2203 module-registry tests\n');
   assert(modules.isModuleKey(null) === false, 'isModuleKey(null) === false');
 
   // listModules returns in registry order.
-  assertEq(modules.listModules().map(m => m.key), SIX, 'listModules() returns entries in registry order');
+  assertEq(modules.listModules().map(m => m.key), REGISTERED, 'listModules() returns entries in registry order');
 }
 
 // -----------------------------------------------------------------------------
@@ -274,7 +284,12 @@ console.log('PHA-2203 module-registry tests\n');
   const defaults = userModel.getDefaultEnabledModules();
   assertEq(defaults.map(e => e.key), ['wall'], 'getDefaultEnabledModules returns [{ key: "wall", ...full registry entry }]');
   const wall = defaults[0];
-  assert(wall && wall.key === 'wall' && wall.name === 'Porch' && wall.icon === '📸', 'default entry is the full wall registry entry');
+  // PHA-2846: built-in icons are now SVG paths under /modules/ rather than
+  // emoji literals (third-party manifests still use emoji strings — see
+  // the dispatch rule in public/modules.html + public/index.html). The
+  // 16-field contract (PHA-2201) is preserved: `icon` is still a non-empty
+  // string. The registry's wall entry is the source of truth.
+  assert(wall && wall.key === 'wall' && wall.name === 'Porch' && wall.icon === '/modules/porch.svg', 'default entry is the full wall registry entry (wall icon is /modules/porch.svg per PHA-2846)');
 }
 
 // -----------------------------------------------------------------------------
@@ -284,7 +299,7 @@ console.log('PHA-2203 module-registry tests\n');
   console.log('\nTest 8: modules.js is a pure data export (no side effects)');
   // Re-require fresh and check that the registry has not been mutated.
   const fresh = require('../lib/modules');
-  assertEq(Object.keys(fresh.REGISTRY), SIX, 'fresh require yields the same six keys');
+  assertEq(Object.keys(fresh.REGISTRY), REGISTERED, 'fresh require yields the same registered keys');
   assertEq(fresh.DEFAULT_ENABLED, ['wall'], 'fresh DEFAULT_ENABLED unchanged');
 }
 
@@ -299,7 +314,7 @@ console.log('PHA-2203 module-registry tests\n');
   assert(userModel.isUserModuleKey('popcorn_vote') === false, 'userModel.isUserModuleKey("popcorn_vote") === false');
 
   // USER_MODULE_KEYS exported by user-model is the same array as modules.MODULE_KEYS.
-  assertEq(userModel.USER_MODULE_KEYS, SIX, 'userModel.USER_MODULE_KEYS matches the registry');
+  assertEq(userModel.USER_MODULE_KEYS, REGISTERED, 'userModel.USER_MODULE_KEYS matches the registry');
 }
 
 console.log(`\nPHA-2203: ${pass} passed, ${fail} failed`);

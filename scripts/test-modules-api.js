@@ -95,11 +95,19 @@ const NOAUTH = (urlPath) => fetch('http://127.0.0.1:3191' + urlPath);
     const layout = await (await GET('/api/me/layout')).json();
     assertEq(layout.layout, 'meadow', 'layout === "meadow" (6 enabled)');
     assertEq(layout.defaultRoute, '/porch.html', 'defaultRoute === "/porch.html"');
-    assertEq(layout.addRoomVisible, false, 'addRoomVisible === false (all enabled)');
+    // PHA-2659: the grandfather backfill grants the six pre-modularity
+    // modules, but Gazette registered after it — so there IS still a
+    // room this user could add, and the pill must stay visible.
+    assertEq(layout.addRoomVisible, true, 'addRoomVisible === true (gazette still addable)');
     assertEq(layout.agentDrawer, true, 'agentDrawer === true (agent is enabled)');
     assertEq(layout.tabs.length, 6, 'tabs.length === 6');
     assertEq(layout.tabs[0].key, 'wall', 'tabs[0].key === "wall"');
-    assertEq(layout.tabs[0].icon, '📸', 'tabs[0].icon === "📸"');
+    // PHA-2846: built-in module icons are SVG paths under /modules/ rather
+    // than emoji literals. Third-party manifests still use emoji strings.
+    // Dispatch in the SPA renderer: /modules/ → <img>, anything else →
+    // escaped emoji glyph. See public/modules.html and openAppsSheetWith()
+    // in public/index.html.
+    assertEq(layout.tabs[0].icon, '/modules/porch.svg', 'tabs[0].icon === "/modules/porch.svg"');
     assertEq(layout.tabs[0].label, 'Porch', 'tabs[0].label === "Porch"');
     assertEq(layout.tabs[0].route, '/porch.html', 'tabs[0].route === "/porch.html"');
     assertEq(layout.tabs[5].key, 'agent', 'tabs[5].key === "agent"');
@@ -174,7 +182,7 @@ const NOAUTH = (urlPath) => fetch('http://127.0.0.1:3191' + urlPath);
   {
     const reg = await (await GET('/api/modules')).json();
     assert(Array.isArray(reg), 'response is an array');
-    assertEq(reg.map(m => m.key), ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent'], 'all six built-ins in registry order');
+    assertEq(reg.map(m => m.key), ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent', 'gazette'], 'all built-ins in registry order');
     // Spot-check shape: every entry has the 16 manifest fields.
     for (const m of reg) {
       assert(m.key && m.name && m.icon && m.url !== undefined && m.open_mode && Array.isArray(m.requires), `entry ${m.key} has full manifest shape`);
