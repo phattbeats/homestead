@@ -376,6 +376,13 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
   transition:opacity .3s var(--ease)}
 #dot.on{display:flex}
 #dot.idle{opacity:.45}
+#shellErr{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:#111;color:#eee;text-align:center;padding:24px}
+#shellErr.on{display:flex}
+#shellErr .shellErr-in{max-width:320px}
+#shellErr .shellErr-icon{font-size:40px;margin-bottom:10px}
+#shellErr .shellErr-msg{font-size:16px;font-weight:700;margin-bottom:4px}
+#shellErr .shellErr-sub{font-size:13px;color:#aaa;margin-bottom:16px}
+#shellErr button{font-size:14px;padding:8px 18px;border-radius:8px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#eee}
 .svc-owner{position:absolute;top:10px;right:10px;width:9px;height:9px;border-radius:50%}
 .showall{font-size:12px;font-weight:600;color:var(--muted)}
 @media(min-width:768px){.svc-grid{grid-template-columns:repeat(3,1fr)}}
@@ -669,7 +676,16 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 </div>
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
-<div id="shell"><iframe id="shellFrame" src="about:blank" allow="fullscreen; autoplay; clipboard-write"></iframe></div>
+<div id="shell"><iframe id="shellFrame" src="about:blank" allow="fullscreen; autoplay; clipboard-write"></iframe>
+  <div id="shellErr">
+    <div class="shellErr-in">
+      <div class="shellErr-icon">⚠️</div>
+      <div class="shellErr-msg">This app didn't load.</div>
+      <div class="shellErr-sub">It may be unreachable or blocking embedding.</div>
+      <button type="button" onclick="closeShell()">Close</button>
+    </div>
+  </div>
+</div>
 <div id="dot">🏡</div>
 
 <!-- PHA-1872: entity page (design doc PHA-1624 §7) -->
@@ -697,7 +713,7 @@ const api=async(m,u,b)=>{const r=await fetch(u,{method:m,headers:{'Content-Type'
 
 /* ---- state ---- */
 let ME=null, USERS={};
-let ENABLED_ROOMS=new Set(); // PHA-2811: populated by applyLayout(), used to gate the FAB picker
+let ENABLED_MODULE_KEYS=new Set(); // PHA-2811: populated by applyLayout(), used to gate the FAB picker
 let TASKS=[],EVENTS=[],SVCS=[];
 let MERGED=[]; // PHA-1867: native + cached provider events for the current month
 let calY,calM,selDate=today();
@@ -1533,15 +1549,32 @@ function launchSvc(ev,id){
 
 /* ---- full-screen app shell + escape dot ---- */
 const dot=$('#dot');
-let dotIdleTimer;
+let dotIdleTimer,shellLoadTimer;
 function openShell(url){
-  $('#shellFrame').src=url;
+  const frame=$('#shellFrame');
+  $('#shellErr').classList.remove('on');frame.style.display='';
+  clearTimeout(shellLoadTimer);
+  frame.onload=()=>{
+    clearTimeout(shellLoadTimer);
+    // about:blank fires onload too (e.g. on close); ignore it here.
+    if(frame.src==='about:blank')return;
+  };
+  frame.onerror=()=>showShellErr();
+  frame.src=url;
   $('#shell').classList.add('on');dot.classList.add('on');dot.classList.remove('idle');
   dot.style.left='';dot.style.top='';dot.style.right='14px';dot.style.bottom='calc(env(safe-area-inset-bottom) + 24px)';
   clearTimeout(dotIdleTimer);dotIdleTimer=setTimeout(()=>dot.classList.add('idle'),2500);
+  shellLoadTimer=setTimeout(()=>showShellErr(),8000);
+}
+function showShellErr(){
+  $('#shellErr').classList.add('on');
+  $('#shellFrame').style.display='none';
 }
 function closeShell(){
+  clearTimeout(shellLoadTimer);
   $('#shell').classList.remove('on');dot.classList.remove('on');
+  $('#shellErr').classList.remove('on');
+  $('#shellFrame').style.display='';
   $('#shellFrame').src='about:blank';
 }
 let drag=null;
