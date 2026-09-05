@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Homestead Gazette</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#FFFBF5">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/brand.css">
+<style>
+  /* PHA-2853 — standalone Gazette page. Typed sections render as
+     cards, never raw HTML: everything text-shaped goes through esc()
+     below. This mirrors the injection-safety rule from
+     docs/GAZETTE-DESIGN.md ("the edition is JSON, not HTML") — it
+     still applies to the typed rework, since sections can carry
+     user-authored wall-post text. */
+  body { background: var(--brand-paper, #f6e4c3); font-family: 'Plus Jakarta Sans', system-ui, sans-serif; margin: 0; color: #2c2115; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 24px 16px 80px; }
+  .masthead { text-align: center; border-bottom: 3px double #4e2d0f; padding-bottom: 12px; margin-bottom: 20px; }
+  .masthead h1 { font-family: Fraunces, serif; font-size: 2.1rem; margin: 0 0 4px; color: #4e2d0f; }
+  .masthead .tagline { font-style: italic; opacity: 0.75; margin: 0 0 8px; }
+  .masthead .meta { display: flex; justify-content: space-between; font-size: 0.85rem; opacity: 0.8; }
+  .nav-row { display: flex; justify-content: space-between; align-items: center; margin: 12px 0 20px; }
+  .nav-row button { background: none; border: 1px solid #4e2d0f; border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 0.85rem; }
+  .nav-row button:disabled { opacity: 0.4; cursor: default; }
+  .section { margin-bottom: 24px; }
+  .section h2 { font-family: Fraunces, serif; font-size: 1.25rem; border-bottom: 1px solid #c9b48c; padding-bottom: 4px; margin-bottom: 10px; color: #4e2d0f; }
+  .section .prose { font-style: italic; margin: 0 0 10px; opacity: 0.9; }
+  .card { background: #fffdf8; border: 1px solid #e3d3ab; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+  .card .card-title { font-weight: 600; }
+  .card .card-sub { font-size: 0.8rem; opacity: 0.7; margin-top: 2px; }
+  .thin-note { text-align: center; font-style: italic; opacity: 0.75; padding: 40px 0; }
+  .ask { margin-top: 32px; border-top: 2px solid #4e2d0f; padding-top: 16px; }
+  .ask h2 { font-family: Fraunces, serif; }
+  .ask form { display: flex; gap: 8px; }
+  .ask input[type=text] { flex: 1; padding: 8px 10px; border: 1px solid #c9b48c; border-radius: 6px; }
+  .ask button[type=submit] { background: #4e2d0f; color: #fffdf8; border: none; border-radius: 6px; padding: 8px 14px; cursor: pointer; }
+  .ask .answer { margin-top: 12px; background: #fffdf8; border: 1px solid #e3d3ab; border-radius: 8px; padding: 10px 12px; }
+  .error-banner { background: #f7d9d9; border: 1px solid #c96b6b; border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="masthead">
+    <h1>The Homestead Gazette</h1>
+    <p class="tagline">Published each dawn by Hearth</p>
+    <div class="meta">
+      <span id="vol"></span>
+      <span id="weather"></span>
+      <span id="dateLabel"></span>
+    </div>
+  </div>
+
+  <div class="nav-row">
+    <button id="prevBtn">&larr; Prev</button>
+    <a href="/" style="font-size:0.85rem;">Back to Homestead</a>
+    <button id="nextBtn">Next &rarr;</button>
+  </div>
+
+  <div id="content">Loading today's issue&hellip;</div>
+
+  <div class="ask">
+    <h2>Ask the editor</h2>
+    <form id="askForm">
+      <input type="text" id="askInput" placeholder="Ask about today's issue&hellip;" maxlength="500" required>
+      <button type="submit">Ask</button>
+    </form>
+    <div id="askAnswer"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // Same esc() convention used elsewhere in this app (index.html) —
+  // never let section text (wall posts, arrival titles, etc.) reach
+  // innerHTML unescaped.
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
+  }
+
+  const SECTION_ICONS = {
+    rotation_desk: '\u{1F9F9}', arts_media: '\u{1F3AC}', porch: '\u{1F6CB}️', listings: '\u{1F4C5}',
+  };
+
+  const dateParam = new URLSearchParams(location.search).get('date');
+  let currentDate = dateParam || null;
+
+  async function api(path) {
+    const r = await fetch(path, { credentials: 'same-origin' });
+    if (r.status === 401) { location.href = '/'; throw new Error('unauthorized'); }
+    return r;
+  }
+
+  function fmtDate(d) {
+    try { return new Date(d + 'T00:00:00Z').toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }); }
+    catch (_) { return d; }
+  }
+
+  function renderCard(item) {
+    if (item.type === 'task') {
+      const label = item.status === 'overdue' ? 'Overdue' : item.status === 'due_soon' ? 'Due soon' : 'Due today';
+      return `<div class="card"><div class="card-title">${esc(item.title)}</div>` +
+        `<div class="card-sub">${esc(label)}${item.assignee ? ' &middot; ' + esc(item.assignee) : ''}</div></div>`;
+    }
+    if (item.type === 'arrival') {
+      return `<div class="card"><div class="card-title">${esc(item.name)}</div>` +
+        `<div class="card-sub">${esc(item.kind || '')}${item.source_service ? ' &middot; ' + esc(item.source_service) : ''}</div></div>`;
+    }
+    if (item.type === 'post' || item.type === 'comment') {
+      const body = item.text_body || item.body || item.link_title || '';
+      return `<div class="card"><div class="card-title">${esc(item.author_display || 'Someone')}</div>` +
+        `<div>${esc(body)}</div>` +
+        `<div class="card-sub">${esc(item.wall_name || item.wall_slug || '')}</div></div>`;
+    }
+    if (item.type === 'event') {
+      const where = item.room_label ? `${esc(item.room_label)}: ` : '';
+      return `<div class="card"><div class="card-title">${where}${esc(item.title)}</div>` +
+        `<div class="card-sub">${esc(item.time || '')}</div></div>`;
+    }
+    return '';
+  }
+
+  function renderIssue(issue) {
+    const payload = issue.payload || {};
+    document.getElementById('dateLabel').textContent = fmtDate(payload.date || issue.date);
+    document.getElementById('vol').textContent = 'Vol. ' + ((payload.date || issue.date || '').replace(/-/g, '.'));
+    const w = payload.weather || issue.weather || {};
+    document.getElementById('weather').textContent = w.summary ? `${w.summary}, ${w.temp_f}°F` : '';
+
+    const content = document.getElementById('content');
+    content.innerHTML = '';
+
+    if (payload.thin || !(payload.sections || []).length) {
+      const note = document.createElement('div');
+      note.className = 'thin-note';
+      note.textContent = payload.editors_note || 'A quiet day. Nothing came in, nothing came due.';
+      content.appendChild(note);
+      return;
+    }
+
+    for (const section of payload.sections) {
+      const el = document.createElement('div');
+      el.className = 'section';
+      let html = `<h2>${SECTION_ICONS[section.key] || ''} ${esc(section.title)}</h2>`;
+      if (section.body) html += `<p class="prose">${esc(section.body)}</p>`;
+      html += (section.items || []).map(renderCard).join('');
+      el.innerHTML = html;
+      content.appendChild(el);
+    }
+  }
+
+  async function loadDate(date) {
+    document.getElementById('content').textContent = 'Loading…';
+    try {
+      const r = date ? await api(`/api/gazette/${encodeURIComponent(date)}`) : await api('/api/gazette/today');
+      if (r.status === 404) {
+        document.getElementById('content').innerHTML = '<div class="error-banner">No issue on file for that date.</div>';
+        return;
+      }
+      const issue = await r.json();
+      currentDate = issue.date || issue.payload && issue.payload.date;
+      renderIssue(issue);
+    } catch (err) {
+      if (err.message !== 'unauthorized') {
+        document.getElementById('content').innerHTML = '<div class="error-banner">Could not load today’s issue.</div>';
+      }
+    }
+  }
+
+  function shiftDate(days) {
+    const base = currentDate ? new Date(currentDate + 'T00:00:00Z') : new Date();
+    base.setUTCDate(base.getUTCDate() + days);
+    const d = base.toISOString().slice(0, 10);
+    loadDate(d);
+  }
+
+  document.getElementById('prevBtn').addEventListener('click', () => shiftDate(-1));
+  document.getElementById('nextBtn').addEventListener('click', () => shiftDate(1));
+
+  document.getElementById('askForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const input = document.getElementById('askInput');
+    const question = input.value.trim();
+    if (!question) return;
+    const answerEl = document.getElementById('askAnswer');
+    answerEl.innerHTML = '<div class="answer">Asking the editor&hellip;</div>';
+    try {
+      const r = await fetch('/api/gazette/ask', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ question }),
+      });
+      if (r.status === 401) { location.href = '/'; return; }
+      const data = await r.json();
+      if (data.ok) {
+        answerEl.innerHTML = `<div class="answer">${esc(data.answer)}</div>`;
+        input.value = '';
+      } else {
+        answerEl.innerHTML = `<div class="answer">The editor is unavailable right now (${esc(data.error || 'unknown')}).</div>`;
+      }
+    } catch (_) {
+      answerEl.innerHTML = '<div class="answer">The editor is unavailable right now.</div>';
+    }
+  });
+
+  loadDate(currentDate);
+})();
+</script>
+
+<script src="/components/app-nav.js" data-active="gazette"></script>
+</body>
+</html>
