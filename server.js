@@ -51,6 +51,7 @@ const calendarSources = require('./lib/calendar-sources');
 const secretBox = require('./lib/secret-box');
 const snapshot = require('./lib/snapshot');
 const gazette = require('./lib/gazette');
+const gazetteDaily = require('./jobs/gazette-daily');
 const drawerDispatch = require('./lib/drawer-dispatch');
 const eventsDispatch = require('./lib/events-dispatch');
 const media = require('./lib/media');
@@ -828,6 +829,118 @@ app.get('/api/me/gazette/today', auth, requireModuleEnabled('gazette'), async (r
     edition,
   });
   res.json({ ...stored, cached: false, retryable: false });
+});
+
+// ---- PHA-2853: typed Gazette issues (standalone page) ----
+//
+// A second, TYPED surface alongside the sheet route above. Both read the
+// same `assembleContext()` / `SECTIONS` material in lib/gazette.js — one
+// source of truth for what is newsworthy — but this one stores a
+// card-renderable payload in `gazette_issues` with real back-issue
+// history, for the standalone `public/gazette.html` page and the cron
+// pipeline (`jobs/gazette-daily.js`).
+//
+// GET /api/gazette/today — today's issue, generating on demand as a
+// fallback so a user who enables the module mid-day (after the 04:00
+// cron window already passed) isn't 404'd until tomorrow.
+app.get('/api/gazette/today', auth, requireModuleEnabled('gazette'), async (req, res) => {
+  const username = req.session.user && req.session.user.username;
+  if (!username) return res.status(401).json({ error: 'unauthorized' });
+  const me = userModel.getMe(db, username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+
+  const tz = snapshot.resolveTz(req);
+
+  let ctx;
+  try {
+    ctx = gazette.assembleContext(db, username, { tz });
+  } catch (err) {
+    console.error('[gazette] context assembly failed', err);
+    return res.status(500).json({ error: 'gazette_context_failed' });
+  }
+
+  const cached = gazette.getIssue(db, me.id, ctx.date);
+  if (cached) return res.json({ ...cached, cached: true });
+
+  const sections = gazette.availableSections(ctx);
+  let prose = null;
+  if (sections.length > 0) {
+    try {
+      const { system, user } = gazette.buildPrompt(ctx);
+      const result = await agentRuntime.composeGazette({ system, user });
+      if (result && result.ok) prose = gazette.parseEdition(result.text, sections);
+    } catch (err) {
+      // Typed payload below is not conditioned on prose — degrade quietly.
+      console.error('[gazette] prose composition failed', err.message);
+    }
+  }
+
+  const payload = gazette.composeTypedPayload(ctx, { prose });
+  const stored = gazette.putIssue(db, me.id, ctx.date, { payload, weatherEntry: payload.weather });
+  res.json({ ...stored, cached: false });
+});
+
+// GET /api/gazette/:date — back-issue browsing. 404 if that user never
+// had an issue generated for that date (no synthetic backfill here —
+// the seed script is what populates scrollback).
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+app.get('/api/gazette/:date', auth, requireModuleEnabled('gazette'), (req, res) => {
+  const username = req.session.user && req.session.user.username;
+  if (!username) return res.status(401).json({ error: 'unauthorized' });
+  const me = userModel.getMe(db, username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+
+  const date = String(req.params.date || '');
+  if (!DATE_RE.test(date)) return res.status(400).json({ error: 'bad_date' });
+
+  const issue = gazette.getIssue(db, me.id, date);
+  if (!issue) return res.status(404).json({ error: 'no_issue' });
+  res.json({ ...issue, cached: true });
+});
+
+// POST /api/gazette/ask — "ask the editor". Routes the question through
+// the same Hearth dispatch every other agent-facing surface in this app
+// uses (`agentRuntime.dispatchHearth`, PHA-1899/PHA-2827.C) rather than
+// inventing a second LLM call path. `actions: false` keeps this
+// text-only on purpose — asking the editor a question about today's
+// issue should never let a model queue a chore or post to a wall as a
+// side effect; that surface belongs to the agent drawer, not the
+// Gazette. The question is grounded in today's already-composed typed
+// issue so answers can reference what's actually printed.
+app.post('/api/gazette/ask', auth, requireModuleEnabled('gazette'), async (req, res) => {
+  const username = req.session.user && req.session.user.username;
+  if (!username) return res.status(401).json({ error: 'unauthorized' });
+  const me = userModel.getMe(db, username);
+  if (!me) return res.status(401).json({ error: 'unknown_user' });
+
+  const question = typeof req.body?.question === 'string' ? req.body.question.trim() : '';
+  if (!question) return res.status(400).json({ error: 'question_required' });
+
+  const tz = snapshot.resolveTz(req);
+  let ctx;
+  try {
+    ctx = gazette.assembleContext(db, username, { tz });
+  } catch (err) {
+    console.error('[gazette] ask: context assembly failed', err);
+    return res.status(500).json({ error: 'gazette_context_failed' });
+  }
+  const issue = gazette.getIssue(db, me.id, ctx.date);
+
+  const result = await agentRuntime.dispatchHearth({
+    db,
+    me,
+    message: question,
+    conversationId: `gazette-ask-${me.id}-${ctx.date}`,
+    requestId: `gazette-ask-${Date.now()}`,
+    view: 'gazette',
+    snapshotPayload: { gazette_issue: issue ? issue.payload : null, date: ctx.date },
+    actions: false,
+  });
+
+  if (!result || !result.ok) {
+    return res.status(200).json({ ok: false, error: (result && (result.lastError || result.status)) || 'unavailable' });
+  }
+  res.json({ ok: true, answer: result.text });
 });
 
 // ---- PHA-2204 (PHA-2200.3): module / layout API surface ----
@@ -4817,6 +4930,13 @@ if (require.main === module) {
         const r = media.cleanupSweep(db);
         if (r.reaped > 0) console.log(`[scheduler] media sweep: reaped ${r.reaped}`);
       } catch (e) { console.error('[scheduler] media sweep:', e.message); }
+      // PHA-2853: Gazette daily issue generation. Per-tick self-check —
+      // for each user with `gazette` enabled, mints today's typed issue
+      // once their local clock crosses 04:00 and they don't have one yet.
+      try {
+        const r = await gazetteDaily.tick(db);
+        if (r.length) console.log(`[scheduler] gazette daily: ${r.length} issue(s) processed`);
+      } catch (e) { console.error('[scheduler] gazette daily:', e.message); }
     };
     setTimeout(tick, 10 * 1000);
     schedulerHandle = setInterval(tick, SCHED_TICK_MS);
