@@ -1,3 +1,7 @@
+## v0.5.18 (2026-09-05) — CD recipe, companion CLI, Gazette room listings (PHA-3083)
+
+**PHA-3083:** first tagged deploy since v0.5.8 went live. Merges: PR #130 (PHA-2971, simplified CD — drop auto-tag CI workflow, tag manually), PR #124 (PHA-2881, companion-side pairing protocol + reference CLI), and PR #132 (PHA-2853, Gazette listings keyed by house room). Also rolls up the accumulated Hearth actions, Gazette, and visual-asset work below that was sitting unreleased.
+
 ## Unreleased — Hearth can act, not just talk (PHA-2851)
 
 **PHA-2851:** the drawer demo promised Hearth could take real action across the house ("queue Part Two", "tell him the meme was mid"), but the server-side runtime (PHA-2830) shipped text-only — no tool calls, nothing behind the promise. Hearth now has an inbound action surface.
