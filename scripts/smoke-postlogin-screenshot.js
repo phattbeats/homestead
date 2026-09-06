@@ -33,6 +33,32 @@ process.env.ADMIN_PASSWORD = adminPassword;
 process.env.BRANDON_PASSWORD = 'smoke-postlogin-brandon-pw';
 process.env.SESSION_SECRET = 'smoke-postlogin-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
+// This smoke talks to a real instance over plain HTTP, so disable the
+// production-only Secure-cookie transport flag. The bootstrap helper used by
+// the unit-test chain already sets this test-only opt-out; keeping it here
+// makes the standalone `node scripts/smoke-postlogin-screenshot.js` entry
+// point behave the same way after PHA-3200.
+process.env.HOMESTEAD_INSECURE_TEST_COOKIES = '1';
+
+function formatPageError(error) {
+  if (error && typeof error === 'object') {
+    const ownProperties = Object.getOwnPropertyNames(error);
+    // A non-Error pageerror can still carry a meaningful stack/message. Use
+    // either when it is genuinely diagnostic; the special `Object` message
+    // is Playwright's non-Error placeholder and must not hide the payload.
+    if (error.stack) return error.stack;
+    if (error.message && error.message !== 'Object' && error.message !== '[object Object]') {
+      return error.message;
+    }
+    try {
+      const payload = JSON.stringify(error, ownProperties);
+      if (payload) return payload;
+    } catch (_) {
+      // Fall through to String() for objects with throwing getters/cycles.
+    }
+  }
+  return String(error);
+}
 
 async function main() {
   // Use the in-repo playwright dependency's bundled chromium when the
@@ -89,12 +115,16 @@ async function main() {
     await page.waitForSelector('#username', { state: 'visible', timeout: 5000 });
     await page.fill('#username', 'admin');
     await page.fill('#pw', adminPassword);
-    const loginResponse = page.waitForResponse(
+    const loginResponsePromise = page.waitForResponse(
       (r) => r.url().includes('/api/login') && r.request().method() === 'POST',
       { timeout: 5000 },
-    ).catch(() => null);
+    );
     await page.click('#loginBtn');
-    await loginResponse;
+    const loginResponse = await loginResponsePromise;
+    if (!loginResponse || !loginResponse.ok()) {
+      const body = loginResponse ? await loginResponse.text().catch(() => '') : '<no response>';
+      throw new Error(`POST /api/login failed (${loginResponse ? loginResponse.status() : 'no response'}): ${body}`);
+    }
 
     // Wait for the app shell to render (#app becomes visible).
     await page.waitForSelector('#app', { state: 'visible', timeout: 10000 });
@@ -106,7 +136,8 @@ async function main() {
     console.log(`✓ screenshot saved → ${outPath}`);
 
     if (pageErrors.length) {
-      throw new Error(`browser pageerror(s) on post-login render: ${pageErrors.map((e) => e.stack || e.message).join('\n')}`);
+      const details = pageErrors.map(formatPageError);
+      throw new Error(`browser pageerror(s) on post-login render: ${details.join('\n')}`);
     }
     if (consoleErrors.length) {
       throw new Error(`browser console error(s) on post-login render: ${consoleErrors.join(' | ')}`);

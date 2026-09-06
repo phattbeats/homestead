@@ -32,6 +32,8 @@ process.env.PORT = String(port);
 process.env.ADMIN_PASSWORD = adminPassword;
 process.env.SESSION_SECRET = 'smoke-2707-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
+// Scratch smokes use plain HTTP; production Secure cookies would not round-trip.
+process.env.HOMESTEAD_INSECURE_TEST_COOKIES = '1';
 process.env.ALLOW_HEADER_TRUST = '0';
 
 let pass = 0, fail = 0;
