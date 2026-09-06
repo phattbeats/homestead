@@ -69,6 +69,8 @@ const porchComprehension = require('./lib/porch/comprehension');
 const oidcLink = require('./lib/oidc-link');
 const mailbox = require('./lib/porch/mailbox');
 const agentConnectionsRouter = require('./routes/agent-connections');
+// PHA-3214 (PHA-1647): second domain extracted from server.js.
+const healthRouter = require('./routes/health');
 
 const hearthCharacters = require('./lib/hearth-characters');
 // PHA-2851: Hearth's inbound action surface — the house-actions the
@@ -591,43 +593,20 @@ async function notify(userId, payload, opts = {}) {
   return { delivered, skipped: 0, errors };
 }
 
-const PROCESS_STARTED_AT_MS = Date.now();
 const PKG_VERSION = require('./package.json').version;
 const COMMIT_SHA = process.env.COMMIT_SHA || null;
 
 // ---- public probes (no auth) ----
-app.get('/api/health', (req, res) => {
-  let dbStatus = 'ok';
-  try {
-    db.prepare('SELECT 1 AS one').get();
-  } catch (err) {
-    dbStatus = 'error';
-  }
-  // CALENDAR_CRED_KEY is required for any source with a non-empty
-  // cred_blob. Its absence only disables that optional integration:
-  // it must not make the core service health probe fail on a README-default
-  // install. Keep the readiness signal separately for calendar operators.
-  const credKeyReady = secretBox.keyReady();
-  const sessionReady = secretBox.sessionSecretReady();
-  res.json({
-    ok: dbStatus === 'ok',
-    service: 'homestead',
-    version: PKG_VERSION,
-    commit: COMMIT_SHA,
-    uptime: Math.round((Date.now() - PROCESS_STARTED_AT_MS) / 1000),
-    db: dbStatus,
-    calendarCredKeyReady: credKeyReady,
-    // PHA-3200: separate readiness signal for the session cookie signer.
-    // A misconfigured box that booted on a hardcoded fallback would have
-    // logged `false` here — operators can spot it from a Watchtower
-    // health probe without dumping the secret.
-    sessionSecretReady: sessionReady,
-  });
-});
-
-app.get('/api/version', (req, res) => {
-  res.json({ version: PKG_VERSION, commit: COMMIT_SHA });
-});
+// PHA-3214 (PHA-1647): /api/health and /api/version relocated to
+// routes/health.js. Behavior unchanged; see routes/health.js for
+// the readiness-signal rationale (CALENDAR_CRED_KEY, PHA-3200
+// sessionSecret).
+app.use('/api', healthRouter({
+  db,
+  secretBox,
+  version: PKG_VERSION,
+  commit: COMMIT_SHA,
+}));
 
 // ---- auth ----
 // LAN fallback login (PHA-1574 keeps built-in login working behind
