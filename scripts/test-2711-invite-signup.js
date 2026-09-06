@@ -66,7 +66,7 @@ function assertEq(actual, expected, label) {
 
 function startServer(port, dbPath) {
   return new Promise((resolve, reject) => {
-    const env = { ...process.env, DATA_DIR: path.dirname(dbPath), PORT: String(port), NODE_ENV: 'test', ALLOW_HEADER_TRUST: '0', SESSION_SECRET: 'pha-2711-test-secret' };
+    const env = { ...process.env, DATA_DIR: path.dirname(dbPath), PORT: String(port), NODE_ENV: 'test', ALLOW_HEADER_TRUST: '0', SESSION_SECRET: 'pha-2711-test-secret-padded-to-meet-min-32' };
     const child = require('child_process').spawn('node', [path.join(__dirname, '..', 'server.js')], { env, stdio: ['ignore', 'pipe', 'pipe'] });
     let stderr = '';
     child.stderr.on('data', (b) => { stderr += b.toString(); });

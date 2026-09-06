@@ -266,7 +266,7 @@ function bootServerAndLogin() {
   process.env.PORT = '3098';
   process.env.ADMIN_PASSWORD = 'snap-admin-pw';
   process.env.BRANDON_PASSWORD = 'snap-brandon-pw';
-  process.env.SESSION_SECRET = 'snap-secret-' + crypto.randomBytes(4).toString('hex');
+  process.env.SESSION_SECRET = 'snap-secret--padding-to-meet-min-32-chars' + crypto.randomBytes(4).toString('hex');
   process.env.NODE_ENV = 'production';
   process.env.CALENDAR_CRED_KEY = crypto.randomBytes(32).toString('hex');
   // Stub the caldav adapter so the http test doesn't touch the network.

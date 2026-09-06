@@ -36,7 +36,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = '3191';
 process.env.ADMIN_PASSWORD = 'modapi-test-pw';
 process.env.BRANDON_PASSWORD = 'modapi-test-pw';
-process.env.SESSION_SECRET = 'modapi-test-secret';
+process.env.SESSION_SECRET = 'modapi-test-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 
 let pass = 0, fail = 0;

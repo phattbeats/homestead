@@ -38,7 +38,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = '3192';
 process.env.ADMIN_PASSWORD = 'modlayout-test-pw';
 process.env.BRANDON_PASSWORD = 'modlayout-test-pw';
-process.env.SESSION_SECRET = 'modlayout-test-secret';
+process.env.SESSION_SECRET = 'modlayout-test-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 
 let pass = 0, fail = 0;

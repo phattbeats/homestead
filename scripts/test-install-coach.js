@@ -399,7 +399,7 @@ console.log('PHA-2219 install-coach tests\n');
   process.env.DATA_DIR = tmpDir;
   process.env.PORT = '0';
   process.env.ADMIN_PASSWORD = 'test';
-  process.env.SESSION_SECRET = 'test-secret';
+  process.env.SESSION_SECRET = 'test-secret-padding-to-meet-min-32-chars';
   const app = require('../server.js');
 
   // Boot a listener on a free port
