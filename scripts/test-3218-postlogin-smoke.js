@@ -28,6 +28,26 @@ assert.match(
   'post-login smoke requires a successful login response before waiting for the authenticated app shell',
 );
 
+const ciSmokeFiles = [
+  'smoke-spa-pageerrors.js',
+  'smoke-postlogin-screenshot.js',
+  'smoke-entity-deeplink.js',
+  'smoke-2498-install-coach-deferral.js',
+  'smoke-2498-fab-pileup.js',
+  'smoke-2498-preauth-drawer.js',
+  'smoke-2585-home-always-visible.js',
+  'smoke-2586-lists-ui.js',
+  'smoke-2707-invite-welcome.js',
+];
+for (const file of ciSmokeFiles) {
+  const source = fs.readFileSync(path.join(__dirname, file), 'utf8');
+  assert.match(
+    source,
+    new RegExp(insecureOptOut.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+    `${file} explicitly opts out of Secure cookies for its plain-HTTP scratch server`,
+  );
+}
+
 let server;
 
 async function startServer() {

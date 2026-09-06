@@ -25,6 +25,8 @@ process.env.ADMIN_PASSWORD = 'entity-deeplink-admin-pw';
 process.env.BRANDON_PASSWORD = 'entity-deeplink-brandon-pw';
 process.env.SESSION_SECRET = 'entity-deeplink-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
+// Scratch smokes use plain HTTP; production Secure cookies would not round-trip.
+process.env.HOMESTEAD_INSECURE_TEST_COOKIES = '1';
 
 const headers = {
   'x-authentik-username': 'brandon',

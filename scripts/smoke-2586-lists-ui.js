@@ -25,6 +25,8 @@ process.env.ADMIN_PASSWORD = 'smoke-2586-admin-pw';
 process.env.BRANDON_PASSWORD = brandonPassword;
 process.env.SESSION_SECRET = 'smoke-2586-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
+// Scratch smokes use plain HTTP; production Secure cookies would not round-trip.
+process.env.HOMESTEAD_INSECURE_TEST_COOKIES = '1';
 
 async function main() {
   const app = require('../server.js');
