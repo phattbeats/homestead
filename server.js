@@ -2286,13 +2286,25 @@ app.post('/api/agent-connections/:id/events', (req, res) => {
   if (!Number.isInteger(connectionId) || connectionId <= 0) {
     return res.status(400).json({ error: 'invalid_connection_id' });
   }
-  const requestId = req.get('X-Homestead-Request-Id');
+  const rawRequestId = req.get('X-Homestead-Request-Id');
   const timestamp = req.get('X-Homestead-Timestamp');
   const signature = req.get('X-Homestead-Signature');
-  if (!requestId || !timestamp || !signature) {
+  if (!rawRequestId || !timestamp || !signature) {
     return res.status(401).json({
       error: 'missing_signature_headers',
       required: ['X-Homestead-Request-Id', 'X-Homestead-Timestamp', 'X-Homestead-Signature'],
+    });
+  }
+  // PHA-3199: reject malformed request ids before we touch any crypto
+  // path — non-empty, max 128 chars, charset [A-Za-z0-9._-]. A
+  // missing/oversized/junk-id is the same bucket as a missing header
+  // (you can't be a real companion if you can't format an id).
+  const requestId = agentConnections.validateRequestId(rawRequestId);
+  if (!requestId) {
+    return res.status(401).json({
+      error: 'invalid_request_id',
+      maxLength: 128,
+      charset: 'A-Za-z0-9._-',
     });
   }
   // The PHA-3116 events route is the ONLY path that reads the stored
@@ -2314,13 +2326,41 @@ app.post('/api/agent-connections/:id/events', (req, res) => {
   if (connection.status !== agentConnections.STATUS_ACTIVE) {
     return res.status(409).json({ error: 'connection_not_active', status: connection.status });
   }
-  // verifySignature expects the raw bytes the client signed; the
-  // express.json({ verify }) hook captured them onto req.rawBody as
-  // UTF-8. Fall back to JSON.stringify for clients that POST without
-  // a real Content-Type — verifySignature hashes byte-equal payloads.
-  const rawBody = req.rawBody != null ? req.rawBody : JSON.stringify(req.body || {});
+  // PHA-3199: fail closed on missing rawBody. The verify hook in the
+  // express.json({ verify }) middleware above stashes req.rawBody when
+  // it sees a non-empty Buffer. If it's missing (empty body, wrong
+  // Content-Type, body parser short-circuited, etc.) there is NOTHING
+  // we can HMAC that the client also signed — any fallback we cooked
+  // up server-side would not match what a real companion sent. We do
+  // NOT fall back to JSON.stringify(req.body): Express's JSON.parse
+  // can re-order object keys, drop whitespace, and lose information;
+  // a client signing one document and a server signing another is a
+  // false-positive signing risk. Hard 401 + an explicit error code so
+  // the companion logs something useful.
+  const rawBody = req.rawBody;
+  if (typeof rawBody !== 'string' || rawBody.length === 0) {
+    return res.status(401).json({ error: 'raw_body_unavailable' });
+  }
   if (!agentConnections.verifySignature(connection.secret_plaintext, timestamp, rawBody, signature)) {
     return res.status(401).json({ error: 'bad_signature' });
+  }
+  // PHA-3199: signature is good. Now check the replay ledger BEFORE we
+  // write to the mailbox so a duplicate request id never produces a
+  // second inbound message. Cheap GC on the way in keeps the table
+  // bounded to the last 6 minutes of activity.
+  agentConnections.purgeOldReplays(db);
+  const fresh = agentConnections.recordReplay(db, {
+    connectionId: connection.id,
+    requestId,
+  });
+  if (!fresh) {
+    // We log the duplicate as a bookkeeping row but DO NOT surface
+    // the request id back to the caller (echoing attacker-supplied
+    // input is a habit we don't need). 409 is the spec'd response.
+    try {
+      agentConnections.recordDispatch(db, connection.id, { statusCode: 409, error: 'replay_detected' });
+    } catch (_) { void _; }
+    return res.status(409).json({ error: 'replay_detected' });
   }
   const { threadKey, topic, body, wallSlug } = req.body || {};
   if (typeof threadKey !== 'string' || !threadKey) {

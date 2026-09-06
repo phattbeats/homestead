@@ -2,7 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PHATT Tech LLC
 //
-// PHA-3116 — POST /api/agent-connections/:id/events
+// PHA-3116 + PHA-3199 — POST /api/agent-connections/:id/events
+//   * PHA-3116: signed event body is accepted; unsigned/skewed/tampered
+//     bodies are rejected; revoked and missing connections are rejected;
+//     the event lands as a mailbox message.
+//   * PHA-3199: same route, plus replay protection (Request-Id ledger)
+//     and fail-closed on missing rawBody. A captured signed POST can no
+//     longer be re-fired inside the 5-min skew window, and an
+//     attacker-supplied empty body never sees a re-serialized hash.
 //
 // Acceptance test: signed event body is accepted; unsigned/skewed/tampered
 // bodies are rejected; revoked and missing connections are rejected; the
@@ -317,6 +324,178 @@ async function main() {
       }, raw);
       assertEq(resp.status, 400, `${label} returns 400`);
     }
+
+    // ------------------------------------------------------------------
+    // 10. PHA-3199: same Request-Id twice → second is 409, one mailbox row.
+    //
+    // Fresh connection for this test because connectionId was revoked
+    // in Test 7 and we want a known-active state.
+    // ------------------------------------------------------------------
+    console.log('\nTest 10 (PHA-3199): replay of the same Request-Id returns 409');
+    const mintReplay = await httpRequest(base, {
+      path: '/api/agent-connections/pair', method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    }, JSON.stringify({ provider: 'openclaw', label: 'replay-test' }));
+    const redeemReplay = await httpRequest(base, {
+      path: '/api/agent-connections/redeem-pairing-code', method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    }, JSON.stringify({ code: mintReplay.body.pairing_code }));
+    const replayConnId = redeemReplay.body.id;
+    const replaySecret = redeemReplay.body.secret_plaintext;
+    assert(!!replayConnId && !!replaySecret, 'replay-test connection is set up');
+
+    const replayPayload = JSON.stringify({
+      threadKey: 'replay:check',
+      topic: 'replay test',
+      body: 'first delivery — should land in mailbox',
+      wallSlug: 'household',
+    });
+    const fixedReqId = crypto.randomUUID();
+    const firstHeaders = signedHeaders(replaySecret, replayPayload);
+    firstHeaders['X-Homestead-Request-Id'] = fixedReqId;
+    const first = await httpRequest(base, {
+      path: `/api/agent-connections/${replayConnId}/events`, method: 'POST',
+      headers: firstHeaders,
+    }, replayPayload);
+    assertEq(first.status, 202, 'first delivery with unique id returns 202');
+
+    // Resend the EXACT same headers+body — same Request-Id, same signature.
+    const second = await httpRequest(base, {
+      path: `/api/agent-connections/${replayConnId}/events`, method: 'POST',
+      headers: firstHeaders,
+    }, replayPayload);
+    assertEq(second.status, 409, 'replay with same Request-Id returns 409');
+    assert(second.body && second.body.error === 'replay_detected', 'replay error code is replay_detected');
+
+    // Mailbox thread should have exactly ONE message from this connection.
+    // threadId = `openclaw::replay:check` (lib/porch/mailbox.js's
+    // `${appId}::${threadKey}` convention); we look it up directly
+    // rather than relying on the topic field (the listing endpoint
+    // doesn't return it on the summary row).
+    const replayThreadId = 'openclaw::replay:check';
+    const replayMessages = await httpRequest(base, {
+      path: `/api/mailbox/threads/${replayThreadId}/messages`, method: 'GET',
+      headers: { Cookie: cookie },
+    });
+    assertEq(replayMessages.status, 200, 'replay thread messages endpoint returns 200');
+    const matchingMsgs = replayMessages.body.messages.filter(m => m.body === 'first delivery — should land in mailbox');
+    assertEq(matchingMsgs.length, 1, 'mailbox has exactly ONE message for the replayed body (duplicate was rejected)');
+
+    // ------------------------------------------------------------------
+    // 11. PHA-3199: two DIFFERENT Request-Ids, same body, both succeed.
+    //
+    // The replay ledger is keyed on request_id, not on (body, sig).
+    // Two distinct deliveries (distinct ids) are independent events
+    // even if their bodies happen to match — that mirrors Stripe's
+    // Idempotency-Key model where the same payload sent twice with
+    // different keys is two writes.
+    // ------------------------------------------------------------------
+    console.log('\nTest 11 (PHA-3199): two distinct Request-Ids, same body — both 202');
+    const sameBody = JSON.stringify({
+      threadKey: 'replay:check',
+      topic: 'replay test',
+      body: 'repeated payload, distinct ids',
+      wallSlug: 'household',
+    });
+    const idA = crypto.randomUUID();
+    const idB = crypto.randomUUID();
+    const headersA = signedHeaders(replaySecret, sameBody);
+    headersA['X-Homestead-Request-Id'] = idA;
+    const headersB = signedHeaders(replaySecret, sameBody);
+    headersB['X-Homestead-Request-Id'] = idB;
+    const aResp = await httpRequest(base, {
+      path: `/api/agent-connections/${replayConnId}/events`, method: 'POST',
+      headers: headersA,
+    }, sameBody);
+    const bResp = await httpRequest(base, {
+      path: `/api/agent-connections/${replayConnId}/events`, method: 'POST',
+      headers: headersB,
+    }, sameBody);
+    assertEq(aResp.status, 202, 'delivery with id A returns 202');
+    assertEq(bResp.status, 202, 'delivery with id B returns 202');
+
+    // ------------------------------------------------------------------
+    // 12. PHA-3199: missing req.rawBody → 401 raw_body_unavailable.
+    //
+    // The express.json({ verify }) hook only stashes rawBody when the
+    // body parser actually saw a non-empty Buffer. If a client posts
+    // an empty body (or a body Content-Type that bypasses json()),
+    // req.rawBody is null/undefined — we must NOT fall back to
+    // JSON.stringify(req.body) because Express re-serialization does
+    // not byte-equal what the client signed.
+    // ------------------------------------------------------------------
+    console.log('\nTest 12 (PHA-3199): missing req.rawBody returns 401 raw_body_unavailable');
+    const emptyBodyPayload = '';
+    const ts12 = String(Math.floor(Date.now() / 1000));
+    const emptyHeaders = {
+      'Content-Type': 'application/json',
+      'Content-Length': '0',
+      'X-Homestead-Request-Id': crypto.randomUUID(),
+      'X-Homestead-Timestamp': ts12,
+      'X-Homestead-Signature': agentEndpoints.signPayload(replaySecret, ts12, emptyBodyPayload),
+    };
+    const empty = await httpRequest(base, {
+      path: `/api/agent-connections/${replayConnId}/events`, method: 'POST',
+      headers: emptyHeaders,
+    }, emptyBodyPayload);
+    assertEq(empty.status, 401, 'empty rawBody returns 401');
+    assert(empty.body && empty.body.error === 'raw_body_unavailable', 'empty-rawBody error code is raw_body_unavailable');
+
+    // ------------------------------------------------------------------
+    // 13. PHA-3199: invalid Request-Id (oversized, bad charset) → 401.
+    //
+    // Without this guard, an attacker can stuff arbitrary-length junk
+    // into the replay ledger and blow up the table size, or smuggle
+    // escape sequences into any future logging that interpolates the
+    // id. Both are rejected up front.
+    // ------------------------------------------------------------------
+    console.log('\nTest 13 (PHA-3199): invalid Request-Id formats return 401 invalid_request_id');
+    const badIdCases = [
+      { label: 'oversized id (200 chars)', id: 'a'.repeat(200) },
+      { label: 'id with whitespace', id: 'has spaces' },
+      { label: 'id with slash', id: 'has/slash' },
+      { label: 'id with semicolon', id: 'has;semicolon' },
+      { label: 'id with non-ascii', id: 'has\u00e9accent' },
+    ];
+    for (const { label, id } of badIdCases) {
+      const raw = JSON.stringify({
+        threadKey: 'replay:check', topic: 'replay test',
+        body: `bad-id test: ${label}`, wallSlug: 'household',
+      });
+      const hdr = signedHeaders(replaySecret, raw);
+      hdr['X-Homestead-Request-Id'] = id;
+      const resp = await httpRequest(base, {
+        path: `/api/agent-connections/${replayConnId}/events`, method: 'POST',
+        headers: hdr,
+      }, raw);
+      assertEq(resp.status, 401, `${label} returns 401`);
+      assert(resp.body && resp.body.error === 'invalid_request_id', `${label} error is invalid_request_id`);
+    }
+
+    // ------------------------------------------------------------------
+    // 14. PHA-3199: skew > 300s still returns 401 (regression guard).
+    //
+    // The replay table is the NEW replay guard; the timestamp check in
+    // verifySignature is the EXISTING replay guard. Both must hold.
+    // ------------------------------------------------------------------
+    console.log('\nTest 14 (PHA-3199 backstop): skew > 300s still returns 401');
+    const skewBody = JSON.stringify({
+      threadKey: 'replay:check', topic: 'replay test',
+      body: 'an event signed too long ago', wallSlug: 'household',
+    });
+    const skewTs = String(Math.floor(Date.now() / 1000) - 3600);
+    const skewHeaders = {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(skewBody).toString(),
+      'X-Homestead-Request-Id': crypto.randomUUID(),
+      'X-Homestead-Timestamp': skewTs,
+      'X-Homestead-Signature': agentEndpoints.signPayload(replaySecret, skewTs, skewBody),
+    };
+    const skewResp = await httpRequest(base, {
+      path: `/api/agent-connections/${replayConnId}/events`, method: 'POST',
+      headers: skewHeaders,
+    }, skewBody);
+    assertEq(skewResp.status, 401, 'stale timestamp still returns 401');
   } finally {
     server.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });
