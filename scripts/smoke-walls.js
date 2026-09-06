@@ -38,7 +38,7 @@ process.env.PORT = '3095';
 process.env.ADMIN_PASSWORD = 'smoke-walls-admin-pw';
 process.env.BRANDON_PASSWORD = 'smoke-walls-brandon-pw';
 process.env.EMILY_PASSWORD = 'smoke-walls-emily-pw';
-process.env.SESSION_SECRET = 'smoke-walls-secret';
+process.env.SESSION_SECRET = 'smoke-walls-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 
 let pass = 0, fail = 0;

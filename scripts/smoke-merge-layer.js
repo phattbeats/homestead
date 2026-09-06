@@ -28,7 +28,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = '3093';
 process.env.ADMIN_PASSWORD = 'smoke-merge-admin-pw';
 process.env.BRANDON_PASSWORD = 'smoke-merge-brandon-pw';
-process.env.SESSION_SECRET = 'smoke-merge-secret';
+process.env.SESSION_SECRET = 'smoke-merge-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 if (!process.env.CALENDAR_CRED_KEY) {
   console.error('[smoke-merge] CALENDAR_CRED_KEY is required');

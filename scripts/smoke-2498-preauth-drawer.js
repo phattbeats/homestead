@@ -37,7 +37,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = String(port);
 process.env.ADMIN_PASSWORD = 'smoke-preauth-admin-pw';
 process.env.BRANDON_PASSWORD = 'smoke-preauth-brandon-pw';
-process.env.SESSION_SECRET = 'smoke-preauth-secret';
+process.env.SESSION_SECRET = 'smoke-preauth-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 
 async function main() {

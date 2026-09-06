@@ -23,7 +23,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = String(port);
 process.env.ADMIN_PASSWORD = 'entity-deeplink-admin-pw';
 process.env.BRANDON_PASSWORD = 'entity-deeplink-brandon-pw';
-process.env.SESSION_SECRET = 'entity-deeplink-secret';
+process.env.SESSION_SECRET = 'entity-deeplink-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 
 const headers = {

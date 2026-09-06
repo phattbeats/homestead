@@ -35,7 +35,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = '3194';
 process.env.ADMIN_PASSWORD = 'modui-admin-pw';
 process.env.BRANDON_PASSWORD = 'modui-brandon-pw';
-process.env.SESSION_SECRET = 'modui-secret';
+process.env.SESSION_SECRET = 'modui-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 
 let pass = 0, fail = 0;

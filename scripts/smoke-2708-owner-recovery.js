@@ -44,7 +44,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = String(port);
 process.env.ADMIN_PASSWORD = 'smoke-2708-admin-pw';
 process.env.BRANDON_PASSWORD = 'smoke-2708-brandon-pw';
-process.env.SESSION_SECRET = 'smoke-2708-secret';
+process.env.SESSION_SECRET = 'smoke-2708-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 
 const HEAD_ADMIN = {

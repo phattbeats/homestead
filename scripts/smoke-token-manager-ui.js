@@ -41,7 +41,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = '3094';
 process.env.ADMIN_PASSWORD = 'smoke-tokmgr-admin-pw';
 process.env.BRANDON_PASSWORD = 'smoke-tokmgr-brandon-pw';
-process.env.SESSION_SECRET = 'smoke-tokmgr-secret';
+process.env.SESSION_SECRET = 'smoke-tokmgr-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 if (!process.env.CALENDAR_CRED_KEY) {
   console.error('[smoke-tokmgr] CALENDAR_CRED_KEY is required');

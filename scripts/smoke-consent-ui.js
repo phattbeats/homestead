@@ -28,7 +28,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = '3101';
 process.env.ADMIN_PASSWORD = 'smoke-consent-admin-pw';
 process.env.BRANDON_PASSWORD = 'smoke-consent-brandon-pw';
-process.env.SESSION_SECRET = 'smoke-consent-secret';
+process.env.SESSION_SECRET = 'smoke-consent-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 
 let pass = 0, fail = 0;

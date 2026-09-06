@@ -40,7 +40,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = String(port);
 process.env.ADMIN_PASSWORD = 'smoke-coach-admin-pw';
 process.env.BRANDON_PASSWORD = 'smoke-coach-brandon-pw';
-process.env.SESSION_SECRET = 'smoke-coach-secret';
+process.env.SESSION_SECRET = 'smoke-coach-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 
 const ADMIN_PASSWORD = 'smoke-coach-admin-pw';

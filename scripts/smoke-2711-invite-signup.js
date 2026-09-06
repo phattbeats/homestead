@@ -97,7 +97,7 @@ async function main() {
   db.close();
 
   const port = 34000 + Math.floor(Math.random() * 30000);
-  const env = { ...process.env, DATA_DIR: tmpDir, PORT: String(port), NODE_ENV: 'test', SESSION_SECRET: 'pha-2711-smoke-secret', ALLOW_HEADER_TRUST: '0' };
+  const env = { ...process.env, DATA_DIR: tmpDir, PORT: String(port), NODE_ENV: 'test', SESSION_SECRET: 'pha-2711-smoke-secret-padding-to-meet-min-32-chars', ALLOW_HEADER_TRUST: '0' };
   const child = require('child_process').spawn('node', [path.join(__dirname, '..', 'server.js')], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let stderr = '';
   child.stderr.on('data', (b) => { stderr += b.toString(); });

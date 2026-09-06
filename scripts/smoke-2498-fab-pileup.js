@@ -34,7 +34,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = String(port);
 process.env.ADMIN_PASSWORD = 'smoke-fab-admin-pw';
 process.env.BRANDON_PASSWORD = 'smoke-fab-brandon-pw';
-process.env.SESSION_SECRET = 'smoke-fab-secret';
+process.env.SESSION_SECRET = 'smoke-fab-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 
 const ADMIN_PASSWORD = 'smoke-fab-admin-pw';
