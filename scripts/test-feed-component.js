@@ -229,7 +229,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = '3193';
 process.env.ADMIN_PASSWORD = 'feed-test-admin-pw';
 process.env.BRANDON_PASSWORD = 'feed-test-brandon-pw';
-process.env.SESSION_SECRET = 'feed-test-secret';
+process.env.SESSION_SECRET = 'feed-test-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 
 (async () => {

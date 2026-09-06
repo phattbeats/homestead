@@ -16,7 +16,7 @@ const port = 3198;
 process.env.DATA_DIR = dataDir;
 process.env.PORT = String(port);
 process.env.ADMIN_PASSWORD = 'health-default-admin-pw';
-process.env.SESSION_SECRET = 'health-default-session-secret';
+process.env.SESSION_SECRET = 'health-default-session-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 delete process.env.CALENDAR_CRED_KEY;
 

@@ -36,7 +36,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = String(PORT);
 process.env.ADMIN_PASSWORD = 'gazette-test-pw';
 process.env.BRANDON_PASSWORD = 'gazette-test-pw';
-process.env.SESSION_SECRET = 'gazette-test-secret';
+process.env.SESSION_SECRET = 'gazette-test-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 // Point the harness at the fake provider below rather than any real one.
 process.env.HEARTH_PROVIDER = 'litellm';

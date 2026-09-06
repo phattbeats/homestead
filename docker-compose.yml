@@ -14,9 +14,14 @@ services:
       # SQLite lives here. Mount a host path so the DB survives image upgrades.
       - /mnt/user/appdata/homestead:/data
     environment:
-      # Long random string — used to sign session cookies. Generate one with
-      # `openssl rand -hex 32` and replace before first run.
-      - SESSION_SECRET=change-this-to-something-long-and-random
+      # REQUIRED. Long random string used to sign session cookies. PHA-3200
+      # makes the server refuse to boot if this is missing, a known
+      # placeholder, or shorter than 32 chars. Generate one with:
+      #   openssl rand -hex 32
+      # and paste the result here (no quotes). The Unraid template
+      # below also has SESSION_SECRET as Required + Masked — set it once
+      # in the container's environment and never commit the value.
+      - SESSION_SECRET=
       # Seed password used ONLY on the very first run (when /data/life.db
       # does not exist yet). It bootstraps the `admin` user; log in as admin
       # and create real household users via Settings → Users. Later env

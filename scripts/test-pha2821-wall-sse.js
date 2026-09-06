@@ -21,7 +21,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = '3194';
 process.env.ADMIN_PASSWORD = 'sse-test-admin-pw';
 process.env.BRANDON_PASSWORD = 'sse-test-brandon-pw';
-process.env.SESSION_SECRET = 'sse-test-secret';
+process.env.SESSION_SECRET = 'sse-test-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 
 async function login(username, password) {

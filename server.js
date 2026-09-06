@@ -259,11 +259,32 @@ app.use(express.json({
     }
   },
 }));
+// PHA-3200: fail-closed session secret. Throws at boot if SESSION_SECRET
+// is missing, empty, a known placeholder, or shorter than 32 chars. Same
+// posture as `lib/secret-box.js` loadKey() for CALENDAR_CRED_KEY — we'd
+// rather refuse to start than silently sign cookies with a public string.
+// Tests inject a valid secret via scripts/_test-bootstrap.js (--require).
+const sessionSecret = secretBox.loadSessionSecret();
+const sessionCookieSecure = (
+  process.env.NODE_ENV === 'production' &&
+  process.env.HOMESTEAD_INSECURE_TEST_COOKIES !== '1'
+);
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'life-app-secret-change-me',
+  secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, sameSite: 'lax', maxAge: 1000 * 60 * 60 * 24 * 90 }
+  cookie: {
+    httpOnly: true,
+    sameSite: 'lax',
+    // PHA-3200: production must use Secure cookies. life.phatt.vip is
+    // HTTPS via SWAG/Cloudflare and app.set('trust proxy', 1) is set
+    // above so Express can honour X-Forwarded-Proto. `secure: true`
+    // blocks the cookie from being sent on a stray http:// hop. Tests
+    // and local `npm start` over http://127.0.0.1 opt out via
+    // HOMESTEAD_INSECURE_TEST_COOKIES=1 (set by _test-bootstrap.js).
+    secure: sessionCookieSecure,
+    maxAge: 1000 * 60 * 60 * 24 * 14, // 14d; was 90d pre-PHA-3200
+  },
 }));
 
 // PHA-1617.6: in-memory consecutive-failure streak map, keyed by
@@ -586,6 +607,7 @@ app.get('/api/health', (req, res) => {
   // it must not make the core service health probe fail on a README-default
   // install. Keep the readiness signal separately for calendar operators.
   const credKeyReady = secretBox.keyReady();
+  const sessionReady = secretBox.sessionSecretReady();
   res.json({
     ok: dbStatus === 'ok',
     service: 'homestead',
@@ -594,6 +616,11 @@ app.get('/api/health', (req, res) => {
     uptime: Math.round((Date.now() - PROCESS_STARTED_AT_MS) / 1000),
     db: dbStatus,
     calendarCredKeyReady: credKeyReady,
+    // PHA-3200: separate readiness signal for the session cookie signer.
+    // A misconfigured box that booted on a hardcoded fallback would have
+    // logged `false` here — operators can spot it from a Watchtower
+    // health probe without dumping the secret.
+    sessionSecretReady: sessionReady,
   });
 });
 

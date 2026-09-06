@@ -40,7 +40,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = '3094';
 process.env.ADMIN_PASSWORD = 'mergetest-admin-pw';
 process.env.BRANDON_PASSWORD = 'mergetest-brandon-pw';
-process.env.SESSION_SECRET = 'merge-test-secret-' + crypto.randomBytes(4).toString('hex');
+process.env.SESSION_SECRET = 'merge-test-secret--padding-to-meet-min-32-chars' + crypto.randomBytes(4).toString('hex');
 process.env.NODE_ENV = 'production';
 process.env.CALENDAR_CRED_KEY = crypto.randomBytes(32).toString('hex');
 

@@ -50,7 +50,7 @@ process.env.DATA_DIR = tmpRoot;
 process.env.PORT = String(port);
 process.env.ADMIN_PASSWORD = 'p2708-owner-test-pw';
 process.env.BRANDON_PASSWORD = 'p2708-brandon-test-pw';
-process.env.SESSION_SECRET = 'p2708-test-secret';
+process.env.SESSION_SECRET = 'p2708-test-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 
 let pass = 0, fail = 0;

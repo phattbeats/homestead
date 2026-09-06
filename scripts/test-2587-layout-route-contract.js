@@ -31,7 +31,7 @@ const { spawn } = require('child_process');
 const PORT = 3187;
 const DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-2587-XXXXXX'));
 const ADMIN_PASSWORD = 'verify-admin-pw';
-const SESSION_SECRET = 'verify-secret-2587';
+const SESSION_SECRET = 'verify-secret-2587-padding-to-meet-min-32-chars';
 const HOST = '127.0.0.1';
 
 let passed = 0, failed = 0;

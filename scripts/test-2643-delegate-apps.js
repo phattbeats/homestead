@@ -28,7 +28,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = String(PORT);
 process.env.ADMIN_PASSWORD = 'delegate-test-admin-pw';
 process.env.EMILY_PASSWORD = 'delegate-test-emily-pw';
-process.env.SESSION_SECRET = 'delegate-test-secret';
+process.env.SESSION_SECRET = 'delegate-test-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 
 (async () => {
