@@ -19,7 +19,7 @@ process.env.PORT = '3096';
 process.env.ADMIN_PASSWORD = 'smoke-notif-admin-pw';
 process.env.BRANDON_PASSWORD = 'smoke-notif-brandon-pw';
 process.env.EMILY_PASSWORD = 'smoke-notif-emily-pw';
-process.env.SESSION_SECRET = 'smoke-notif-secret';
+process.env.SESSION_SECRET = 'smoke-notif-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 
 let pass = 0, fail = 0;

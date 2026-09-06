@@ -28,7 +28,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = '3194';
 process.env.ADMIN_PASSWORD = '***';
 process.env.BRANDON_PASSWORD = 'p2706-test-pw';
-process.env.SESSION_SECRET = '***';
+process.env.SESSION_SECRET = '***-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 
 const verifyOut = path.join(__dirname, '..', 'verify-out');

@@ -33,7 +33,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = '3096';
 process.env.ADMIN_PASSWORD = 'smoke-porch-admin-pw';
 process.env.BRANDON_PASSWORD = 'smoke-porch-brandon-pw';
-process.env.SESSION_SECRET = 'smoke-porch-secret';
+process.env.SESSION_SECRET = 'smoke-porch-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 
 let pass = 0, fail = 0;

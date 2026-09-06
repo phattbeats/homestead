@@ -33,7 +33,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = '3097';
 process.env.ADMIN_PASSWORD = 'smoke-snap-admin-pw';
 process.env.BRANDON_PASSWORD = 'smoke-snap-brandon-pw';
-process.env.SESSION_SECRET = 'smoke-snap-secret-' + crypto.randomBytes(4).toString('hex');
+process.env.SESSION_SECRET = 'smoke-snap-secret-padding-to-meet-min-32-chars-' + crypto.randomBytes(4).toString('hex');
 process.env.NODE_ENV = 'production';
 if (!process.env.CALENDAR_CRED_KEY) {
   console.error('[smoke-snapshot] CALENDAR_CRED_KEY is required');

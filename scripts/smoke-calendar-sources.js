@@ -25,7 +25,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = '3092';
 process.env.ADMIN_PASSWORD = 'smoketest-admin-pw';
 process.env.BRANDON_PASSWORD = 'smoketest-brandon-pw';
-process.env.SESSION_SECRET = 'smoke-test-secret';
+process.env.SESSION_SECRET = 'smoke-test-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 if (!process.env.CALENDAR_CRED_KEY) {
   console.error('[smoke] CALENDAR_CRED_KEY is required');
