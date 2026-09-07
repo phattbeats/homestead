@@ -46,6 +46,11 @@ COPY server.js ./
 # `Error: Cannot find module './lib/user-model'` (PHA-2001).
 COPY lib ./lib
 COPY jobs ./jobs
+# Route factories are required directly by server.js. Keep this explicit
+# runtime-stage copy beside the other application source directories: a
+# multi-stage image otherwise succeeds at build time but dies at boot with
+# MODULE_NOT_FOUND as soon as a route is extracted from server.js.
+COPY routes ./routes
 COPY public ./public
 # PHA-2971: release.yml passes --build-arg COMMIT_SHA so /api/version
 # (PHA-1706) reports the real deployed commit instead of null. A build-arg
