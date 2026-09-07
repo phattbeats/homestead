@@ -294,12 +294,22 @@ const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'
 assert(/^\d+\.\d+\.\d+$/.test(pkg.version), 'package.json version is semver');
 
 // -----------------------------------------------------------------------------
-// Test 12: npm test chain integration — verify test-analytics-capture.js
-// is in the test: command (so it runs in CI).
+// Test 12: npm test discovery — verify test-analytics-capture.js is wired
+// into the test runner. PHA-3206 replaced the 5,242-char `&&` chain in
+// `npm test` with `node scripts/run-tests.js`, which globs
+// `scripts/test-*.js` automatically. So "wired in" now means: the
+// runner script exists, and this file matches its discovery pattern.
+// (No more checking the package.json string — that was the silent-skip
+// bug class PHA-3206 was filed to eliminate.)
 // -----------------------------------------------------------------------------
 console.log('\nTest 12: test-analytics-capture wired into npm test');
-const testScripts = pkg.scripts.test || '';
-assert(testScripts.includes('test-analytics-capture'), 'test: script includes test-analytics-capture');
+const runnerPath = path.join(__dirname, 'run-tests.js');
+assert(fs.existsSync(runnerPath), 'scripts/run-tests.js exists (PHA-3206 runner)');
+const runnerSrc = fs.readFileSync(runnerPath, 'utf8');
+assert(/scripts\/test-\*\.js/.test(runnerSrc) || /test-\*\.js/.test(runnerSrc),
+  'runner globs scripts/test-*.js');
+assert(/^test-.*\.js$/.test('test-analytics-capture.js'),
+  'this filename matches the runner glob');
 
 // -----------------------------------------------------------------------------
 // Cleanup

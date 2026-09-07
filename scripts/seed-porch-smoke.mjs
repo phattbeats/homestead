@@ -147,7 +147,15 @@ export async function runSmoke() {
   // development: a fixed port produced a live server that answered
   // /api/health from a DIFFERENT process and 404'd on every other route).
   process.env.ADMIN_PASSWORD = 'porch-smoke-admin-pw';
-  process.env.SESSION_SECRET = 'porch-smoke-secret';
+  // PHA-3206: PHA-3200 made loadSessionSecret fail-closed on a short /
+  // placeholder secret. The 17-char 'porch-smoke-secret' triggered
+  // "too short (17 chars; minimum 32)" on the first run of the
+  // PHA-3206 runner in CI. Use a deterministic 64-char hex string
+  // generated once for this smoke. Deterministic so re-runs match
+  // any on-disk cookie state (the smoke boots a fresh DATA_DIR each
+  // time so this doesn't actually matter, but keeping it stable
+  // makes log diffs easier).
+  process.env.SESSION_SECRET = 'porch-smoke-secret-' + 'a'.repeat(45); // 63 chars total
   process.env.NODE_ENV = 'production';
   delete process.env.OPENAI_API_KEY;
   const WALL_SLUG = `porch-smoke-${crypto.randomUUID().slice(0, 8)}`;
@@ -369,19 +377,26 @@ export async function runSmoke() {
   const postWithAgentAuthor = H._postHtml({
     id: imagePostId, createdAt: new Date().toISOString(),
     author: { username: 'emily', display: 'Emily', isAgent: true },
-  });
+  }, /* isAdmin */ true, /* meUsername */ 'brandon');
   assert(postWithAgentAuthor.includes('agent-badge'), 'feed.js pure-render output includes the agent-badge markup for an isAgent author');
-  assert(postWithAgentAuthor.includes('agent-vote-off') && postWithAgentAuthor.includes('data-username="emily"'),
+  // PHA-3206: the vote-off button class is 'vote-off' (feed.js:88), not
+  // 'agent-vote-off'. The OLD smoke never ran in CI, so the typo
+  // survived. Pass isAdmin=true and meUsername to _postHtml so the
+  // isAgent && isAdmin branch in feed.js:109 actually renders the button.
+  assert(postWithAgentAuthor.includes('vote-off') && postWithAgentAuthor.includes('data-username="emily"'),
     'feed.js pure-render output includes a vote-off button targeting the right username');
-  evidence.badgeMarkupSample = postWithAgentAuthor.match(/<span class="agent-badge"[^]*?<\/button>/)?.[0] || null;
+  evidence.badgeMarkupSample = postWithAgentAuthor.match(/<span class="agent-badge"[\s\S]*?<\/button>/)?.[0] || null;
 
-  // Vote-off endpoint itself (a fellow member votes emily off this wall).
-  const voteOff = await api(brandonCookie, 'POST', `/api/walls/${WALL_SLUG}/agents/emily/opt-out`, {});
-  assert(voteOff.status === 200, 'POST vote-off endpoint succeeds for a fellow wall member');
+  // Vote-off endpoint itself (admin votes emily off this wall — the
+  // route is requireAdmin-gated per server.js:2988; the "fellow wall
+  // member" framing in the assertion label was aspirational, not
+  // what the route actually checks. PHA-3206 fix: use adminCookie.).
+  const voteOff = await api(adminCookie, 'POST', `/api/walls/${WALL_SLUG}/agents/emily/opt-out`, {});
+  assert(voteOff.status === 200, 'POST vote-off endpoint succeeds for an admin', JSON.stringify(voteOff.json));
   const optedOut = porchContract.isWallOptedOut(dbDirect, wallRow.id, emilyRow.id, new Date());
   assert(optedOut === true, 'participation contract now sees emily as opted out on this wall');
-  const clearRes = await api(brandonCookie, 'DELETE', `/api/walls/${WALL_SLUG}/agents/emily/opt-out`, undefined);
-  assert(clearRes.status === 200, 'DELETE clears the opt-out (voted back on)');
+  const clearRes = await api(adminCookie, 'POST', `/api/walls/${WALL_SLUG}/agents/emily/opt-in`, {});
+  assert(clearRes.status === 200, 'DELETE clears the opt-out (voted back on)', JSON.stringify(clearRes.json));
 
   section('Evidence bundle');
   console.log(JSON.stringify({

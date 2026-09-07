@@ -178,6 +178,17 @@ try {
   rawDb.prepare('INSERT OR IGNORE INTO user_groups (user_id, group_id) VALUES (?, ?)').run(brandonId, mediaClubGroup.id);
   rawDb.prepare('INSERT OR IGNORE INTO user_groups (user_id, group_id) VALUES (?, ?)').run(emilyId, mediaClubGroup.id);
 
+  // PHA-3206: the lib/walls.js seed only creates the 'household' wall,
+  // not a media-club wall. The 'media-club' group is seeded but with
+  // no wall row referencing it. The OLD chain skipped this test
+  // entirely (it wasn't in package.json's && list), so the missing
+  // fixture never surfaced. Create the media-club wall here so the
+  // membership gate has something to check.
+  const existingMediaClubWall = rawDb.prepare('SELECT id FROM walls WHERE slug = ?').get('media-club');
+  if (!existingMediaClubWall) {
+    rawDb.prepare(`INSERT INTO walls (id, slug, name, visibility, group_name) VALUES (?, 'media-club', 'Media Club', 'group', 'media-club')`).run(crypto.randomUUID());
+  }
+
   // A second wall brandon belongs to as a human, that the app's token
   // (scoped only to read:walls:media_club) must NOT be able to read.
   let familyGroup = rawDb.prepare('SELECT id FROM groups WHERE name = ?').get('family');
