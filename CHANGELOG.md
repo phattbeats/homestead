@@ -1,3 +1,20 @@
+## Unreleased — npm test runner: discover every test, not just the ones someone remembered to splice in (PHA-3206)
+
+**PHA-3206:** replaces the 5,242-character `&&` chain in `package.json` `"test"` with `node scripts/run-tests.js` — a tiny glob-discovery runner that picks up every `scripts/test-*.js` and every `test/porch/*.test.mjs` automatically, exits non-zero on first failure, enforces a 50-file floor so an empty glob can't "pass", and applies a per-script 120s wall-clock timeout so a hanging test can't burn the 6-hour CI window. Adding a new `scripts/test-foo.js` now runs on `npm test` with **zero package.json edits**.
+
+**Why it matters (the bug it fixes):** the OLD chain had a silent-skip class of regression. Any test not spliced into the `&&` string didn't run in CI. PHA-2883 was the canonical hit — `scripts/test-companion-cli.js` went green against a throwaway listener while prod `POST /api/agent-connections/:id/events` was 404, because the events route test was never appended to the chain. Discovery is the durable fix.
+
+**Latent test bugs the runner surfaced on first CI run** (all fixed in the same PR):
+
+- `scripts/test-companion-cli.js` — `execFileSync` hangs indefinitely on this Node version; switched to `spawn` + Promise + explicit `process.exit(0)`.
+- `scripts/test-pa-2201-install.js` — test assumed a `media-club` wall row exists; `lib/walls.js#seed()` only creates the `household` wall, so the media-club GROUP row had no wall referencing it. Test now seeds the wall fixture the same way it already seeds the family wall.
+- `test/porch/*.test.mjs` — the porch `node --test` invocation wasn't getting `--require ./scripts/_test-bootstrap.js`, so `loadSessionSecret` failed-closed under PHA-3200. Plus `scripts/seed-porch-smoke.mjs` unconditionally set `SESSION_SECRET = 'porch-…cret'` (17 chars); bumped to a 63-char string.
+- `scripts/seed-porch-smoke.mjs` vote-off section — wrong button class (`agent-vote-off` vs the actual `vote-off`), `postHtml` called with 1 arg instead of 3 so the `isAgent && isAdmin` branch never rendered, opt-out endpoint is `requireAdmin`-gated but the test called it as `brandonCookie`, and opt-out clear is `POST .../opt-in` not `DELETE .../opt-out`.
+
+**Discovery property verified:** 70 `scripts/test-*.js` + 2 `test/porch/*.test.mjs` all run under the new runner (vs 66 + 1 under the OLD chain — 4 tests were silently skipped). CI green: https://github.com/phattbeats/homestead/actions/runs/34112336092 (test pass + validate-commit-range pass). Merged via squash PR #139 → `92954cec`.
+
+**Compatibility:** the existing `scripts/test-*.js` files were not rewritten — they remain the per-PHA evidence. The runner just discovers them. `test:smoke` and `scripts/verify.sh` stay separate (need a booted instance).
+
 ## v0.5.20 (2026-09-05) — fix missing jobs/ in runtime image (PHA-2853)
 
 **PHA-2853 follow-up:** v0.5.19 shipped `require('./jobs/gazette-daily')` in `server.js` but the Dockerfile's runtime stage never `COPY`'d the new `jobs/` directory, so the container crash-looped on boot (`Cannot find module './jobs/gazette-daily'`) the moment it was deployed. Caught while getting a live screenshot for PHA-2853's own acceptance criteria — the fix is one line: `COPY jobs ./jobs` alongside the existing `lib`/`public` copies.
