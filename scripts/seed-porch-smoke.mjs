@@ -147,7 +147,15 @@ export async function runSmoke() {
   // development: a fixed port produced a live server that answered
   // /api/health from a DIFFERENT process and 404'd on every other route).
   process.env.ADMIN_PASSWORD = 'porch-smoke-admin-pw';
-  process.env.SESSION_SECRET = 'porch-smoke-secret';
+  // PHA-3206: PHA-3200 made loadSessionSecret fail-closed on a short /
+  // placeholder secret. The 17-char 'porch-smoke-secret' triggered
+  // "too short (17 chars; minimum 32)" on the first run of the
+  // PHA-3206 runner in CI. Use a deterministic 64-char hex string
+  // generated once for this smoke. Deterministic so re-runs match
+  // any on-disk cookie state (the smoke boots a fresh DATA_DIR each
+  // time so this doesn't actually matter, but keeping it stable
+  // makes log diffs easier).
+  process.env.SESSION_SECRET = 'porch-smoke-secret-' + 'a'.repeat(45); // 63 chars total
   process.env.NODE_ENV = 'production';
   delete process.env.OPENAI_API_KEY;
   const WALL_SLUG = `porch-smoke-${crypto.randomUUID().slice(0, 8)}`;

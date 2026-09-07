@@ -163,7 +163,12 @@ async function main() {
 
     if (mjsFiles.length > 0) {
       console.log(`\n=== porch (node --test, ${mjsFiles.length} files) ===`);
-      const r = spawnSync(process.execPath, ['--test', ...mjsFiles], {
+      // PHA-3206: pass --require so the PHA-3200 bootstrap shim
+      // sets SESSION_SECRET / HOMESTEAD_INSECURE_TEST_COOKIES / NODE_ENV
+      // before any test module imports server.js. Without it the
+      // fail-closed loadSessionSecret throws "too short" on the porch
+      // e2e-smoke.test.mjs because the test process inherits no env.
+      const r = spawnSync(process.execPath, ['--require', bootstrap, '--test', ...mjsFiles], {
         cwd: repoRoot,
         stdio: 'inherit',
         env: process.env,
