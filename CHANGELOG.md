@@ -1,6 +1,6 @@
-## v0.5.21 (2026-09-07) — fix missing routes/ in runtime image (PHA-3327)
+## v0.5.24 (2026-09-07) — fix missing routes/ in runtime image (PHA-3327)
 
-**PHA-3327:** same failure class as v0.5.20's `jobs/` miss. Router extraction (PHA-3214's `routes/health.js`, then `routes/agent-connections.js`) moved `server.js` dependencies into `routes/`, but the Dockerfile's runtime stage never `COPY`'d that directory, so the container crash-looped on boot (`Cannot find module './routes/agent-connections'`) — this is what took prod down this morning. Fix is `COPY routes ./routes` alongside the existing `lib`/`jobs`/`public` copies, plus `scripts/test-dockerfile-runtime-routes.js` to catch the next router extraction before it ships the same way.
+**PHA-3327:** same failure class as v0.5.20's `jobs/` miss. Router extraction (PHA-3214's `routes/health.js`, then `routes/agent-connections.js`) moved `server.js` dependencies into `routes/`, but the Dockerfile's runtime stage never `COPY`'d that directory, so the container crash-looped on boot (`Cannot find module './routes/agent-connections'`) — this is what took prod down this morning. Fix is `COPY routes ./routes` alongside the existing `lib`/`jobs`/`public` copies, plus `scripts/test-dockerfile-runtime-routes.js` to catch the next router extraction before it ships the same way. Version jumps from v0.5.20 to v0.5.24: tags v0.5.21–v0.5.23 exist on GitHub pointing at earlier untagged-in-`package.json` commits (never bumped here), so this release claims the next free number rather than reusing one.
 
 ## Unreleased — npm test runner: discover every test, not just the ones someone remembered to splice in (PHA-3206)
 
