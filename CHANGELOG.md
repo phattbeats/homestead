@@ -1,3 +1,7 @@
+## v0.5.21 (2026-09-07) — fix missing routes/ in runtime image (PHA-3327)
+
+**PHA-3327:** same failure class as v0.5.20's `jobs/` miss. Router extraction (PHA-3214's `routes/health.js`, then `routes/agent-connections.js`) moved `server.js` dependencies into `routes/`, but the Dockerfile's runtime stage never `COPY`'d that directory, so the container crash-looped on boot (`Cannot find module './routes/agent-connections'`) — this is what took prod down this morning. Fix is `COPY routes ./routes` alongside the existing `lib`/`jobs`/`public` copies, plus `scripts/test-dockerfile-runtime-routes.js` to catch the next router extraction before it ships the same way.
+
 ## Unreleased — npm test runner: discover every test, not just the ones someone remembered to splice in (PHA-3206)
 
 **PHA-3206:** replaces the 5,242-character `&&` chain in `package.json` `"test"` with `node scripts/run-tests.js` — a tiny glob-discovery runner that picks up every `scripts/test-*.js` and every `test/porch/*.test.mjs` automatically, exits non-zero on first failure, enforces a 50-file floor so an empty glob can't "pass", and applies a per-script 120s wall-clock timeout so a hanging test can't burn the 6-hour CI window. Adding a new `scripts/test-foo.js` now runs on `npm test` with **zero package.json edits**.
