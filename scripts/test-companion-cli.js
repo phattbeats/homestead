@@ -15,7 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const http = require('http');
-const { execFileSync } = require('child_process');
+const { spawn } = require('child_process');
 
 const agentConnections = require('../lib/agent-connections');
 
@@ -34,15 +34,31 @@ function assertEq(actual, expected, label) {
 const CLI = path.join(__dirname, '..', 'companion-cli', 'homestead-companion.js');
 
 function runCli(args, env) {
-  try {
-    const out = execFileSync(process.execPath, [CLI, ...args], {
-      env: { ...process.env, ...env },
-      encoding: 'utf8',
+  // PHA-3206: switched from execFileSync to spawn (wrapped in Promise)
+  // because execFileSync hangs indefinitely on this harness when the
+  // companion CLI's http.request completes successfully — the sync
+  // wait-for-exit path doesn't reap the child cleanly in some Node 24
+  // sandbox configurations. spawn + 'close' event is reliable.
+  // Returns { status, out } exactly like the old execFileSync version
+  // so the rest of the test doesn't change.
+  return new Promise((resolve) => {
+    const child = spawn(
+      process.execPath,
+      [CLI, ...args],
+      { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => { stdout += d; });
+    child.stderr.on('data', (d) => { stderr += d; });
+    child.on('error', (err) => {
+      resolve({ status: 1, out: `${stdout}${stderr}${err.message}` });
     });
-    return { status: 0, out };
-  } catch (err) {
-    return { status: err.status ?? 1, out: (err.stdout || '') + (err.stderr || '') };
-  }
+    child.on('close', (code, signal) => {
+      const status = signal ? 128 + (signal === 'SIGKILL' ? 9 : 15) : (code == null ? 1 : code);
+      resolve({ status, out: stdout + stderr });
+    });
+  });
 }
 
 function request(base, opts, body) {
@@ -98,14 +114,14 @@ async function main() {
   const companionHome = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-companion-home-'));
   const env = { HOMESTEAD_COMPANION_HOME: companionHome };
 
-  const loginCli = runCli(['login', '--base-url', baseUrl, '--username', 'brandon', '--password', password], env);
+  const loginCli = await runCli(['login', '--base-url', baseUrl, '--username', 'brandon', '--password', password], env);
   assertEq(loginCli.status, 0, '`login` succeeds', loginCli.out);
 
   const cfgAfterLogin = JSON.parse(fs.readFileSync(path.join(companionHome, 'connection.json'), 'utf8'));
   assert(!!cfgAfterLogin.session_cookie, 'login stores a session cookie locally');
   assert(!cfgAfterLogin.secret, 'login does not yet have a secret (not paired)');
 
-  const pairCli = runCli(['pair', '--code', pairingCode], env);
+  const pairCli = await runCli(['pair', '--code', pairingCode], env);
   assertEq(pairCli.status, 0, '`pair` succeeds', pairCli.out);
 
   const cfgAfterPair = JSON.parse(fs.readFileSync(path.join(companionHome, 'connection.json'), 'utf8'));
@@ -114,14 +130,14 @@ async function main() {
   assertEq(cfgAfterPair.provider, 'claude_code', 'pair stores the provider');
 
   // Re-pairing with the same (now consumed) code fails cleanly.
-  const rePairCli = runCli(['pair', '--code', pairingCode], env);
+  const rePairCli = await runCli(['pair', '--code', pairingCode], env);
   assert(rePairCli.status !== 0, 're-pairing with a consumed code fails');
 
   // `sign` produces a header trio that a receiver can verify against
   // the stored secret using lib/agent-connections.js's verifySignature
   // — the exact function a future inbound route would call.
   const eventBody = JSON.stringify({ type: 'test_event', payload: { hello: 'world' } });
-  const signCli = runCli(['sign', '--body', eventBody], env);
+  const signCli = await runCli(['sign', '--body', eventBody], env);
   assertEq(signCli.status, 0, '`sign` succeeds', signCli.out);
   const headers = JSON.parse(signCli.out);
   assert(!!headers['X-Homestead-Signature'], 'sign output carries X-Homestead-Signature');
@@ -166,7 +182,7 @@ async function main() {
   await new Promise(resolve => receiver.listen(0, '127.0.0.1', resolve));
   const receiverPort = receiver.address().port;
 
-  const relayCli = runCli(['relay-one-event', '--url', `http://127.0.0.1:${receiverPort}/inbound`, '--body', eventBody], env);
+  const relayCli = await runCli(['relay-one-event', '--url', `http://127.0.0.1:${receiverPort}/inbound`, '--body', eventBody], env);
   assertEq(relayCli.status, 0, '`relay-one-event` succeeds', relayCli.out);
   assert(!!received, 'receiver got the relayed event');
   assert(received && received.okSig === true, 'receiver verified the relayed event signature');
@@ -177,6 +193,14 @@ async function main() {
 
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
+  // PHA-3206: explicit exit-on-success. The receiver / server listeners
+  // are closed but Node's event loop can keep a few handles alive
+  // (socket pairs, dns resolver cache) long enough that on slower CI
+  // hosts the process sits idle past the run-tests.js wall-clock
+  // timeout. `process.exit(0)` guarantees the runner sees a clean
+  // exit and moves on to the next script. Mirrors the pattern used
+  // by the other scripts in this dir that exit explicitly on pass.
+  process.exit(0);
 }
 
 main().catch(err => {
