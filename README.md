@@ -257,8 +257,7 @@ UI lists google in the add-source picker but marks it as
    + Add source, v0.1.13). The sheet is provider-aware: CalDAV
    sources need an app-password; Microsoft 365 sources need an
    access token + refresh token + client_id (Azure app registration).
-   For a household-shared calendar (e.g. Nextcloud's Shade/Kelly
-   Household), tick the **Shared** checkbox (admin only).
+   For a household-shared calendar (e.g. a shared Nextcloud calendar), tick the **Shared** checkbox (admin only).
 
    For scripted / bulk setups the curl payload is the same JSON the
    UI submits:
