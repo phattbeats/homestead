@@ -31,7 +31,7 @@ main{padding:8px 18px 110px;max-width:680px;margin:0 auto}
 .card-in{border:1px solid var(--line);border-radius:17px;padding:16px;display:flex;align-items:center;gap:14px}
 .tile{font-size:28px;width:48px;height:48px;border-radius:14px;background:var(--accent-soft);
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  /* PHA-2846: when .tile contains an <img>, make the image fill the
+  /* #2846: when .tile contains an <img>, make the image fill the
      tile and round its corners to match the accent-soft squircle.
      Emoji glyphs ignore these rules and render in the slot. */
   overflow:hidden}
@@ -68,7 +68,7 @@ main{padding:8px 18px 110px;max-width:680px;margin:0 auto}
 </div>
 
 <script>
-// PHA-2205 (PHA-2200.4) add-a-room sheet. Renders the difference
+// #2205 (#2200.4) add-a-room sheet. Renders the difference
 // between the user's enabled-modules set and the full registry;
 // each row is a toggle that fires POST /api/me/modules/:key/enable
 // (or /disable). On Done, navigate back to the SPA so applyLayout()
@@ -94,7 +94,7 @@ async function api(method, url, body) {
   return r.json();
 }
 
-// PHA-2846: built-in modules now ship a path-style icon
+// #2846: built-in modules now ship a path-style icon
 // ("/modules/{key}.svg") under public/modules/. The registry
 // returns this string from GET /api/modules. Third-party
 // manifests still ship emoji strings (e.g. "🍿"); they pass
@@ -197,7 +197,7 @@ function render() {
   }
 })();
 </script>
-<!-- PHA-2823: persistent cross-page nav (wall/porch/rooms/invites/connectors) -->
+<!-- #2823: persistent cross-page nav (wall/porch/rooms/invites/connectors) -->
 <script src="/components/app-nav.js" data-active="modules"></script>
 </body>
 </html>

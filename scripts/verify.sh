@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PHA-2501 standing policy enforcement — one-shot verify command.
+# #2501 standing policy enforcement — one-shot verify command.
 #
 # Per Brandon's 2026-08-23 directive (Definition of Done), every Homestead
 # change must come with artifact-grade evidence (screenshot, curl transcript,
@@ -10,7 +10,7 @@
 #   1. Boots a scratch Homestead instance on port 3105 with an ephemeral
 #      DATA_DIR (fresh DB) and the standard seeded users (admin / brandon).
 #   2. Runs the SPA page-error guard (catches duplicate top-level
-#      declarations like the PHA-2494 bug — see scripts/smoke-spa-pageerrors.js).
+#      declarations like the #2494 bug — see scripts/smoke-spa-pageerrors.js).
 #   3. Runs the post-login mobile-viewport screenshot smoke (catches login
 #      render breakage — see scripts/smoke-postlogin-screenshot.js).
 #   4. Drops screenshots into ./verify-out/.
@@ -38,7 +38,7 @@ KEEP_DATA="${VERIFY_KEEP_DATA:-0}"
 # or by the CI workflow. Honor an explicit override for constrained envs.
 export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-0}"
 
-echo "==> PHA-2501 verify.sh — Homestead Definition of Done guard"
+echo "==> #2501 verify.sh — Homestead Definition of Done guard"
 echo "    repo: $REPO_DIR"
 echo "    port: $PORT"
 echo "    data: $TMP_DATA"
@@ -82,14 +82,14 @@ NODE_ENV=production \
   node scripts/smoke-postlogin-screenshot.js
 echo
 
-# PHA-2556: fresh-install Porch acceptance smoke — logs in as brandon,
+# #2556: fresh-install Porch acceptance smoke — logs in as brandon,
 # taps the Porch tab, posts a text message, and captures 390x844
 # screenshots of (1) Porch with composer visible and (2) Porch with
 # the new post landed. This is the user-visible acceptance criterion
-# for the PHA-2556 fix; the previous Porch flow had a wall that was
+# for the #2556 fix; the previous Porch flow had a wall that was
 # invisible on a fresh boot, so a smoke that walks the actual user
 # path is what proves the fix works.
-echo "==> Step 3/4 — PHA-2556 fresh-install Porch smoke"
+echo "==> Step 3/4 — #2556 fresh-install Porch smoke"
 VERIFY_OUT="$VERIFY_OUT" \
 DATA_DIR="$TMP_DATA" \
 PORT="$PORT" \
@@ -100,23 +100,23 @@ NODE_ENV=production \
   node scripts/smoke-2556-porch-default.js
 echo
 
-# 4. PHA-2583: unauthenticated invite-link bounce smoke. Validates that
+# 4. #2583: unauthenticated invite-link bounce smoke. Validates that
 #    /invite/{code} serves HTML (not the /api 404 JSON), GET /api/login
 #    returns a 302 to /?next= instead of JSON 404, and a fresh
 #    browser walks the bounce-back to the original URL after login.
 #    Drop two screenshots into verify-out/ at 390x844 mobile viewport.
-echo "==> Step 4/5 — PHA-2583 unauthenticated invite-link bounce smoke"
+echo "==> Step 4/5 — #2583 unauthenticated invite-link bounce smoke"
 VERIFY_OUT="$VERIFY_OUT" \
   node scripts/smoke-2583-invite-bounce.js
 echo
 
-# PHA-2585: Home / Today landing is always-visible after applyLayout.
+# #2585: Home / Today landing is always-visible after applyLayout.
 # Boots a fresh instance, logs in as brandon, asserts that the Home
 # tab is visible in the bottom nav regardless of which modules are
 # enabled. Drops two screenshots into verify-out/ at 390x844:
 #   home-always-visible-390.png          (all six modules enabled)
 #   home-always-visible-disabled-390.png (most modules disabled)
-echo "==> Step 5/6 — PHA-2585 Home always-visible smoke"
+echo "==> Step 5/6 — #2585 Home always-visible smoke"
 VERIFY_OUT="$VERIFY_OUT" \
 DATA_DIR="$TMP_DATA" \
 PORT="$PORT" \
@@ -127,9 +127,9 @@ NODE_ENV=production \
   node scripts/smoke-2585-home-always-visible.js
 echo
 
-# 6. PHA-2586: a fresh DB must expose Groceries, then a household user
+# 6. #2586: a fresh DB must expose Groceries, then a household user
 #    opens Lists and adds an item through the actual mobile UI.
-echo "==> Step 6/7 — PHA-2586 Lists fresh-install journey smoke"
+echo "==> Step 6/7 — #2586 Lists fresh-install journey smoke"
 VERIFY_OUT="$VERIFY_OUT" \
   node scripts/smoke-2586-lists-ui.js
 echo
@@ -168,4 +168,4 @@ echo "==> Done. Artifacts:"
 ls -la "$VERIFY_OUT" 2>/dev/null | sed 's/^/    /'
 echo
 echo "Attach these (or their paths) to the closing comment of any UI/API issue."
-echo "Per PHA-2501 standing policy: no evidence, no done."
+echo "Per #2501 standing policy: no evidence, no done."

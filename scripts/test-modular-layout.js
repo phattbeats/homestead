@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2209 / PHA-2200.8 — Modular layout acceptance test.
+// #2209 / #2200.8 — Modular layout acceptance test.
 //
 // Exercises the three layout shapes (feed-only, feed-tabs, meadow)
 // plus the empty state via HTTP against a live server.js. Uses the
@@ -11,10 +11,10 @@
 //     count.
 //   * The welcome-sheet flow: first_run === true on a fresh user,
 //     POST /api/me/first-run-complete stamps it, subsequent reads
-//     return first_run === false (PHA-2200.6).
+//     return first_run === false (#2200.6).
 //   * The agent-drawer flag: when the agent module is enabled,
 //     /api/me.layout.agentDrawer === true; when disabled, false
-//     (PHA-2200.7 — even though PHA-2221 wires the actual drawer
+//     (#2200.7 — even though #2221 wires the actual drawer
 //     UI, the flag MUST be present and correct).
 //   * The `+ Add rooms` pill affordance: addRoomVisible === true
 //     when at least one module is un-enabled, false when all 6 are
@@ -113,7 +113,7 @@ const GET = (urlPath) => fetch('http://127.0.0.1:3192' + urlPath, { headers: HEA
   // Start from all-6 → meadow.
   let layout = (await (await GET('/api/me/layout')).json());
   assertEq(layout.layout, 'meadow', 'all 6 enabled → meadow');
-  // PHA-2659: this baseline enables the six pre-Gazette modules, so the
+  // #2659: this baseline enables the six pre-Gazette modules, so the
   // pill correctly stays visible — gazette is still addable. Test 5
   // below covers the genuinely-everything-on case.
   assertEq(layout.addRoomVisible, true, 'six enabled → addRoomVisible (gazette still addable)');
@@ -194,7 +194,7 @@ const GET = (urlPath) => fetch('http://127.0.0.1:3192' + urlPath, { headers: HEA
   const agentTile = layout.tabs.find(t => t.key === 'agent');
   assert(agentTile, 'agent tile present');
   assertEq(agentTile.route, null, 'agent (drawer mode) has route null — opens FAB, not route');
-  // PHA-2846: built-in icons are SVG paths under /modules/ (see
+  // #2846: built-in icons are SVG paths under /modules/ (see
   // public/modules.html + public/index.html for the dispatch rule).
   assertEq(agentTile.icon, '/modules/agent.svg', 'agent tile icon');
   assertEq(agentTile.label, 'Agent', 'agent tile label');
@@ -206,7 +206,7 @@ const GET = (urlPath) => fetch('http://127.0.0.1:3192' + urlPath, { headers: HEA
   assertEq(layout.agentDrawer, false, 'agentDrawer flag flips to false');
 
   // -----------------------------------------------------------------------------
-  // 4. Welcome-sheet flow (first_run lifecycle, PHA-2200.6).
+  // 4. Welcome-sheet flow (first_run lifecycle, #2200.6).
   // -----------------------------------------------------------------------------
   console.log('\nTest 4: welcome-sheet flow');
   // /api/me.first_run is true for the fresh brandon user.

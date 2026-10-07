@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2711 acceptance tests for the same-day closed-beta invite
+// #2711 acceptance tests for the same-day closed-beta invite
 // vertical path.
 //
 // Exercises lib/invites.signupViaInvite + signinViaInvite + the
@@ -159,7 +159,7 @@ async function withServer(fn) {
 }
 
 async function main() {
-  console.log('PHA-2711 invite-signup tests');
+  console.log('#2711 invite-signup tests');
 
   // ---------- Direct lib tests ----------
   await withServer(async ({ port, dbPath }) => {

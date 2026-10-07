@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2586 acceptance smoke: a fresh Homestead DB seeds the shared
+// #2586 acceptance smoke: a fresh Homestead DB seeds the shared
 // Groceries list; a household user opens Lists and adds an item through
 // the rendered mobile UI. No SQLite fixture writes are allowed here.
 //

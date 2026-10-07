@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2853 — seed 28 back-issues of `gazette_issues` for a demo/test
+// #2853 — seed 28 back-issues of `gazette_issues` for a demo/test
 // user, so the standalone Gazette page has real scrollback on first
 // paint instead of a blank "no back-issues yet" state.
 //

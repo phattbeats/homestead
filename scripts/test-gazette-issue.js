@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2853 acceptance tests — the typed Gazette issue rework.
+// #2853 acceptance tests — the typed Gazette issue rework.
 //
 // Covers:
 //   1. `composeTypedPayload` produces typed, card-renderable sections
@@ -53,7 +53,7 @@ function assertEq(actual, expected, label) {
   if (a === e) ok(label); else ng(label, `expected ${e}, got ${a}`);
 }
 
-console.log('PHA-2853 Gazette typed-issue tests\n');
+console.log('#2853 Gazette typed-issue tests\n');
 
 // -----------------------------------------------------------------------------
 // 1. Pure unit tests: composeTypedPayload
@@ -91,7 +91,7 @@ console.log('PHA-2853 Gazette typed-issue tests\n');
   }
 
   const listing = issue.sections.find(s => s.key === 'listings').items[0];
-  assertEq(listing.room_label, 'Kitchen', 'PHA-2852 room-keyed listing carries room_label through to the typed item');
+  assertEq(listing.room_label, 'Kitchen', '#2852 room-keyed listing carries room_label through to the typed item');
 
   const rotation = issue.sections.find(s => s.key === 'rotation_desk').items[0];
   assertEq(rotation.status, 'due_today', 'rotation desk item is typed with its due-status, not prose');
@@ -160,7 +160,7 @@ async function main() {
 
   console.log('\nTest 3: enabling gazette (with its widened requires) works out of the box');
   {
-    // PHA-2853 widened requires to ['agent','wall','calendar']; all
+    // #2853 widened requires to ['agent','wall','calendar']; all
     // three are grandfathered-enabled on a fresh install, so this
     // should not need withRequirements.
     const en = await POST('/api/me/modules/gazette/enable');

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2881 (PHA-2855 phase 2) acceptance test for companion-cli/homestead-companion.js.
+// #2881 (#2855 phase 2) acceptance test for companion-cli/homestead-companion.js.
 //
 // Drives the CLI as a real subprocess against a live server.js instance,
 // end to end: mint a pairing code (as the browser session would),
@@ -34,7 +34,7 @@ function assertEq(actual, expected, label) {
 const CLI = path.join(__dirname, '..', 'companion-cli', 'homestead-companion.js');
 
 function runCli(args, env) {
-  // PHA-3206: switched from execFileSync to spawn (wrapped in Promise)
+  // #3206: switched from execFileSync to spawn (wrapped in Promise)
   // because execFileSync hangs indefinitely on this harness when the
   // companion CLI's http.request completes successfully — the sync
   // wait-for-exit path doesn't reap the child cleanly in some Node 24
@@ -78,7 +78,7 @@ function request(base, opts, body) {
   });
 }
 
-console.log('PHA-2881 companion CLI acceptance test\n');
+console.log('#2881 companion CLI acceptance test\n');
 
 async function main() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-companion-http-'));
@@ -193,7 +193,7 @@ async function main() {
 
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail > 0) process.exit(1);
-  // PHA-3206: explicit exit-on-success. The receiver / server listeners
+  // #3206: explicit exit-on-success. The receiver / server listeners
   // are closed but Node's event loop can keep a few handles alive
   // (socket pairs, dns resolver cache) long enough that on slower CI
   // hosts the process sits idle past the run-tests.js wall-clock

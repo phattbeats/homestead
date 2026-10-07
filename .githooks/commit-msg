@@ -3,7 +3,7 @@
 set -eu
 
 message_file=${1:?commit message path is required}
-expected_ident='phattbeats <obiwouldjablowme@protonmail.com>'
+expected_ident='phattbeats <21150921+phattbeats.noreply.github.com>'
 author_ident=$(git var GIT_AUTHOR_IDENT | sed -E 's/ [0-9]+ [+-][0-9]{4}$//')
 
 if [ "$author_ident" != "$expected_ident" ]; then

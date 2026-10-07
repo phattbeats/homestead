@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-1872 (design doc PHA-1624 §11) — the Dune walkthrough, on disk.
+// #1872 (design doc #1624 §11) — the Dune walkthrough, on disk.
 //
 // Direct DB calls only (no write API — Phase A ships read-only). Idempotent:
 // re-running this script must not duplicate entities or edges. Entities use

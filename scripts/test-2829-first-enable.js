@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2829 acceptance tests for lib/hearth-characters.js.
+// #2829 acceptance tests for lib/hearth-characters.js.
 //
 // Drives `lib/hearth-characters.js` directly against a temp SQLite file,
 // plus a smoke test of the `GET /api/drawer/intro` route against a
@@ -54,7 +54,7 @@ function freshDb() {
   return { db, tmpDir };
 }
 
-console.log('PHA-2829 Hearth character tests\n');
+console.log('#2829 Hearth character tests\n');
 
 // ---- Test 1: migrate() creates the table + indexes ----
 {

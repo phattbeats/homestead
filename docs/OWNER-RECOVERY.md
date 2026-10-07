@@ -1,13 +1,13 @@
 # Owner Recovery — Operational Runbook
 
-_PHA-2708: preventing another owner lockout._
+_#2708: preventing another owner lockout._
 
 This document describes the break-glass pathway for the household
 owner. Read it before you need it. It does **not** contain any
 hashes, tokens, or passwords — operational state only.
 
 Note: this is a *different* mechanism from `scripts/reset-owner-password.js`
-(PHA-2711), which is a general-purpose "reset any user's password"
+(#2711), which is a general-purpose "reset any user's password"
 CLI consumed through `POST /api/public/invites/reset`. This runbook
 covers the OWNER-only, hardened break-glass flow, which stores its
 token in the dedicated `owner_recovery_token_hash` /
@@ -45,7 +45,7 @@ and don't migrate state across owner changes.
 3. **Every identity_link row for the owner was unlinked** AND the
    `local_credentials.password_hash` was rotated or deleted.
 
-PHA-2708 closes all three loops with the same primitive: a
+#2708 closes all three loops with the same primitive: a
 host-side CLI (`scripts/owner-recovery.js`) that mints a
 short-lived, one-shot, sha256-hashed reset token directly against
 the SQLite DB and an HTTP endpoint that consumes it. The CLI does
@@ -254,7 +254,7 @@ exists.
   if you're worried about a corruption event. Don't break glass
   on a database you cannot afford to lose.
 - It does NOT touch `identity_links` rows. Those belong to
-  PHA-2706 / PHA-2703. Rotating the owner's password has nothing
+  #2706 / #2703. Rotating the owner's password has nothing
   to do with linking them to a new Authentik subject.
 - It does NOT log the plaintext token to disk anywhere
   (analytics_events meta, ops logs, anywhere). The only place the
@@ -266,14 +266,14 @@ exists.
 ## See also
 
 - `lib/identity.js` — the canonical primitives. The comment block
-  at the top of the PHA-2708 section explains the threat model.
+  at the top of the #2708 section explains the threat model.
 - `scripts/test-2708-owner-recovery.js` — the contract. If the
   runbook and the test disagree, the test wins.
 - `scripts/smoke-2708-owner-recovery.js` — the end-to-end
   evidence generator. Run it on any Homestead install to capture
   verify-out/ artifacts for a deploy review.
-- PHA-2708 (this issue) — original requirements.
-- PHA-2704 — the identity foundation this PHA builds on. Read
+- #2708 (this issue) — original requirements.
+- #2704 — the identity foundation this PHA builds on. Read
   that first if you need to understand the schema.
 - `docs/DEFINITION-OF-DONE.md` — evidence requirements for a
   closed issue.

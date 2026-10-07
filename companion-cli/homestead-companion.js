@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Homestead local companion — reference CLI (PHA-2881, PHA-2855 phase 2).
+// Homestead local companion — reference CLI (#2881, #2855 phase 2).
 //
 // This is the OTHER end of lib/agent-connections.js's pairing flow
-// (PHA-2880, phase 1). It runs on the USER's own machine — laptop,
+// (#2880, phase 1). It runs on the USER's own machine — laptop,
 // phone, wherever OpenClaw / Claude Code / Codex actually lives — and
 // is the only thing that ever holds:
 //   * the user's Homestead session cookie (used once, to redeem a
@@ -13,7 +13,7 @@
 //
 // Protocol (mirrors lib/agent-connections.js's header contract exactly):
 //   1. User opens the "Connect an agent" wizard in the Homestead web UI
-//      (PHA-2882), picks a provider tile, and gets a 6-character
+//      (#2882), picks a provider tile, and gets a 6-character
 //      pairing code (10-minute TTL, single-use).
 //   2. Companion logs in as that same user (`login`) and redeems the
 //      code (`pair`) — POST /api/agent-connections/redeem-pairing-code
@@ -45,7 +45,7 @@
 //
 // State lives in $HOMESTEAD_COMPANION_HOME (default ~/.homestead-companion)
 // as connection.json: { base_url, connection_id, provider, secret, session_cookie }.
-// This is a reference skeleton for the PHA-2855 phase 4 acceptance proof,
+// This is a reference skeleton for the #2855 phase 4 acceptance proof,
 // not a packaged/distributed binary — no auto-update, no keychain
 // integration, no multi-connection management yet.
 
@@ -237,7 +237,7 @@ async function cmdSign(args) {
 // `relay-one-event` — signs and POSTs a single JSON event body to
 // `--url` (defaults to `<base_url>/api/agent-connections/<id>/events`,
 // the inbound route future phases wire up). This is the end-to-end
-// proof PHA-2855 phase 4's acceptance test drives: mint code -> pair ->
+// proof #2855 phase 4's acceptance test drives: mint code -> pair ->
 // relay-one-event -> Homestead verifies the signature with
 // lib/agent-connections.js's verifySignature() against the stored
 // secret.

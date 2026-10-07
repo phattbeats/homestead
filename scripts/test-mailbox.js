@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// PHA-2426 acceptance tests for lib/porch/mailbox.js: the message
+// #2426 acceptance tests for lib/porch/mailbox.js: the message
 // table's core write path, chatter-budget + per-thread turn-limit
 // enforcement, and the structural "every message has a Porch post"
 // invariant (rule 3 — no hidden DM layer). Same boot pattern as
 // scripts/test-porch-sweep.js (ephemeral DATA_DIR, migrate the
 // primitives the module sits on top of, then drive it directly).
 //
-// "Foreign harness" is simulated exactly as PHA-2201 models it: an
+// "Foreign harness" is simulated exactly as #2201 models it: an
 // installed_apps row + an app-scoped agent_tokens row carrying
 // read:mailbox/write:mailbox — there is no separate agent registry to
 // fake (same fixture shape as scripts/test-agent-endpoints.js's
@@ -38,7 +38,7 @@ function assertThrowsCode(fn, expectedCode, label) {
   }
 }
 
-console.log('PHA-2426 mailbox tests\n');
+console.log('#2426 mailbox tests\n');
 
 const tmpDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-mailbox-test-'));
 process.env.DATA_DIR = tmpDataDir;

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PHATT Tech LLC
 
-// PHA-2852 acceptance tests for lib/house-rooms.js and the additive
+// #2852 acceptance tests for lib/house-rooms.js and the additive
 // `room_kinds` module-registry field.
 //
 // The three acceptance criteria from the issue, tested by name below:
@@ -39,7 +39,7 @@ function assertThrowsStatus(fn, status, label) {
   catch (e) { assertEq(e.status, status, label); }
 }
 
-console.log('PHA-2852 house rooms tests\n');
+console.log('#2852 house rooms tests\n');
 
 const db = new Database(':memory:');
 userModel.migrate(db);
@@ -277,7 +277,7 @@ console.log('\nAcceptance 2/3: events tagged to a room, filtered and joined');
 console.log('\nModule gate: room_kinds is additive');
 {
   assertEq(validator.REQUIRED_FIELDS.length, 16,
-    'REQUIRED_FIELDS is still exactly 16 — the PHA-2201 contract is unbroken');
+    'REQUIRED_FIELDS is still exactly 16 — the #2201 contract is unbroken');
   assert(!validator.REQUIRED_FIELDS.includes('room_kinds'), 'room_kinds is not a required field');
 
   assertEq(modules.getRoomKinds('calendar'), ['house_room'], 'calendar declares house_room');
@@ -288,7 +288,7 @@ console.log('\nModule gate: room_kinds is additive');
   assertEq(modules.modulesForRoomKind('house_room'), ['lists', 'calendar', 'chores'],
     'reverse lookup returns declaring modules in registry order');
 
-  // The live registry still validates, and a pre-PHA-2852 manifest
+  // The live registry still validates, and a pre-#2852 manifest
   // (16 fields, no room_kinds) is still a valid entry.
   assertEq(validator.validateRegistry(null), null, 'live registry passes validation with the new field');
   const legacy = {

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2711: owner-account break-glass reset.
+// #2711: owner-account break-glass reset.
 //
 // Mints a one-shot recovery token for a Homestead local-account user.
 // The token is valid for 1 hour, sha256-hashed in the DB, and
@@ -19,8 +19,8 @@
 //
 // This is the documented "Brandon's owner account has a working local
 // credential and documented break-glass reset path independent of
-// Authentik" path. PHA-2711 explicitly requires both the working
-// credential (PHA-2704 already backfilled pass_hash → local_credentials
+// Authentik" path. #2711 explicitly requires both the working
+// credential (#2704 already backfilled pass_hash → local_credentials
 // on first boot) and a way to recover it if the password is forgotten.
 
 'use strict';

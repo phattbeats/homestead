@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-1867 acceptance tests for the month-grid merge layer.
+// #1867 acceptance tests for the month-grid merge layer.
 //
 // Covers:
 //   * `/api/events/merged` returns native + cached provider events tagged
@@ -8,7 +8,7 @@
 //     END inside it (the bug the merge-layer fix is meant to close).
 //   * Events from disabled sources are excluded.
 //   * The response payload never contains credential field names — this
-//     is the publicView leak-check the foundation work (PHA-1620) defined,
+//     is the publicView leak-check the foundation work (#1620) defined,
 //     extended here to the merged endpoint specifically.
 //   * The endpoint requires `auth` — anonymous calls get 401.
 //

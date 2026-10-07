@@ -1,18 +1,18 @@
-// Homestead — third-party app consent screen (PHA-2201.2 / PHA-2230).
+// Homestead — third-party app consent screen (#2201.2 / #2230).
 //
 // Vanilla JS, no build step, no framework — same convention as
 // public/porch.js. Renders the manifest preview + the mapped scope
-// phrases (from /lib/scope-display.js, PHA-2230's shared mapping) in
+// phrases (from /lib/scope-display.js, #2230's shared mapping) in
 // the two-column "will be able to" / "will NOT be able to" layout from
-// the PHA-2201 design note §4. Copy is the verbatim v1 baseline —
+// the #2201 design note §4. Copy is the verbatim v1 baseline —
 // intentionally NOT derived from what's actually true beyond the
 // scopes[] list (design note §4: no raw manifest JSON, no token value,
 // no "I trust this author" checkbox, no code-signing badge).
 //
 // The install endpoints (POST /api/apps/resolve, /consent, /install)
-// are PHA-2229 (shipped). This screen itself has no DB dependency
-// (PHA-2230's scope) and renders purely from a manifest + scopes[]
-// list. `renderConsentScreen` is the reusable piece — PHA-2232's
+// are #2229 (shipped). This screen itself has no DB dependency
+// (#2230's scope) and renders purely from a manifest + scopes[]
+// list. `renderConsentScreen` is the reusable piece — #2232's
 // Settings → Apps install flow embeds this script and calls it
 // directly against its own sheet markup + resolved manifest; this
 // page's own boot() below (guarded to only run on consent.html itself)
@@ -49,7 +49,7 @@
   // reusable piece. `root` is the container holding the ids below
   // (public/consent.html's #app, or any host markup with the same
   // structure). Throws if `scopes` contains anything outside the
-  // PHA-2201 §3 vocabulary — see lib/scope-display.js.
+  // #2201 §3 vocabulary — see lib/scope-display.js.
   function renderConsentScreen(root, manifest, scopes, handlers) {
     handlers = handlers || {};
 
@@ -106,7 +106,7 @@
 
   function boot() {
     // Guard: this standalone-page demo/preview harness only runs on
-    // consent.html itself. PHA-2232 (Settings → Apps → install) embeds
+    // consent.html itself. #2232 (Settings → Apps → install) embeds
     // this same script for `window.HomesteadConsent.renderConsentScreen`
     // but has its own root markup (inside a Settings sheet, not
     // consent.html's #demoBanner/#app structure) — without this guard,
@@ -124,9 +124,9 @@
         history.back();
       },
       onInstall() {
-        // POST /api/apps/install lands with PHA-2229. Until then this
+        // POST /api/apps/install lands with #2229. Until then this
         // screen only proves the render contract, not the write.
-        window.alert('Install endpoint not built yet (PHA-2229).');
+        window.alert('Install endpoint not built yet (#2229).');
       },
     });
   }

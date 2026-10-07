@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2201.4 (PHA-2232) smoke test: Settings → Apps UI — apps list
+// #2201.4 (#2232) smoke test: Settings → Apps UI — apps list
 // (built-in + third-party), per-app detail (scopes + activity),
 // revoke, and the paste-a-manifest-URL install flow.
 //
@@ -68,7 +68,7 @@ function request(opts, body) {
   assert(html.includes('function openAppInstallSheet'), 'openAppInstallSheet() exists');
   assert(html.includes('function loadAppActivity'), 'loadAppActivity() exists (paginated activity)');
   assert(html.includes("api('POST', `/api/apps/${encodeURIComponent(app.key)}/revoke`)"), 'detail sheet calls POST /api/apps/:key/revoke');
-  assert(html.includes('window.HomesteadConsent.renderConsentScreen'), 'install flow reuses the PHA-2230 consent screen renderer, not a reimplementation');
+  assert(html.includes('window.HomesteadConsent.renderConsentScreen'), 'install flow reuses the #2230 consent screen renderer, not a reimplementation');
   assert(html.includes("api('POST', '/api/apps/resolve'"), 'install flow calls POST /api/apps/resolve');
   assert(html.includes("api('POST', '/api/apps/consent'"), 'install flow calls POST /api/apps/consent');
   assert(html.includes("api('POST', '/api/apps/install'"), 'install flow calls POST /api/apps/install');

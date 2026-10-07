@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2588 regression: a README-default installation does not need the
+// #2588 regression: a README-default installation does not need the
 // optional CALENDAR_CRED_KEY to serve the core application. Health remains
 // green when SQLite is ready while calendarCredKeyReady exposes the feature
 // capability independently.
@@ -34,7 +34,7 @@ delete process.env.CALENDAR_CRED_KEY;
     assert.equal(health.ok, true, 'healthy database keeps core probe true');
     assert.equal(health.db, 'ok', 'fresh database is ready');
     assert.equal(health.calendarCredKeyReady, false, 'optional calendar key remains separately visible');
-    console.log('PHA-2588: default-install health contract passes');
+    console.log('#2588: default-install health contract passes');
   } finally {
     await new Promise((resolve) => server.close(resolve));
     fs.rmSync(dataDir, { recursive: true, force: true });

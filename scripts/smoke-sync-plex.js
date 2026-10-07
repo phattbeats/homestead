@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-1873 (PHA-1624 Phase B-1) smoke test for the Plex sync worker.
+// #1873 (#1624 Phase B-1) smoke test for the Plex sync worker.
 //
 // End-to-end smoke against a live Plex Media Server. Reads:
 //

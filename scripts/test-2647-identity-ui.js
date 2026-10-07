@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2647 acceptance tests for the Porch agent-identity backend
+// #2647 acceptance tests for the Porch agent-identity backend
 // primitives: derived isAgent on post/comment authors, the wall-level
 // "vote off the porch" toggle (list/opt-out/opt-in), the feed/comments
 // hiding that toggle drives, and the identity.js collision-suffix
@@ -23,7 +23,7 @@ function assertEq(actual, expected, label) {
   if (a === e) ok(label); else ng(label, `expected ${e}, got ${a}`);
 }
 
-console.log('PHA-2647 Porch identity UI backend tests\n');
+console.log('#2647 Porch identity UI backend tests\n');
 
 const tmpDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-2647-test-'));
 process.env.DATA_DIR = tmpDataDir;

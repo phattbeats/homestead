@@ -1,4 +1,4 @@
-/* Homestead — The Porch Wall (PHA-2151). Tokens ported verbatim from
+/* Homestead — The Porch Wall (#2151). Tokens ported verbatim from
    public/index.html's <style> :root block for visual consistency. */
 :root{
   --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#7a7269;
@@ -100,7 +100,7 @@ textarea{resize:vertical;font-family:inherit}
 .mute-btn{font-size:15px;color:var(--muted);padding:2px 6px;border-radius:8px;line-height:1}
 .mute-btn.muted{color:var(--accent)}
 
-/* PHA-2647: Porch agent identity — honest identity clause. Wordmark-style
+/* #2647: Porch agent identity — honest identity clause. Wordmark-style
    badge (no avatar imagery, no faces) so a synthetic post is unmistakable
    at a glance, plus the reversible per-wall opt-out control. */
 .agent-post{border:1px solid var(--line);box-shadow:none}
@@ -130,7 +130,7 @@ textarea{resize:vertical;font-family:inherit}
   opacity:0;pointer-events:none;transition:opacity .25s var(--ease),transform .25s var(--ease);z-index:50;max-width:90vw;text-align:center}
 #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 
-/* ---- PHA-2727: wall-only mobile layout (comp A — compact floating FAB) ----
+/* ---- #2727: wall-only mobile layout (comp A — compact floating FAB) ----
    No bottom bar exists on this standalone shell, so the composer is
    collapsed by default and the single available action (post to the
    wall) becomes a centered, unmissable FAB. Profile/settings — which had
@@ -148,7 +148,7 @@ textarea{resize:vertical;font-family:inherit}
 .compose-fab.open{transform:translateX(-50%) rotate(45deg)}
 .compose-fab.open:active{transform:translateX(-50%) rotate(45deg) scale(.92)}
 
-/* PHA-2822: the one door out of the wall-only funnel. Kept off to the
+/* #2822: the one door out of the wall-only funnel. Kept off to the
    side and visually quiet — a text pill, not another FAB — so the
    compose action stays the obvious primary move and this reads as
    "there's more here" rather than a second call to action. */

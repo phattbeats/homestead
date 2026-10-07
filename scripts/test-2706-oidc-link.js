@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2706 acceptance tests — "Link Authentik later" OIDC flow.
+// #2706 acceptance tests — "Link Authentik later" OIDC flow.
 //
 // What this script guards:
 //   * Schema: oidc_link_states table exists with the expected columns.

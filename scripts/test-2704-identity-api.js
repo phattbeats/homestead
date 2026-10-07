@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2704 API surface acceptance tests for the canonical identity foundation.
+// #2704 API surface acceptance tests for the canonical identity foundation.
 //
 // Boots server.js on an ephemeral port (3192) and exercises the new
 // /api/me/identities endpoints end-to-end against a header-trust mock.

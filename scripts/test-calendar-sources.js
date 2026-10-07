@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-1620 acceptance tests for the calendar-sources module.
+// #1620 acceptance tests for the calendar-sources module.
 //   * secret-box (AES-256-GCM encrypt/decrypt + fail-closed on missing key)
 //   * caldav-source (iCal parser, adapter factory, injected HTTP stub)
 //   * calendar-sources (migration, publicView never exposes cred_blob,
@@ -46,7 +46,7 @@ function assertThrows(fn, pattern, label) {
   }
 }
 
-console.log('PHA-1620 calendar-sources tests\n');
+console.log('#1620 calendar-sources tests\n');
 
 // ---- Test 1: secret-box round-trip + tamper detection ----------------
 console.log('Test 1: secret-box round-trip');

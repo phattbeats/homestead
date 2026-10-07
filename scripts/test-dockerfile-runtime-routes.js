@@ -1,6 +1,6 @@
 'use strict';
 
-// PHA-3327: Router extraction moves a server.js dependency into routes/.
+// #3327: Router extraction moves a server.js dependency into routes/.
 // The production image has a deliberately narrow runtime COPY allowlist, so
 // assert the directory is included before a deployment discovers it at boot.
 
@@ -16,4 +16,4 @@ assert.match(
   'runtime Dockerfile must copy routes/ for server.js router factories',
 );
 
-console.log('PHA-3327: Docker runtime routes copy contract passes (1/1)');
+console.log('#3327: Docker runtime routes copy contract passes (1/1)');

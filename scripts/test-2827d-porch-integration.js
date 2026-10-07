@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2831 (PHA-2827.D) + PHA-2844 acceptance tests: Hearth as a Porch
+// #2831 (#2827.D) + #2844 acceptance tests: Hearth as a Porch
 // citizen — character row + register weights + sweep integration, plus
 // the real comprehension -> per-register draft -> decide -> post
 // pipeline that closes the loop server.js's onDecision used to leave
@@ -7,7 +7,7 @@
 //
 // Exercises the full pipeline end-to-end: ensureBuiltinAgentUser seeds
 // Hearth's built-in account + `characters` row (same seed path as
-// PHA-2827.B) and backfills wall membership; lib/porch/sweep.js's
+// #2827.B) and backfills wall membership; lib/porch/sweep.js's
 // listAgentUserIds() picks him up alongside any user-installed agent
 // character; porchContract.resolveCharacter() reads his register
 // weights straight off the `characters` table; decide() gates a
@@ -18,7 +18,7 @@
 // lexicon, wall opt-out) still hand-inject candidates the way
 // test/porch/participation-contract.test.mjs does — that's testing
 // decide()'s gate logic in isolation, not the candidate-generation
-// step, and hand-injection is the right tool for that. The PHA-2844
+// step, and hand-injection is the right tool for that. The #2844
 // block at the end is different: it exercises the REAL upstream
 // pipeline — lib/porch/comprehension.js's buildComprehension() (real
 // media upload + a stubbed vision describer, since no real vision
@@ -48,7 +48,7 @@ function assertEq(actual, expected, label) {
   if (a === e) ok(label); else ng(label, `expected ${e}, got ${a}`);
 }
 
-console.log('PHA-2831 (PHA-2827.D) Hearth-on-the-Porch integration tests\n');
+console.log('#2831 (#2827.D) Hearth-on-the-Porch integration tests\n');
 
 const tmpDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-2827d-test-'));
 process.env.DATA_DIR = tmpDataDir;
@@ -126,7 +126,7 @@ function mkPost(slug, authorId, text, createdAt) {
 // createProvider() consumes, so draftPorchCandidate() runs its real
 // parsing/streaming code against a canned single-chunk reply instead
 // of a real network call. Every register in a given call gets the
-// same reply text; the PHA-2844 pipeline tests pick reply text that
+// same reply text; the #2844 pipeline tests pick reply text that
 // deliberately contains one of the comprehension package's concrete
 // refs so the specificity gate has something real to pass.
 function fakeProviderCfg(replyText) {
@@ -209,7 +209,7 @@ console.log('character row + register weights');
   const character = hearthCharacters.getDefaultCharacter(db, hearthUserId);
   assert(!!character, 'Hearth built-in account has a default characters row');
   assertEq(character.character_key, 'hearth', 'character_key is hearth');
-  assert(!!character.soul_source_sha, 'soul_source_sha recorded (same seed path as PHA-2827.B)');
+  assert(!!character.soul_source_sha, 'soul_source_sha recorded (same seed path as #2827.B)');
   assert(!!character.intro_source_sha, 'intro_source_sha recorded');
   assertEq(
     JSON.parse(character.register_weights_json),
@@ -380,10 +380,10 @@ console.log('\nnegative: per-wall opt-out silences Hearth (vote him off the porc
 }
 
 (async () => {
-  // ---- PHA-2844: real pipeline, image post — comprehension (real
+  // ---- #2844: real pipeline, image post — comprehension (real
   // upload + stubbed vision) -> per-register draft (stubbed LLM) ->
   // decide -> post. No hand-injected candidates anywhere below. ----
-  console.log('\nPHA-2844: real pipeline end-to-end — image post');
+  console.log('\n#2844: real pipeline end-to-end — image post');
   {
     const uploaded = await uploadTestPng(human.username);
     assert(!!uploaded && !!uploaded.id, 'test PNG uploaded through the real lib/media.js route', JSON.stringify(uploaded));
@@ -436,10 +436,10 @@ console.log('\nnegative: per-wall opt-out silences Hearth (vote him off the porc
       'a real post_comment row exists for the image post — comprehension->candidate->decide->post, zero hand-injected candidates');
   }
 
-  // ---- PHA-2844: real pipeline, text-only post — comprehension is
+  // ---- #2844: real pipeline, text-only post — comprehension is
   // derived straight from the post text (no LLM call at all) -> per-
   // register draft (stubbed LLM) -> decide -> post. ----
-  console.log('\nPHA-2844: real pipeline end-to-end — text-only post');
+  console.log('\n#2844: real pipeline end-to-end — text-only post');
   {
     const textPost = mkPost(slug, human.id, 'the Kowalski twins built a blanket fort in the living room',
       new Date(BASE_NOW.getTime() + 22 * HOUR - 5 * HOUR));
@@ -484,6 +484,6 @@ console.log('\nnegative: per-wall opt-out silences Hearth (vote him off the porc
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => {
-  console.error('PHA-2844 pipeline test crashed:', e);
+  console.error('#2844 pipeline test crashed:', e);
   process.exit(1);
 });

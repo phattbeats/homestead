@@ -1,6 +1,6 @@
 // jobs/gazette-daily.js
 //
-// PHA-2853 — the cron half of the Gazette rework. Composes and persists
+// #2853 — the cron half of the Gazette rework. Composes and persists
 // a `gazette_issues` row for every user who has the `gazette` module
 // enabled, once per user per LOCAL day, at ~04:00 in that user's own
 // timezone (not one global cron time — a household spans timezones).
@@ -22,7 +22,7 @@
 // / `gazette_editions` row it writes. This job reuses the most recent
 // tz on record for the user (falling back to `DEFAULT_TZ`) as the best
 // available per-user schedule offset without inventing new storage.
-// Flagged explicitly in the PHA-2853 report as a real limitation, not
+// Flagged explicitly in the #2853 report as a real limitation, not
 // a silent guess.
 
 'use strict';

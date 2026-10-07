@@ -7,12 +7,12 @@
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#FFFBF5">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<!-- PHA-2846 / v0.5.10: apple-touch-icon falls back to the canonical 512px install icon so iOS Safari / shared-sheet home-screen installs show the same opening-door mark instead of a generic thumbnail. SVG opens aren't supported by Safari's home-screen install path, hence the .png. -->
+<!-- #2846 / v0.5.10: apple-touch-icon falls back to the canonical 512px install icon so iOS Safari / shared-sheet home-screen installs show the same opening-door mark instead of a generic thumbnail. SVG opens aren't supported by Safari's home-screen install path, hence the .png. -->
 <link rel="apple-touch-icon" href="/icon-512.png">
 <!-- Same canonical mark, also as a 32x32 PNG, in case any browser fetches /favicon.ico before /favicon.svg. -->
 <link rel="alternate icon" href="/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="stylesheet" href="/brand.css">
-<!-- PHA-2200.5 / PHA-2206: shared wall feed styles. Same file the
+<!-- #2200.5 / #2206: shared wall feed styles. Same file the
      standalone /porch.html loads, so the in-place mount inside
      #page-wall renders identically to /porch.html. -->
 <link rel="stylesheet" href="/porch.css">
@@ -87,7 +87,7 @@ main{padding:14px 18px;max-width:680px;margin:0 auto}
 .overdue{color:#b3453a;font-weight:600}
 .x{color:var(--muted);font-size:18px;padding:6px;opacity:.5}
 
-/* PHA-2586: lists primitive */
+/* #2586: lists primitive */
 .lists-sec{display:flex;justify-content:space-between;align-items:center}
 .lists-grid{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
 .list-chip{
@@ -134,7 +134,7 @@ main{padding:14px 18px;max-width:680px;margin:0 auto}
 .day.sel{background:var(--ink);color:#fff}
 .pips{display:flex;gap:2px;height:5px}
 .pip{width:5px;height:5px;border-radius:50%}
-/* PHA-1867: provider pips carry a 1px surface-coloured ring so they
+/* #1867: provider pips carry a 1px surface-coloured ring so they
    don't blur together with the per-user coloured pips on the same cell.
    The ring is drawn via box-shadow inset so the dot stays a circle. */
 .pip.provider{box-shadow:0 0 0 1px var(--surface), 0 0 0 2px var(--line)}
@@ -142,7 +142,7 @@ main{padding:14px 18px;max-width:680px;margin:0 auto}
 .ev:last-child{border-bottom:none}
 .ev-time{font-size:12px;font-weight:700;color:var(--muted);width:52px;flex-shrink:0}
 .ev-bar{width:4px;height:34px;border-radius:2px;flex-shrink:0}
-/* PHA-1867: provider events sit in the same row layout as native events
+/* #1867: provider events sit in the same row layout as native events
    but render the source as a small chip + a left-bar tint so the user
    can tell at a glance that the row came from Nextcloud / iCloud / etc. */
 .ev.provider{opacity:.96}
@@ -159,7 +159,7 @@ main{padding:14px 18px;max-width:680px;margin:0 auto}
 .svc-icon{font-size:28px}
 .svc-name{font-weight:700;margin-top:10px;font-size:15px}
 .svc-desc{font-size:12px;color:var(--muted);margin-top:2px}
-/* v0.0.6 health indicator (PHA-1623): subtle red dot + down-since
+/* v0.0.6 health indicator (#1623): subtle red dot + down-since
    label. The dot sits in the same corner as the owner-dot; tap-
    through still works (it's a CSS overlay, not a button). */
 .svc-health{position:absolute;top:10px;left:10px;display:none;align-items:center;gap:5px;
@@ -184,7 +184,7 @@ nav button.on{color:var(--accent)}
 nav .ico{font-size:20px;display:inline-flex;align-items:center;justify-content:center;line-height:1;width:24px;height:24px}
 nav .ico img{display:block;width:22px;height:22px;object-fit:contain}
 
-/* ---- PHA-2205 (PHA-2200.4): layout-aware nav + Add rooms pill ---- */
+/* ---- #2205 (#2200.4): layout-aware nav + Add rooms pill ---- */
 /* feed-only layout: hide the bottom nav entirely; the Add-rooms pill
    is the only nav affordance. */
 body[data-layout="feed-only"] #appNav{display:none}
@@ -203,7 +203,7 @@ body[data-layout="meadow"] #addRoomPill{position:fixed;right:20px;bottom:calc(en
 body[data-layout="feed-tabs"] #addRoomPill:active,
 body[data-layout="meadow"] #addRoomPill:active{transform:scale(.96)}
 /* Hide nav buttons whose module is not in the user's enabled set.
-   data-enabled-keys is set by applyLayout() (PHA-2205). */
+   data-enabled-keys is set by applyLayout() (#2205). */
 #appNav button[data-p][data-disabled="1"]{display:none}
 /* Hide pages whose module is not in the user's enabled set.
    When EVERY page is hidden (feed-only → all chrome collapsed),
@@ -211,8 +211,8 @@ body[data-layout="meadow"] #addRoomPill:active{transform:scale(.96)}
    defaultRoute (e.g. /porch.html for a wall-only user). */
 .page[data-disabled="1"]{display:none}
 
-/* ---- PHA-1898 + PHA-2498 (UX batch #2): meta-agent chat drawer FAB. ----
-   PHA-2498 #2 closed the FAB pileup on Home/Tasks: two competing
+/* ---- #1898 + #2498 (UX batch #2): meta-agent chat drawer FAB. ----
+   #2498 #2 closed the FAB pileup on Home/Tasks: two competing
    circular buttons in the bottom-right were unreadable on a 390px
    screen. The directive was "one primary FAB per screen; the drawer
    affordance docks into the tab bar / header / or a smaller pill."
@@ -221,7 +221,7 @@ body[data-layout="meadow"] #addRoomPill:active{transform:scale(.96)}
    vertical position now belongs to #fab alone; the + Add rooms pill
    sits to the left of #fab in meadow layout (also lifted off the
    bottom-right stack). The drawerFab remains gated by
-   applyLayout()'s `agentDrawer` flag (PHA-2200.7 / PHA-2495) — when
+   applyLayout()'s `agentDrawer` flag (#2200.7 / #2495) — when
    the `agent` module is disabled the FAB stays hidden via `.off`,
    making its on/off state structural rather than CSS-only. */
 #drawerFab{width:38px;height:38px;border-radius:50%;background:var(--ink);color:#fff;font-size:18px;
@@ -229,7 +229,7 @@ body[data-layout="meadow"] #addRoomPill:active{transform:scale(.96)}
   display:flex;align-items:center;justify-content:center;opacity:.95;flex-shrink:0}
 #drawerFab:active{transform:scale(.92)}
 #drawerFab.off{opacity:0;pointer-events:none;transform:scale(.7)}
-/* PHA-2659: sheet-module launchers, docked beside the chat FAB. Same
+/* #2659: sheet-module launchers, docked beside the chat FAB. Same
    size and shadow so the header reads as one cluster; lighter fill so
    the chat FAB stays the primary affordance. Each button carries the
    module's registry icon. */
@@ -283,7 +283,7 @@ body[data-layout="meadow"] #addRoomPill:active{transform:scale(.96)}
 .drawer-msg.system{align-self:center;background:var(--accent-soft);color:var(--accent);
   font-size:12px;font-weight:600;border-radius:10px;padding:6px 12px}
 .drawer-msg.error{align-self:center;background:#F5E4E4;color:#9B3A3A;font-size:13px;border-radius:10px;padding:8px 12px;border:1px solid #E5C9C9}
-/* PHA-2851: tool-result chip — "(✓ queued Part Two)". Left-aligned with
+/* #2851: tool-result chip — "(✓ queued Part Two)". Left-aligned with
    the agent bubble because it belongs to Hearth's turn, but visually
    quieter than prose: this is a receipt, not something he said. The
    failed variant borrows the error palette without the full-width
@@ -324,7 +324,7 @@ body[data-layout="meadow"] #addRoomPill:active{transform:scale(.96)}
 .sheet h2{font-size:19px;font-weight:800;letter-spacing:-.01em;margin-bottom:18px}
 .sheet h3{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
   margin:18px 0 8px}
-/* ---- PHA-2219: install coach ---- */
+/* ---- #2219: install coach ---- */
 .coach-visual{text-align:center}
 .coach-steps{margin:8px 0 4px;padding:0 0 0 22px;font-size:14px;line-height:1.55;color:var(--ink)}
 .coach-steps li{margin-bottom:10px}
@@ -387,7 +387,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 .showall{font-size:12px;font-weight:600;color:var(--muted)}
 @media(min-width:768px){.svc-grid{grid-template-columns:repeat(3,1fr)}}
 
-/* PHA-1872: entity page (design doc PHA-1624 §7) */
+/* #1872: entity page (design doc #1624 §7) */
 #entityPage{position:fixed;inset:0;z-index:120;background:var(--bg,#fff);display:none;overflow-y:auto;padding:16px 16px 90px}
 #entityPage.on{display:block}
 .ent-back{background:none;border:none;font-size:15px;color:var(--muted);cursor:pointer;padding:6px 0}
@@ -416,7 +416,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 .ent-footer{margin-top:20px;padding-top:12px;border-top:1px solid rgba(0,0,0,.08);font-size:12px;color:var(--muted)}
 .ent-empty{padding:20px 0;color:var(--muted);font-size:14px}
 
-/* PHA-1872: cmd-k search palette */
+/* #1872: cmd-k search palette */
 #palette{position:fixed;inset:0;z-index:130;background:rgba(0,0,0,.45);display:none;align-items:flex-start;justify-content:center;padding-top:12vh}
 #palette.on{display:flex}
 .palette-box{width:min(560px,92vw);background:var(--bg,#fff);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}
@@ -427,7 +427,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 .palette-hit .kind{color:var(--muted);font-size:12px}
 .palette-empty{padding:16px;color:var(--muted);font-size:13px}
 
-/* ---- PHA-1868: calendar sources management ---- */
+/* ---- #1868: calendar sources management ---- */
 .src-list{display:flex;flex-direction:column;gap:8px}
 .src-row{display:flex;gap:12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--surface);align-items:center}
 .src-color{width:8px;align-self:stretch;border-radius:4px;background:var(--uc,var(--muted));flex-shrink:0}
@@ -439,7 +439,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 .src-actions .link{padding:8px 10px;border-radius:8px;background:var(--bg);border:1px solid var(--line);color:var(--ink);font-weight:600}
 .src-actions .link.danger{color:#b3453a;border-color:rgba(179,69,58,.3)}
 
-/* PHA-1896 (PHA-1617.3): connected-agents / token-manager UI.
+/* #1896 (#1617.3): connected-agents / token-manager UI.
    Mirrors the calendar-sources row pattern but with a `token` chip
    (the 16-char non-secret prefix shown as a label) and a special
    secret-issuance modal (copy-once plaintext reveal). */
@@ -447,7 +447,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 .tok-row{display:flex;gap:12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--surface);align-items:center}
 .tok-mark{width:36px;height:36px;border-radius:50%;background:var(--accent-soft);color:var(--accent);flex-shrink:0;
   display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;
-  /* PHA-2846: when .tok-mark contains an <img>, fill the disc.
+  /* #2846: when .tok-mark contains an <img>, fill the disc.
      Built-in modules ship an /modules/{key}.svg icon; the SPA
      renders it here for the Apps sheet rows + App detail header.
      Emoji glyphs ignore these rules and render as text. */
@@ -462,7 +462,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 .tok-actions .link{padding:8px 10px;border-radius:8px;background:var(--bg);border:1px solid var(--line);color:var(--ink);font-weight:600}
 .tok-actions .link.danger{color:#b3453a;border-color:rgba(179,69,58,.3)}
 
-/* PHA-1896: copy-once plaintext reveal modal. The plaintext is shown
+/* #1896: copy-once plaintext reveal modal. The plaintext is shown
    in a monospace block inside a bordered card. The "I've stored it"
    acknowledgement button is disabled until the user has either
    clicked "Copy" or manually toggled the checkbox. This is a UX guard
@@ -474,7 +474,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 .secret-card .copied{color:#9eb48a;font-size:12px;font-weight:700;font-family:'Plus Jakarta Sans',sans-serif;align-self:center;display:none}
 .secret-card .copied.on{display:inline-block}
 
-/* PHA-2201.4 (PHA-2232): Settings → Apps. Rows reuse the .tok-row
+/* #2201.4 (#2232): Settings → Apps. Rows reuse the .tok-row
    shape (connected agents); .app-row adds a chevron + pointer cursor
    since rows are tappable (open per-app detail). */
 .app-row{cursor:pointer}
@@ -488,7 +488,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 .act-row .act-status.err{color:#b3453a}
 
 /* Embedded consent screen (public/consent.js's renderConsentScreen,
-   reused here per the PHA-2201 design note §4 — same copy, same
+   reused here per the #2201 design note §4 — same copy, same
    mapping, different host markup). Scoped under .consent-embed so it
    doesn't touch this page's own .btn/.app-icon-style rules. */
 .consent-embed .app-preview{display:flex;align-items:center;gap:14px;margin-bottom:16px}
@@ -530,17 +530,17 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
     <div class="header-lockup"><a class="brand-lockup" href="/" aria-label="Homestead home"><img src="/icon.svg" alt="" class="brand-icon"><img src="/wordmark.svg" alt="Homestead" class="brand-wordmark"></a><div class="greet"><small id="dateLine"></small><span id="greet"></span></div></div>
     <div style="display:flex;align-items:center;gap:10px">
       <button class="avatar" id="avatarBtn"></button>
-      <!-- PHA-2498 (UX batch #2): drawer FAB docked into the header
+      <!-- #2498 (UX batch #2): drawer FAB docked into the header
            next to the avatar; the bottom-right corner is reserved for
            the single primary + Add-rooms pill (see the meadow-layout
            override on the pill below). applyLayout's agentDrawer flag
            toggles .off on this FAB when the agent module is
            disabled for the current user. Note: backticks are absent
-           here on purpose — the PHA-2209 Amendment 3 audit's regex
+           here on purpose — the #2209 Amendment 3 audit's regex
            matches them in HTML comments (not stripped), so the
            registry-key guard would flag the word. -->
       <button id="drawerFab" type="button" title="Open chat" aria-label="Open chat drawer">💬</button>
-      <!-- PHA-2659: launchers for open-mode-sheet modules (the Gazette
+      <!-- #2659: launchers for open-mode-sheet modules (the Gazette
            today). Populated by applyLayout() from the layout payload's
            sheets[] array - one button per enabled sheet module, empty
            and invisible when the user has none. Sheet modules have no
@@ -561,7 +561,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
       <div class="sec">Done</div>
       <div class="card"><div class="card-in" id="doneTasks"></div></div>
     </div>
-    <!-- PHA-2557 / PHA-2586: Lists page. The `lists` module's registry
+    <!-- #2557 / #2586: Lists page. The `lists` module's registry
          `room` field is "r-lists", so applyLayout() matches this div by
          `data-p="r-lists"`. The content is the real lists primitive:
          server.js wires GET/POST /api/lists and /api/lists/:id/items
@@ -593,37 +593,37 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
         <button class="link" id="addSvc">+ Add</button></div>
       <div class="svc-grid" id="svcGrid"></div>
     </div>
-    <!-- PHA-2200.5 / PHA-2206: in-place wall mount. The same
+    <!-- #2200.5 / #2206: in-place wall mount. The same
          HomesteadFeed component that backs /porch.html is mounted into
          this div when the feed module is enabled for the current user
          (see boot() below). When the feed module is the user's SOLE
          enabled module, the SPA redirects to /porch.html instead of
-         mounting here (per PHA-2200 §6 dual-surface design). The
+         mounting here (per #2200 §6 dual-surface design). The
          page id matches the nav button's data-p attribute so the
          existing tab-switching handler (curPage = b.dataset.p; show
          #page-{curPage}) finds it. We use 'porch' (the room
          discriminator) instead of the registry key to avoid colliding
-         with PHA-2209's no-hardcoded-keys audit. -->
+         with #2209's no-hardcoded-keys audit. -->
     <div class="page" id="page-porch"></div>
   </main>
   <button id="fab">+</button>
-  <!-- PHA-2205 (PHA-2200.4): "+ Add rooms" pill. Only visible when
+  <!-- #2205 (#2200.4): "+ Add rooms" pill. Only visible when
        /api/me/layout.addRoomVisible === true. In feed-only layout
        this is the ONLY nav affordance (no <nav> rendered); in other
        layouts it sits above the bottom nav for quick access. -->
   <button id="addRoomPill" type="button" aria-label="Add rooms" style="display:none">+ Add rooms</button>
   <nav id="appNav">
-    <!-- PHA-2557: nav buttons use the module's registry `room` field as
+    <!-- #2557: nav buttons use the module's registry `room` field as
          the data-p discriminator (the previous version used `cal` and
          lacked a `lists` button — the layout API returned 6 tabs but
          the nav only had room for 4 plus the hidden Porch). applyLayout()
          matches each button against the layout payload's `room` field.
          The `home` button is always on (no module backing it — it's
          the always-visible "today + tasks + events" landing page). -->
-    <!-- PHA-2846 / v0.5.10: bottom-nav icon migration to the canonical
+    <!-- #2846 / v0.5.10: bottom-nav icon migration to the canonical
          brand SVG set. Previous emoji literals (🏠 ✓ 📝 📅 🛰️ 📸)
-         were a documented exception to PHA-2209's audit because the
-         nav predated PHA-2777 (canonical brand system). Each tab now
+         were a documented exception to #2209's audit because the
+         nav predated #2777 (canonical brand system). Each tab now
          references the matching built-in module's SVG:
            * Home (always-on landing, no module backing) -> /icon.svg
              (the canonical opening-door mark — the same one /favicon.svg
@@ -642,24 +642,24 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
     <button data-p="r-lists" aria-label="Lists"><span class="ico"><img src="/modules/lists.svg" alt="" width="22" height="22"></span>Lists</button>
     <button data-p="r-calendar" aria-label="Calendar"><span class="ico"><img src="/modules/calendar.svg" alt="" width="22" height="22"></span>Calendar</button>
     <button data-p="svc" aria-label="Apps"><span class="ico"><img src="/modules/apps.svg" alt="" width="22" height="22"></span>Apps</button>
-    <!-- PHA-2200.5 / PHA-2206: in-place Porch tab. Replaces the old
+    <!-- #2200.5 / #2206: in-place Porch tab. Replaces the old
          `navPorch` <a> that linked to /porch.html as a separate page;
          now it's a real tab button that switches to #page-wall. Hidden
          until boot() detects the feed module is enabled for the
          current user. The data-p attribute is a tab-discriminator
          string (matches the page div id, not the module key) so we
          use the room name 'porch' to avoid colliding with the
-         PHA-2209 no-hardcoded-keys audit. -->
+         #2209 no-hardcoded-keys audit. -->
     <button data-p="porch" id="navWall" style="display:none" aria-label="Porch"><span class="ico"><img src="/modules/porch.svg" alt="" width="22" height="22"></span>Porch</button>
   </nav>
 
-  <!-- PHA-1898 + PHA-2498: meta-agent chat drawer.
+  <!-- #1898 + #2498: meta-agent chat drawer.
        The chat drawer PANEL lives inside #app (pre-auth hiding per
-       PHA-2498 #3, structural). The FAB itself lives in the header
-       (PHA-2498 #2 — docked out of the bottom-right FAB stack).
+       #2498 #3, structural). The FAB itself lives in the header
+       (#2498 #2 — docked out of the bottom-right FAB stack).
        Frontend-only shell: composer + SSE/JSON consumer. POSTs to
        /api/drawer; the HMAC-signed outbound forwarding to the user's
-       harness URL is wired in PHA-1617.6. -->
+       harness URL is wired in #1617.6. -->
   <div id="drawer" role="dialog" aria-label="Chat drawer" aria-hidden="true">
     <div class="drawer-head">
       <div class="title">Chat</div>
@@ -688,13 +688,13 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 </div>
 <div id="dot">🏡</div>
 
-<!-- PHA-1872: entity page (design doc PHA-1624 §7) -->
+<!-- #1872: entity page (design doc #1624 §7) -->
 <div id="entityPage">
   <button class="ent-back" id="entBack">‹ Back</button>
   <div id="entBody"></div>
 </div>
 
-<!-- PHA-1872: cmd-k search palette -->
+<!-- #1872: cmd-k search palette -->
 <div id="palette">
   <div class="palette-box">
     <input class="palette-input" id="paletteInput" placeholder="Search entities… (name, alias, tag)" autocomplete="off">
@@ -702,7 +702,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
   </div>
 </div>
 
-<!-- PHA-2201.4 (PHA-2232): shared scope mapping + the reusable consent
+<!-- #2201.4 (#2232): shared scope mapping + the reusable consent
      screen renderer (window.HomesteadConsent.renderConsentScreen),
      same source consent.html uses — see .consent-embed CSS above. -->
 <script src="/lib/scope-display.js"></script>
@@ -713,9 +713,9 @@ const api=async(m,u,b)=>{const r=await fetch(u,{method:m,headers:{'Content-Type'
 
 /* ---- state ---- */
 let ME=null, USERS={};
-let ENABLED_MODULE_KEYS=new Set(); // PHA-2811: populated by applyLayout(), used to gate the FAB picker
+let ENABLED_MODULE_KEYS=new Set(); // #2811: populated by applyLayout(), used to gate the FAB picker
 let TASKS=[],EVENTS=[],SVCS=[];
-let MERGED=[]; // PHA-1867: native + cached provider events for the current month
+let MERGED=[]; // #1867: native + cached provider events for the current month
 let calY,calM,selDate=today();
 
 function today(){const d=new Date();return d.toISOString().slice(0,10)}
@@ -788,7 +788,7 @@ async function doLogin(){
   if(!u){$('#loginErr').textContent='Username required';return}
   try{
     const r=await api('POST','/api/login',{username:u,password:p});
-    // PHA-2583: ?next= bounce-back after login. Server's GET /api/login
+    // #2583: ?next= bounce-back after login. Server's GET /api/login
     // handler preserves a same-origin path (whitelisted to /invite/,
     // /welcome, or /) and lands the user here with ?next=<that path>.
     // After a successful login we navigate to it instead of dropping the
@@ -826,9 +826,9 @@ function renderLoginChips(){
 }
 
 /* ---- boot ---- */
-/* ---- PHA-2205 (PHA-2200.4): layout-aware SPA bootstrap ---- */
+/* ---- #2205 (#2200.4): layout-aware SPA bootstrap ---- */
 
-// `applyLayout(layout)` (PHA-2205): consumes the payload from
+// `applyLayout(layout)` (#2205): consumes the payload from
 // GET /api/me/layout (see lib/modules.computeLayout) and applies the
 // three layout-aware rules:
 //
@@ -845,11 +845,11 @@ function renderLoginChips(){
 //      AND the user is authenticated. Clicking the pill opens
 //      /modules.html (the add-a-room sheet).
 //
-// `agentDrawer` toggles the meta-agent chat-drawer FAB (PHA-1898 /
-// PHA-2200.7). When the `agent` module is disabled, the FAB is
+// `agentDrawer` toggles the meta-agent chat-drawer FAB (#1898 /
+// #2200.7). When the `agent` module is disabled, the FAB is
 // hidden — the chat composer simply isn't reachable. This is the
 // structural fix for "every wall-only user sees the chat FAB even
-// though they have no harness" (regression flagged in PHA-2495).
+// though they have no harness" (regression flagged in #2495).
 //
 // The function is idempotent — safe to call multiple times, e.g.
 // after every POST /api/me/modules/:key/enable from the add-a-room
@@ -868,7 +868,7 @@ function applyLayout(layout) {
   // Build the reverse-lookup (room -> keys) from the registry, fetched
   // live. The SPA bootstrap already has tabs[] in the layout payload;
   // each tab carries {key, room, route}. The `room` field is the
-  // in-SPA view discriminator (PHA-2557) — the nav button + page div
+  // in-SPA view discriminator (#2557) — the nav button + page div
   // share the `data-p` attribute, and `room === data-p` for every
   // frame-mode module. For drawer-mode modules (e.g. `agent`) the
   // SPA wires them to the chat-drawer FAB instead of a nav button.
@@ -884,19 +884,19 @@ function applyLayout(layout) {
   //
   // We derive the on/off state by checking whether ANY enabled key's
   // room matches the data-p attribute — no module-key literals appear
-  // in this file. PHA-2209 Amendment 3 audit passes.
+  // in this file. #2209 Amendment 3 audit passes.
   const enabledRooms = new Set();
   for (const t of (Array.isArray(layout.tabs) ? layout.tabs : [])) {
     if (t && typeof t.room === 'string') enabledRooms.add(t.room);
   }
-  // PHA-2811: FAB picker reads this to hide the Task option when the
+  // #2811: FAB picker reads this to hide the Task option when the
   // 'tasks' room (the chores module) isn't enabled — same room-based
   // derivation as the nav gating below, no module-key literal needed.
   ENABLED_ROOMS = enabledRooms;
-  // PHA-2585: the Home tab/page (`data-p="home"`) is the always-on
+  // #2585: the Home tab/page (`data-p="home"`) is the always-on
   // landing (today's events + today's tasks) and is NOT a module
   // room — it must remain enabled regardless of which modules the
-  // user has turned on. PHA-2205 / PHA-2557 treat every nav button
+  // user has turned on. #2205 / #2557 treat every nav button
   // uniformly, but the SPA bootstrap comments (line ~531) explicitly
   // promise "The home button is always on." Honor that promise here:
   // never mark the Home button or #page-home as data-disabled.
@@ -920,17 +920,17 @@ function applyLayout(layout) {
   if (pill) pill.style.display = layout.addRoomVisible ? '' : 'none';
 
   // Agent drawer FAB. Shown iff agentDrawer === true. The actual
-  // drawer markup is already wired (PHA-1898); we just gate visibility.
+  // drawer markup is already wired (#1898); we just gate visibility.
   const fab = document.getElementById('drawerFab');
   if (fab) {
     if (layout.agentDrawer === true) fab.classList.remove('off');
     else fab.classList.add('off');
   }
 
-  // PHA-2659: sheet-module launchers. `layout.sheets` carries one entry
+  // #2659: sheet-module launchers. `layout.sheets` carries one entry
   // per enabled open-mode-sheet module ({key, icon, label}); the server
   // derives that list from the registry's open_mode, so this loop never
-  // names a module key and the PHA-2209 Amendment 3 audit stays clean.
+  // names a module key and the #2209 Amendment 3 audit stays clean.
   // Rebuilt wholesale on every applyLayout so a module toggled off in
   // the add-a-room sheet loses its launcher immediately.
   const launchers = document.getElementById('sheetLaunchers');
@@ -988,7 +988,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (pill) pill.onclick = () => { window.location.href = '/modules.html'; };
 });
 
-// `showWelcomeSheet()` (PHA-2205 / PHA-2200.6): first-run welcome
+// `showWelcomeSheet()` (#2205 / #2200.6): first-run welcome
 // overlay. Dismissing it POSTs /api/me/first-run-complete to stamp
 // `first_run_completed_at`; subsequent boots skip the sheet (the
 // API returns first_run:false). The sheet is rendered inline in the
@@ -1004,7 +1004,7 @@ function showWelcomeSheet() {
       <p style="color:var(--muted);font-size:14px;margin:0 0 18px">Your home is set up. Add more rooms any time with the <b>+ Add rooms</b> button.</p>
       <button class="btn" id="welcomeDismiss">Got it</button>
     </div>`;
-  // PHA-2584: every other sheet goes through openSheet() →
+  // #2584: every other sheet goes through openSheet() →
   // classList.add('on'). Setting style.display = '' cleared the
   // inline override but the CSS rule `#modal{display:none}` still
   // won (display:flex only fires from `#modal.on`). Use the same
@@ -1027,7 +1027,7 @@ async function boot(user){
   const d=new Date();calY=d.getFullYear();calM=d.getMonth();
   await refreshUsersFromServer();
   await refresh();
-  // PHA-2205 (PHA-2200.4): layout-aware bootstrap. The SPA now
+  // #2205 (#2200.4): layout-aware bootstrap. The SPA now
   // reads /api/me/layout (computed from enabled-keys) and applies
   // visibility rules per layout (empty / feed-only / feed-tabs /
   // meadow). See lib/modules.computeLayout() for the four-mode
@@ -1046,17 +1046,17 @@ async function boot(user){
     // Fall back to the legacy "everything visible" rendering.
     applyLayout({ layout:'meadow', tabs:[], pages:[], defaultRoute:'/', addRoomVisible:true, agentDrawer:true });
   }
-  // PHA-2200.5 / PHA-2206: wall module is mounted in-place when the
+  // #2200.5 / #2206: wall module is mounted in-place when the
   // user's enabled-modules set includes the feed module. The mount lives
   // in #page-wall and shares the HomesteadFeed component with /porch.html.
   // We identify the feed module by its `room === 'porch'` discriminator
   // in the /api/modules registry — NOT by hardcoding the literal key —
-  // so PHA-2209's "no hardcoded module-key literals in render code"
+  // so #2209's "no hardcoded module-key literals in render code"
   // audit (Amendment 3) doesn't flag this SPA bootstrap. The same
   // discriminator matches the wall entry's `room: 'porch'` in lib/modules.js.
   // Three things happen here, in order:
   //   1. Fetch /api/me/modules — the caller's enabled-keys list in
-  //      registry order (PHA-2204). If the feed module (room=porch)
+  //      registry order (#2204). If the feed module (room=porch)
   //      is in there, show the in-place nav tile (#navWall) and mount
   //      the feed component.
   //   2. If the feed module is NOT enabled, unmount any leftover
@@ -1065,7 +1065,7 @@ async function boot(user){
   //   3. If the feed module is the user's ONLY enabled module, redirect
   //      to /porch.html — that placement is the full standalone page,
   //      not an SPA tab. This is the dual-surface rule from
-  //      PHA-2200 §6.
+  //      #2200 §6.
   try{
     const enabled=await api('GET','/api/me/modules');
     let feedKey=null;
@@ -1109,8 +1109,8 @@ async function boot(user){
       window.location.href='/porch.html';
     }
   }catch(_){}
-  // PHA-2205: welcome sheet for first-run users. After dismissal,
-  // POST /api/me/first-run-complete (PHA-2200.6). The sheet never
+  // #2205: welcome sheet for first-run users. After dismissal,
+  // POST /api/me/first-run-complete (#2200.6). The sheet never
   // re-appears once first_run_completed_at is set.
   try{
     const me = await api('GET','/api/me');
@@ -1118,7 +1118,7 @@ async function boot(user){
       showWelcomeSheet();
     }
   }catch(_){}
-  // PHA-1619: if the browser already has permission + a subscription,
+  // #1619: if the browser already has permission + a subscription,
   // re-register it against this session so a returning user on a fresh
   // device doesn't have to click "Enable" again. Best-effort: any error
   // is swallowed because the user can always re-enable from the avatar menu.
@@ -1134,7 +1134,7 @@ async function boot(user){
       await api('POST','/api/push/subscribe',{endpoint:json.endpoint,keys:json.keys});
     }
   }catch(_){}
-  // PHA-2219: install coach — fires once per browser, only when
+  // #2219: install coach — fires once per browser, only when
   // not installed and not previously dismissed. Runs after the
   // push re-subscribe block so a returning user with push already
   // enabled is never prompted.
@@ -1167,7 +1167,7 @@ async function refresh(){
   renderHome();renderTasks();renderCal();renderSvcs();renderLists();
 }
 
-/* ---- lists (PHA-2586) ---- */
+/* ---- lists (#2586) ---- */
 //
 // Front-end of the lists primitive. Two state slices:
 //   LISTS  — Array<list>, mirrored from GET /api/lists on every refresh().
@@ -1405,7 +1405,7 @@ function taskRow(t){
     <button class="x" onclick="delTask(${t.id})">✕</button></div>`;
 }
 function renderHome(){
-  // PHA-1867: pull today's events from the merged feed so provider events
+  // #1867: pull today's events from the merged feed so provider events
   // appear on the home screen alongside native ones. Use eventsForDay
   // for the same overlap rules as the calendar grid.
   const evs=eventsForDay(today());
@@ -1426,8 +1426,8 @@ function evRow(e){
     ${e.notes?`<div class="t-meta">${esc(e.notes)}</div>`:''}</div>
     <button class="x" onclick="event.stopPropagation();delEvent(${e.id})">✕</button></div>`;
 }
-// PHA-1867: provider events are read-only in v1 (Phase 2 write-back lives
-// in PHA-1866). The row uses a chip tag to show the source display_name
+// #1867: provider events are read-only in v1 (Phase 2 write-back lives
+// in #1866). The row uses a chip tag to show the source display_name
 // and a coloured left bar in the source's color. No edit/delete buttons
 // because we never wrote it locally — the source of truth is the provider.
 function providerEvRow(e){
@@ -1511,7 +1511,7 @@ function pickDay(ds){selDate=ds;renderCal()}
 $('#calPrev').onclick=async()=>{calM--;if(calM<0){calM=11;calY--}await refreshMerged();renderCal()};
 $('#calNext').onclick=async()=>{calM++;if(calM>11){calM=0;calY++}await refreshMerged();renderCal()};
 let showAll=false;
-// v0.0.6 health badge (PHA-1623): format a "down since HH:MM" label
+// v0.0.6 health badge (#1623): format a "down since HH:MM" label
 // from an ISO timestamp in the local timezone.
 function fmtDownSince(iso){
   if(!iso)return '';
@@ -1618,7 +1618,7 @@ function openSheet(html){$('#sheet').innerHTML=html;$('#modal').classList.add('o
 function closeSheet(){$('#modal').classList.remove('on')}
 $('#modal').onclick=e=>{if(e.target.id==='modal')closeSheet()};
 
-/* PHA-2659: open-mode-sheet module dispatch.
+/* #2659: open-mode-sheet module dispatch.
 
    SHEET_RENDERERS is a registration table, not a branch: a sheet
    module's key maps to the async renderer that owns its surface. The
@@ -1765,7 +1765,7 @@ function goToModuleSettings(){
   location.href='/modules.html';
 }
 function openPicker(){
-  // PHA-2811: a chore added while `chores` is off writes a row that
+  // #2811: a chore added while `chores` is off writes a row that
   // never renders anywhere (no nav tab, no home task list) — so the
   // Task option is hidden here instead of opening a dead-end sheet.
   const taskBtn=ENABLED_ROOMS.has('tasks')
@@ -1860,7 +1860,7 @@ function openSvcSheet(id){
 }
 async function delSvc(id){if(confirm('Remove this service?')){await api('DELETE',`/api/services/${id}`);closeSheet();await refresh()}}
 
-// PHA-2643: admin-only reassignment view — every app tile in one place,
+// #2643: admin-only reassignment view — every app tile in one place,
 // instead of long-pressing tiles one at a time to find "Whose app?".
 async function openDelegateAppsSheet(){
   const svcs=await api('GET','/api/services');
@@ -1896,7 +1896,7 @@ async function openDelegateAppsSheet(){
 }
 $('#addSvc').onclick=()=>openSvcSheet();
 
-// PHA-2586: lists page "+ New list" — defers to createListFlow, which
+// #2586: lists page "+ New list" — defers to createListFlow, which
 // prompts for a name and posts to /api/lists. The chip-row + add-item
 // composer inside the page is wired inside renderLists() because the
 // DOM is rebuilt on every refresh.
@@ -2018,7 +2018,7 @@ function openSettingsSheet(){
   };
 }
 
-// ---- PHA-2556: walls admin sheet ----
+// ---- #2556: walls admin sheet ----
 // Renders a list of every wall in the system (visibility, members),
 // a "Create wall" form, and an inline member-management UI per wall.
 // Lives in its own sheet so the household-members form above doesn't
@@ -2110,7 +2110,7 @@ async function openWallsAdminSheet(){
     }catch(_){/* wall exists but caller isn't a member (404-private) — skip member list */}
   }
 
-  // Wire "Agents" buttons (one per existing wall) — PHA-2647.
+  // Wire "Agents" buttons (one per existing wall) — #2647.
   document.querySelectorAll('[data-agents]').forEach(btn=>{
     btn.onclick=()=>openWallAgentsSheet(btn.dataset.agents);
   });
@@ -2149,7 +2149,7 @@ async function openWallsAdminSheet(){
   };
 }
 
-// PHA-2647: wall-settings "Agents" section — same underlying
+// #2647: wall-settings "Agents" section — same underlying
 // porch_wall_settings toggle as the per-post "Vote off the porch"
 // button in public/components/feed.js. Reachable from the "Agents"
 // link on each wall row in openWallsAdminSheet above.
@@ -2247,7 +2247,7 @@ function openUserEditSheet(username){
   };
 }
 
-/* ---- PHA-1868: per-user calendar source config UI ----
+/* ---- #1868: per-user calendar source config UI ----
 // The sheet is reachable from the avatar menu. Every authenticated
 // user can manage their own per-user sources; admins additionally see
 // shared sources and can edit/delete them. POST /api/calendar-sources
@@ -2437,12 +2437,12 @@ function openCalendarSourceEditSheet(src, kinds, afterSave){
   render();
 }
 
-/* ---- connected agents / token manager (PHA-1896 / PHA-1617.3) ----
+/* ---- connected agents / token manager (#1896 / #1617.3) ----
 //
-// Surfaces the /api/agent-tokens endpoints added in PHA-1617.1 (.1 ships
+// Surfaces the /api/agent-tokens endpoints added in #1617.1 (.1 ships
 // the schema + routes; this is .3, the user-facing UI).
 //
-// Design-doc reference: PHA-1617 doc 'meta-agent-socket-design' rev 1,
+// Design-doc reference: #1617 doc 'meta-agent-socket-design' rev 1,
 // §9.1 (User settings UI) — and §4.3 for the REST contract the sheets
 // consume. Copy-once plaintext modal follows §4.2 (token format /
 // `homestead_pat_<43-char base64url>`).
@@ -2665,9 +2665,9 @@ function platformTokenLabel(){
   return '';
 }
 
-/* ---- Agent endpoints (PHA-2813) ----
+/* ---- Agent endpoints (#2813) ----
    No SPA form existed for POST /api/agent-endpoints (create() has lived
-   in lib/agent-endpoints.js since PHA-1617.4) — users had to curl it
+   in lib/agent-endpoints.js since #1617.4) — users had to curl it
    manually. Two sheets, mirroring the connected-agents pattern:
      1. openAgentEndpointsListSheet() — list of the user's endpoints
         (label, kind, URL, secret prefix chip, remove button).
@@ -2757,20 +2757,20 @@ function openAgentEndpointSheet(defaultKind, afterCreate){
   };
 }
 
-/* ---- Connect an agent wizard (PHA-2882 / PHA-2855 phase 3) ----
+/* ---- Connect an agent wizard (#2882 / #2855 phase 3) ----
    Companion-mediated counterpart to the agent-endpoints/agent-tokens
    sheets above. Three sheets:
      1. openConnectAgentWizardSheet() — provider tiles (OpenClaw, Claude
         Code, Codex) + a "Manage connections" link + an Advanced
         disclosure that reuses openAgentEndpointSheet() unchanged (the
-        generic-webhook path from PHA-2813 is untouched by this feature).
+        generic-webhook path from #2813 is untouched by this feature).
      2. openAgentConnectionPairSheet(provider, providerLabel) — mints a
         pairing code (POST /api/agent-connections/pair), shows the code
         + a copy-paste companion command, and polls GET
         /api/agent-connections every 3s until this connection flips to
         'active' (the companion redeemed it) or the sheet is closed.
      3. openAgentConnectionsListSheet() — list/rename/revoke, mirroring
-        the PHA-2201 app-consent revoke UX and the tok-row list pattern
+        the #2201 app-consent revoke UX and the tok-row list pattern
         used by Connected agents / Agent endpoints above. */
 const CONNECT_AGENT_PROVIDERS = [
   { key: 'openclaw', icon: '🦾', label: 'OpenClaw' },
@@ -2967,22 +2967,22 @@ function openAgentConnectionsListSheetWith(conns){
   $('#conn-add').onclick = () => openConnectAgentWizardSheet();
 }
 
-/* ---- Settings → Apps (PHA-2201.4 / PHA-2232) ----
-   Design note PHA-2201 §2 (install flow) / §5 (revoke). Three sheets:
+/* ---- Settings → Apps (#2201.4 / #2232) ----
+   Design note #2201 §2 (install flow) / §5 (revoke). Three sheets:
      1. openAppsSheet() — every app the user has on, built-in AND
         third-party, from the same GET /api/apps registry read path
         (lib/app-install.js's listApps()).
      2. openAppDetailSheet(key) — "what this app can do" (scopes via
-        the shared window.ScopeDisplay mapping, PHA-2230) + paginated
-        activity (app_api_log, PHA-2231) + Revoke (third-party only —
+        the shared window.ScopeDisplay mapping, #2230) + paginated
+        activity (app_api_log, #2231) + Revoke (third-party only —
         built-ins have no app-scoped token to revoke).
      3. openAppInstallSheet() → openAppConsentSheet() — paste a
         manifest URL, resolve, then render the SAME consent screen
         consent.html uses (window.HomesteadConsent.renderConsentScreen,
-        PHA-2230) inside this sheet, then consent -> install. The
+        #2230) inside this sheet, then consent -> install. The
         newly-minted app token is shown exactly once via the existing
-        copy-once reveal (openTokenRevealSheet, PHA-1617.3 pattern). */
-// PHA-2846: shared icon renderer for the Apps sheet + App detail
+        copy-once reveal (openTokenRevealSheet, #1617.3 pattern). */
+// #2846: shared icon renderer for the Apps sheet + App detail
 // header. Built-in modules ship a path-style icon ("/modules/{key}.svg");
 // third-party manifests ship an emoji string. We render <img> for the
 // former, an escaped emoji span for the latter. The registry's icon
@@ -3169,7 +3169,7 @@ async function runAppInstall(manifestUrl, root){
 api('GET','/api/me').then(r=>{if(r.user)boot(r.user)});
 if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
 
-/* ---- push notifications (PHA-1619) ---- */
+/* ---- push notifications (#1619) ---- */
 function urlBase64ToUint8Array(b64){
   const pad='='.repeat((4-b64.length%4)%4);
   const b=(atob(b64+pad).split('')).map(c=>c.charCodeAt(0));
@@ -3276,10 +3276,10 @@ async function renderPushPrefs(){
   };
 }
 
-/* ---- PHA-2219: PWA install coach ----
+/* ---- #2219: PWA install coach ----
 // First-login flow that helps non-technical friends get from
 // "I have the URL in Safari" to "I get a real push notification."
-// The PWA + VAPID pipeline (PHA-1619) already works; this layer
+// The PWA + VAPID pipeline (#1619) already works; this layer
 // closes the install-friction gap that the decision comment calls
 // out as the actual blocker.
 //
@@ -3296,7 +3296,7 @@ async function renderPushPrefs(){
 //   5. Detect installed state and never show any of this to a
 //      user who already installed.
 //   6. Every step is funnel-instrumented so the analytics pipeline
-//      (PHA-2210) can build the install funnel. Closed-enum steps
+//      (#2210) can build the install funnel. Closed-enum steps
 //      are validated server-side; see POST /api/funnel/install. */
 
 // LS key for the dismissed-forever flag. We keep this per-browser
@@ -3307,7 +3307,7 @@ async function renderPushPrefs(){
 // "saw once" (we want to keep showing it until installed, just
 // without re-prompting if they explicitly hit Not now).
 const INSTALL_DISMISSED_LS = 'homestead.installCoach.dismissed.v1';
-// PHA-2498 (UX batch #1): "situated" rule — auto-open the coach only
+// #2498 (UX batch #1): "situated" rule — auto-open the coach only
 // after a REAL signal of engagement (first action, a dwell, or a
 // returning session), never on the login transition itself. We track
 // three counters locally:
@@ -3508,8 +3508,8 @@ async function openInstallCoach(source){
 
 // Boot-time coach trigger. Called from boot() AFTER refresh() and
 // the walls check have settled, so the friend sees the feed first
-// ("after they are situated" — Brandon's directive). PHA-2498 (UX
-// batch #1): we honour the "situated" rule from PHA-2219's decision,
+// ("after they are situated" — Brandon's directive). #2498 (UX
+// batch #1): we honour the "situated" rule from #2219's decision,
 // which the legacy one-shot boot prompt violated. Three arms qualify
 // a session as "situated":
 //   1. Second session on this device — count >= 2.
@@ -3569,7 +3569,7 @@ async function maybeShowInstallCoach(){
   // so we catch taps even on elements that stop propagation later
   // (the FAB on Home/Tasks, any nav button, the drawer chip in the
   // avatar menu, etc.). The capture-phase trick is the same as
-  // PHA-2494's defensive pattern.
+  // #2494's defensive pattern.
   function _firstActionListener(){
     if(arms.firstActionAt)return;
     arms.firstActionAt = Date.now();
@@ -3632,7 +3632,7 @@ function renderInstallChip(){
 // funnel gets a clean `install_completed` event without waiting
 // for the next page load. Best-effort.
 //
-// PHA-2498 (UX batch #1): the legacy gate was the FIRSTPROMPT localStorage
+// #2498 (UX batch #1): the legacy gate was the FIRSTPROMPT localStorage
 // key — once the coach auto-opened, we had a marker to flip when the
 // user came back installed. With the "situated" rule, the arms
 // structure is the new marker: the user is in the arms path once
@@ -3652,7 +3652,7 @@ document.addEventListener('visibilitychange',async()=>{
   }catch(_){}
 });
 
-/* ---- PHA-1872: entity graph — entity page + cmd-k search palette ---- */
+/* ---- #1872: entity graph — entity page + cmd-k search palette ---- */
 /* Route: /entity/:id (design doc §10.2 deep_links + nav are id-based). */
 const EDGE_GROUP_LABELS={
   available_as:'Available as', available_via:'Available via', authored_by:'Authored by',
@@ -3695,7 +3695,7 @@ function renderEntityPage(entity,edgesRes,backlinksRes,reviewQueue){
   if(entity.meta&&entity.meta.year)metaBits.push(String(entity.meta.year));
   const actions=Object.entries(entity.deep_links||{}).filter(([,url])=>url).map(([svc,url])=>
     `<a href="${esc(url)}" target="_blank" rel="noopener">🔗 Open in ${esc(svc)}</a>`).join('');
-  // PHA-1876: "needs review" indicator + per-item Merge/Don't merge
+  // #1876: "needs review" indicator + per-item Merge/Don't merge
   // buttons. reviewQueue.items is the per-entity list of pending
   // review rows where this entity is candidate_a or candidate_b.
   const pendingReviews = (reviewQueue && Array.isArray(reviewQueue.items))
@@ -3858,9 +3858,9 @@ $('#paletteInput').addEventListener('keydown',e=>{
   },150);
 })();
 
-/* ---- PHA-1898: meta-agent chat drawer (design doc §6.3) ----
+/* ---- #1898: meta-agent chat drawer (design doc §6.3) ----
    Frontend-only shell: composer + SSE/JSON consumer. Talks to the
-   stub /api/drawer backend (PHA-1617.6 will replace the stub with the
+   stub /api/drawer backend (#1617.6 will replace the stub with the
    HMAC-signed outbound forwarder; the wire shape stays the same). */
 const DRAWER = {
   open: false,
@@ -3966,7 +3966,7 @@ function appendDrawerMsg(role, text) {
   return div;
 }
 
-// PHA-2851: render one house-action receipt — "(✓ queued Part Two)".
+// #2851: render one house-action receipt — "(✓ queued Part Two)".
 // textContent throughout: the chip text is server-authored but it
 // embeds a media title that ultimately came from a synced library, so
 // it gets the same defense-in-depth every other drawer string gets.
@@ -4051,7 +4051,7 @@ async function sendDrawerMessage(text) {
       const jsonText = data.text || '';
       if (jsonText) finalizeStreaming(streaming, jsonText);
       else streaming.remove();
-      // PHA-2851: same receipts as the SSE path, for the single-shot
+      // #2851: same receipts as the SSE path, for the single-shot
       // JSON reply.
       (data.tool_results || []).forEach(appendDrawerChip);
       if (!jsonText && !(data.tool_results || []).length) {
@@ -4097,7 +4097,7 @@ async function consumeSseStream(res, el, acc) {
       const ev = parseSseBlock(block);
       if (!ev) continue;
       if (ev.event === 'done') return;
-      // PHA-2851: house-action receipts arrive after the prose and
+      // #2851: house-action receipts arrive after the prose and
       // before `done`. If the model called a tool without narrating,
       // the streaming bubble is still empty — drop it rather than
       // leaving three typing dots hanging above the chip forever.
@@ -4159,7 +4159,7 @@ $('#drawerInput').addEventListener('keydown', (e) => {
 });
 $('#drawerInput').addEventListener('input', autosizeDrawerInput);
 
-// PHA-2200.5 / PHA-2206: load the wall feed component. This script
+// #2200.5 / #2206: load the wall feed component. This script
 // tag MUST come after the SPA's own script so boot() (defined above)
 // is callable when the component mounts. The component itself is
 // pure DOM — it doesn't reach back into this script's scope; it

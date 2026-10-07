@@ -2,19 +2,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PHATT Tech LLC
 
-// PHA-2648 — Porch DoD smoke: a throwaway test post (never a real
+// #2648 — Porch DoD smoke: a throwaway test post (never a real
 // friend's post — that's the manual launch ritual, later) driven
 // through the full pipeline this repo has actually shipped so far:
 //
-//   upload (PHA-2149/2644) -> media-context comprehension package
-//   -> sweep loop picks the post up after its grace window (PHA-2646)
+//   upload (#2149/2644) -> media-context comprehension package
+//   -> sweep loop picks the post up after its grace window (#2646)
 //   -> participation contract gates a candidate reaction on whether it
 //      references something concrete in the comprehension package
-//      (PHA-2645) -> the accepted candidate is posted as a REAL
+//      (#2645) -> the accepted candidate is posted as a REAL
 //      comment via the production HTTP route, and the agent's badge +
-//      vote-off button are visible on the resulting thread (PHA-2648).
+//      vote-off button are visible on the resulting thread (#2648).
 //
-// What this smoke intentionally does NOT exercise: PHA-2636's
+// What this smoke intentionally does NOT exercise: #2636's
 // candidate-generation step (the LLM draft-per-register writer) is
 // still blocked upstream, so this script plays that role itself with
 // two fixed candidates — one that quotes real comprehension-package
@@ -57,7 +57,7 @@ function section(title) { console.log(`\n=== ${title} ===`); }
 
 // A solid-field JPEG standing in for "an obvious meme". The joke lives in
 // the caption metadata (same as how the media-comprehension package
-// surfaces it — see PHA-2644's `caption` upload field), not baked into
+// surfaces it — see #2644's `caption` upload field), not baked into
 // pixels: this repo's ffmpeg build has no `drawtext` filter available.
 async function makeTestImage() {
   const out = path.join(os.tmpdir(), `porch-smoke-image-${crypto.randomUUID()}.jpg`);
@@ -147,10 +147,10 @@ export async function runSmoke() {
   // development: a fixed port produced a live server that answered
   // /api/health from a DIFFERENT process and 404'd on every other route).
   process.env.ADMIN_PASSWORD = 'porch-smoke-admin-pw';
-  // PHA-3206: PHA-3200 made loadSessionSecret fail-closed on a short /
+  // #3206: #3200 made loadSessionSecret fail-closed on a short /
   // placeholder secret. The 17-char 'porch-smoke-secret' triggered
   // "too short (17 chars; minimum 32)" on the first run of the
-  // PHA-3206 runner in CI. Use a deterministic 64-char hex string
+  // #3206 runner in CI. Use a deterministic 64-char hex string
   // generated once for this smoke. Deterministic so re-runs match
   // any on-disk cookie state (the smoke boots a fresh DATA_DIR each
   // time so this doesn't actually matter, but keeping it stable
@@ -220,11 +220,11 @@ export async function runSmoke() {
   const addEmily = await api(adminCookie, 'POST', `/api/walls/${WALL_SLUG}/members`, { username: 'emily' });
   assert(addEmily.status === 200, 'emily (will hold the agent PAT) added to the smoke wall');
 
-  // Emily's own self-issued PAT IS her agent identity — PHA-1617's
+  // Emily's own self-issued PAT IS her agent identity — #1617's
   // architecture note: "agents are wall members with their own identity
   // ... via BYOK key", no separate agent registry table.
   const tokenRes = await api(emilyCookie, 'POST', '/api/agent-tokens', { label: 'porch-smoke-agent' });
-  assert(tokenRes.status === 200 && tokenRes.json.token_plaintext, 'emily mints her own agent PAT (self-service, PHA-1617.1)');
+  assert(tokenRes.status === 200 && tokenRes.json.token_plaintext, 'emily mints her own agent PAT (self-service, #1617.1)');
   const emilyPat = tokenRes.json.token_plaintext;
   evidence.agentUsername = 'emily';
 
@@ -313,7 +313,7 @@ export async function runSmoke() {
 
   // Comprehension mapping: this adapter (media-context payload ->
   // participation-contract's {frames, captionNames, graphEntities,
-  // pastReactionRefs} shape) is exactly the piece PHA-2636's
+  // pastReactionRefs} shape) is exactly the piece #2636's
   // candidate-generation step will own once it lands. It's inlined here,
   // not in lib/porch/*, because that step is still blocked upstream.
   function toComprehension(ctx) {
@@ -379,7 +379,7 @@ export async function runSmoke() {
     author: { username: 'emily', display: 'Emily', isAgent: true },
   }, /* isAdmin */ true, /* meUsername */ 'brandon');
   assert(postWithAgentAuthor.includes('agent-badge'), 'feed.js pure-render output includes the agent-badge markup for an isAgent author');
-  // PHA-3206: the vote-off button class is 'vote-off' (feed.js:88), not
+  // #3206: the vote-off button class is 'vote-off' (feed.js:88), not
   // 'agent-vote-off'. The OLD smoke never ran in CI, so the typo
   // survived. Pass isAdmin=true and meUsername to _postHtml so the
   // isAgent && isAdmin branch in feed.js:109 actually renders the button.
@@ -390,7 +390,7 @@ export async function runSmoke() {
   // Vote-off endpoint itself (admin votes emily off this wall — the
   // route is requireAdmin-gated per server.js:2988; the "fellow wall
   // member" framing in the assertion label was aspirational, not
-  // what the route actually checks. PHA-3206 fix: use adminCookie.).
+  // what the route actually checks. #3206 fix: use adminCookie.).
   const voteOff = await api(adminCookie, 'POST', `/api/walls/${WALL_SLUG}/agents/emily/opt-out`, {});
   assert(voteOff.status === 200, 'POST vote-off endpoint succeeds for an admin', JSON.stringify(voteOff.json));
   const optedOut = porchContract.isWallOptedOut(dbDirect, wallRow.id, emilyRow.id, new Date());

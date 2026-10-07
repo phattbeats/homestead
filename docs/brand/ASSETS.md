@@ -1,6 +1,6 @@
-# Homestead brand asset index (PHA-2846)
+# Homestead brand asset index (#2846)
 
-This document is the **single source of truth** for which brand file is canonical and where it is consumed in the app. If you change any of these paths, update both the path here AND the consumer in the same PR — out-of-sync assets have shipped twice (PHA-2846 caught it).
+This document is the **single source of truth** for which brand file is canonical and where it is consumed in the app. If you change any of these paths, update both the path here AND the consumer in the same PR — out-of-sync assets have shipped twice (#2846 caught it).
 
 ## Locked palette
 
@@ -51,7 +51,7 @@ rsvg-convert -w 512 -h 512            public/icon-maskable.svg   -o public/icon-
 
 ## Built-in module icons (Add Rooms picker + Apps sheet)
 
-**Source directory:** `public/modules/` — six SVGs, one per built-in module key. The 16-field registry contract (PHA-2201) keeps `icon` as a non-empty string; for built-ins it's now a path like `/modules/porch.svg`. The renderer dispatches on prefix:
+**Source directory:** `public/modules/` — six SVGs, one per built-in module key. The 16-field registry contract (#2201) keeps `icon` as a non-empty string; for built-ins it's now a path like `/modules/porch.svg`. The renderer dispatches on prefix:
 
 - `/modules/` prefix → `<img>` (built-in SVG)
 - anything else → escaped emoji glyph (third-party manifest)
@@ -111,6 +111,6 @@ These are **durable** brand assets, not transient chat outputs. Do not overwrite
 
 ## Related
 
-- [PHA-2846](https://paperclip.phatt.vip/issues/PHA-2846) — this index's parent issue
-- [PHA-2777](https://paperclip.phatt.vip/issues/PHA-2777) — brand-system canonical assets (predecessor)
+- [#2846](https://paperclip.phatt.vip/issues/#2846) — this index's parent issue
+- [#2777](https://paperclip.phatt.vip/issues/#2777) — brand-system canonical assets (predecessor)
 - `agents/ledger/assets/homestead/canonical/README.md` — locked brand README (Brandon, 2026-08-28)

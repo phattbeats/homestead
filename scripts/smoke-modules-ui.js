@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2205 (PHA-2200.4) — layout-aware SPA browser/DOM smoke.
+// #2205 (#2200.4) — layout-aware SPA browser/DOM smoke.
 //
 // Drives Playwright Chromium through every layout shape the SPA renders:
 //   * feed-only   — 1 enabled module (wall) → bottom nav hidden, + Add rooms pill
@@ -14,7 +14,7 @@
 //   * agent-gate  — drawerFab visibility tracks agentDrawer flag
 //
 // For each shape the smoke captures a 390x844 mobile-viewport
-// screenshot into ./verify-out/ (per PHA-2501 standing policy) and
+// screenshot into ./verify-out/ (per #2501 standing policy) and
 // asserts the structural rules (nav buttons disabled by data-disabled,
 // pages hidden by data-disabled, body[data-layout] set correctly,
 // + Add rooms pill visibility, drawerFab visibility).
@@ -170,7 +170,7 @@ async function disableAll() {
     assert(navState1.tasks === 'off', 'feed-tabs: nav tasks (chores) is hidden');
     assert(navState1['r-calendar'] === 'off', 'feed-tabs: nav calendar (r-calendar) is hidden');
     assert(navState1.svc === 'off', 'feed-tabs: nav svc (apps) is hidden');
-    // PHA-2557: the rendered tab count MUST match the layout.tabs count.
+    // #2557: the rendered tab count MUST match the layout.tabs count.
     const renderedTabs1 = Object.values(navState1).filter(v => v === 'on').length;
     assertEq(renderedTabs1, layout.tabs.length,
       `feed-tabs: rendered tab count (${renderedTabs1}) === layout.tabs.length (${layout.tabs.length})`);
@@ -187,7 +187,7 @@ async function disableAll() {
     // All enabled → addRoomVisible should be false (all rooms on).
     const meadowPillDisplay = await page.evaluate(() => document.getElementById('addRoomPill').style.display);
     assertEq(meadowPillDisplay, 'none', 'meadow: + Add rooms pill is hidden (nothing to add)');
-    // PHA-2557: rendered tab count parity for full-module user. All 6
+    // #2557: rendered tab count parity for full-module user. All 6
     // modules enabled → meadow layout → 5 nav tabs visible (wall, chores,
     // lists, calendar, apps — `agent` is drawer-mode, surfaces as FAB
     // not a nav button). The renderable count is layout.tabs.length - 1
@@ -278,7 +278,7 @@ async function disableAll() {
     await page.screenshot({ path: path.join(OUT_DIR, 'modui-no-agent.png'), fullPage: false });
     ok('agent gating: drawerFab visibility tracks agentDrawer flag');
 
-    // ---- 6. wall-only screenshot (PHA-2557 acceptance) -----------
+    // ---- 6. wall-only screenshot (#2557 acceptance) -----------
     // Disable every non-wall module. The SPA single-surface rule
     // redirects `/` to /porch.html when wall is the sole enabled
     // module (so we can't take the screenshot on `/` itself) — we
@@ -298,10 +298,10 @@ async function disableAll() {
     await page.goto('http://127.0.0.1:3194/porch.html', { waitUntil: 'load' });
     // The /porch.html shell mounts the HomesteadFeed component into
     // #porch-mount. The component creates a `.feed-root` child even
-    // when the user has no wall memberships (PHA-2206 component
+    // when the user has no wall memberships (#2206 component
     // contract). We assert the mount happened — inner feed content
     // rendering for an empty-walls user is the component's job, not
-    // the layout/nav concern this smoke covers (PHA-2557).
+    // the layout/nav concern this smoke covers (#2557).
     const porchMountState = await page.evaluate(() => {
       const m = document.getElementById('porch-mount');
       const root = m && m.querySelector('.feed-root');
@@ -317,8 +317,8 @@ async function disableAll() {
     await page.screenshot({ path: path.join(OUT_DIR, 'modui-wall-only.png'), fullPage: false });
     ok('wall-only: screenshot captured');
 
-    // ---- 7. PHA-2557 catch-all tightening: unknown *.html → 404 ---
-    // PHA-2658: /entity/:id is the one explicit non-file SPA route. It must
+    // ---- 7. #2557 catch-all tightening: unknown *.html → 404 ---
+    // #2658: /entity/:id is the one explicit non-file SPA route. It must
     // receive the index shell, while the missing-file protections below stay
     // intact. This is intentionally checked without auth: the server route
     // owns shell delivery; the SPA owns the existing post-login restore.
@@ -331,7 +331,7 @@ async function disableAll() {
     // The static handler must NOT serve the SPA shell for non-existent
     // .html files. Previously /lists.html, /calendar.html, /chores.html,
     // /apps.html all returned 200 with the index.html shell (the same
-    // masking class as the PHA-1704/1707/1708 /api bug). With the fix,
+    // masking class as the #1704/1707/1708 /api bug). With the fix,
     // missing *.html returns 404 from the static handler before the SPA
     // catch-all swallows the request. We exercise /lists.html (which
     // exists as a registry route but no file) and assert it's 404.
@@ -349,7 +349,7 @@ async function disableAll() {
     // but the static file was never created).
     const choresRes = await fetch('http://127.0.0.1:3194/chores.html');
     assertEq(choresRes.status, 404, '/chores.html (no file) → 404');
-    // /api still returns 404 for unknown routes (the original PHA-1704
+    // /api still returns 404 for unknown routes (the original #1704
     // bug was /api returning 200 with the SPA shell for unknown paths).
     const apiRes = await fetch('http://127.0.0.1:3194/api/this-does-not-exist');
     assertEq(apiRes.status, 404, '/api/this-does-not-exist → 404');

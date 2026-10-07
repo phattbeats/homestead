@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-// PHA-2207 (PHA-2200.6) acceptance tests for the invite-to-wall flow.
+// #2207 (#2200.6) acceptance tests for the invite-to-wall flow.
 //
 // Boots server.js on an ephemeral port (3192) and exercises the full
 // endpoint matrix against a header-trust mock. Mirrors the pattern of
 // scripts/test-modules-api.js — no supertest, just fetch against the
 // listening socket.
 //
-// Acceptance covered (per PHA-2207 issue body):
-//   * POST /api/invites requires wall_slug (legacy PHA-1575 path returns 400).
+// Acceptance covered (per #2207 issue body):
+//   * POST /api/invites requires wall_slug (legacy #1575 path returns 400).
 //   * POST /api/invites requires admin (non-admin returns 403).
 //   * POST /api/invites with valid wall_slug returns 201 + URL with code.
 //   * Redeeming an invite atomically grants wall membership AND stamps
@@ -21,8 +21,8 @@
 //   * Members list returned by redeem matches the wall roster.
 //
 // Out of scope (handled by sibling PHAs):
-//   * The Wizarr UI for invite creation (PHA-1575 still owns that).
-//   * SPA rendering of the welcome sheet (PHA-2200.4).
+//   * The Wizarr UI for invite creation (#1575 still owns that).
+//   * SPA rendering of the welcome sheet (#2200.4).
 //   * The /invite/:code HTML page itself (this test covers the API;
 //     the HTML is exercised by smoke-* scripts if added later).
 
@@ -90,12 +90,12 @@ const GET = (urlPath, headers = HEAD_ADMIN) => fetch('http://127.0.0.1:3192' + u
 
   console.log('\nTest 1: POST /api/invites requires wall_slug');
   {
-    // No wall_slug — legacy PHA-1575 path — must 400.
+    // No wall_slug — legacy #1575 path — must 400.
     const r = await POST('/api/invites', {});
     assertEq(r.status, 400, 'POST /api/invites {} → 400');
     const body = await r.json();
     assert(body.error === 'wall_slug required', 'error code is "wall_slug required"');
-    assert(body.hint && body.hint.includes('PHA-1575'), 'hint mentions PHA-1575 reframe');
+    assert(body.hint && body.hint.includes('#1575'), 'hint mentions #1575 reframe');
   }
 
   console.log('\nTest 2: POST /api/invites requires admin');

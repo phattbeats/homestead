@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-1902 (PHA-1617.9) smoke test: end-to-end against a live server.js.
+// #1902 (#1617.9) smoke test: end-to-end against a live server.js.
 //
 //   1. Boot server.js in-process against a fresh DATA_DIR.
 //   2. Seed a few tasks/events/notification_log entries for brandon.

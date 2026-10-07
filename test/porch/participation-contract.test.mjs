@@ -1,4 +1,4 @@
-// PHA-2645 unit tests for lib/porch/participation-contract.js.
+// #2645 unit tests for lib/porch/participation-contract.js.
 //
 // Node's built-in test runner (Node 24+; no extra devDependency): run
 // with `node --test test/porch/` or, for coverage,
@@ -236,7 +236,7 @@ test('decide() throws without a character record (no global fallback table)', ()
   }), /character record is required/);
 });
 
-// ---- 5. Foreign-agent restriction (PHA-2426) ----
+// ---- 5. Foreign-agent restriction (#2426) ----
 
 test('allowedRegisters: foreign agents are limited to sincere_question, callback, plain_emoji', () => {
   const character = baseCharacter({ isForeignAgent: true });

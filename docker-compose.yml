@@ -14,7 +14,7 @@ services:
       # SQLite lives here. Mount a host path so the DB survives image upgrades.
       - /mnt/user/appdata/homestead:/data
     environment:
-      # REQUIRED. Long random string used to sign session cookies. PHA-3200
+      # REQUIRED. Long random string used to sign session cookies. #3200
       # makes the server refuse to boot if this is missing, a known
       # placeholder, or shorter than 32 chars. Generate one with:
       #   openssl rand -hex 32

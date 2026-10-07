@@ -8,19 +8,19 @@
 // Push payload shape (sent by server.js notify()):
 //   { title, body, url, tag, icon, badge, category }
 
-// PHA-2200.5 / PHA-2206: minimal precache. The feed component file
+// #2200.5 / #2206: minimal precache. The feed component file
 // is shared between /porch.html and the in-place #page-wall mount
 // inside /index.html — both placements need it to render the wall.
 // Without precaching, a returning PWA user with intermittent
 // connectivity would see an empty Porch. Cache-first for these URLs.
 //
-// PHA-2846 / v0.5.10: cache bumped to homestead-v6 to ship the
+// #2846 / v0.5.10: cache bumped to homestead-v6 to ship the
 // bottom-nav icon migration (the six emoji tabs now reference the
 // matching built-in module SVGs) plus the new /favicon-32.png
 // alternate-icon fallback for browsers that ask /favicon.ico before
 // /favicon.svg. The old homestead-v5 cache is dropped on activate so
 // the emoji tab labels don't persist offline for a returning PWA
-// user. PHA-2846 v0.5.9 shipped the v5 cache for the original
+// user. #2846 v0.5.9 shipped the v5 cache for the original
 // opening-door repair; v0.5.10 layers the bottom-nav onto the same
 // canonical asset set without re-shipping the icons themselves (they
 // are already in v5). New asset: /favicon-32.png (32x32 PNG).
@@ -30,7 +30,7 @@ const PRECACHE_URLS = [
   '/brand.css',
   '/fonts/fraunces-italic-400-latin.woff2',
   '/fonts/plus-jakarta-sans-latin.woff2',
-  // Canonical opening-door mark (PHA-2846)
+  // Canonical opening-door mark (#2846)
   '/icon.svg',
   '/favicon.svg',
   '/favicon-32.png',
@@ -38,7 +38,7 @@ const PRECACHE_URLS = [
   '/icon-512.png',
   '/icon-maskable.svg',
   '/icon-maskable-512.png',
-  // Six built-in module SVG marks (PHA-2846)
+  // Six built-in module SVG marks (#2846)
   '/modules/porch.svg',
   '/modules/lists.svg',
   '/modules/calendar.svg',
@@ -62,7 +62,7 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil((async () => {
-    // Drop old caches on activation. PHA-2846 / v0.5.10: homestead-v5
+    // Drop old caches on activation. #2846 / v0.5.10: homestead-v5
     // is now stale (its /sw.js reference predates the bottom-nav
     // migration; the emoji tab bar would persist offline). v4 (the
     // closed-arch icons) is two-generations stale.
@@ -139,7 +139,7 @@ self.addEventListener('notificationclick', e => {
     }
     await clients.openWindow(url);
   })());
-  // PHA-2218: a push-tap should clear its own badge — mark this notification's
+  // #2218: a push-tap should clear its own badge — mark this notification's
   // tag seen server-side. Additive to the focus/open-tab flow above; best-effort
   // (a failure here shouldn't block or affect navigation, which already ran via
   // the waitUntil() above).

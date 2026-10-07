@@ -1,18 +1,18 @@
 #!/usr/bin/env node
-// PHA-2209 / PHA-2200.8 — Amendment 1 acceptance test:
-// "Built-in modules pass the same shape validator as PHA-2201 third-party apps."
+// #2209 / #2200.8 — Amendment 1 acceptance test:
+// "Built-in modules pass the same shape validator as #2201 third-party apps."
 //
-// Per PHA-2201 (third-party app contract), a third-party app
+// Per #2201 (third-party app contract), a third-party app
 // manifest MUST conform to the same 16-field shape as a built-in
 // registry entry. The validator at `lib/registry-validate.js` is
 // the canonical intake gate — third-party install endpoints
-// (PHA-2229) call it before merging into the registry.
+// (#2229) call it before merging into the registry.
 //
 // This test verifies:
 //   1. Every built-in entry in `lib/modules.js` passes
 //      `validateEntryShape(entry) === null`.
 //   2. A representative third-party-shaped entry (Popcorn Vote
-//      per the PHA-2201 manifest spec) ALSO passes.
+//      per the #2201 manifest spec) ALSO passes.
 //   3. A deliberately-malformed third-party entry FAILS (so we
 //      know the validator actually validates).
 //   4. The validator rejects common drift classes (missing field,
@@ -46,7 +46,7 @@ function assertErr(fn, label, detailMatch) {
   }
 }
 
-console.log('PHA-2209 Amendment 1 — registry shared intake path\n');
+console.log('#2209 Amendment 1 — registry shared intake path\n');
 
 // -----------------------------------------------------------------------------
 // 1. Every built-in passes validateEntryShape.
@@ -76,7 +76,7 @@ const THIRD_PARTY_POPCORN_VOTE = {
   version: '0.1.0',
   author: 'homestead-external', // third-party author namespace
   url: 'https://popcorn.example.com/manifest',
-  open_mode: 'tab', // external-host mode (per PHA-2201)
+  open_mode: 'tab', // external-host mode (per #2201)
   scopes: ['read:walls:media_club'],
   mcp: true,
   webhooks: ['on_pick'],

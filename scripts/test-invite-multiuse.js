@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2664 acceptance tests for multi-use ("porch code") invites.
+// #2664 acceptance tests for multi-use ("porch code") invites.
 //
 // Exercises lib/invites.js directly against an ephemeral sqlite db —
 // same pattern as scripts/test-invite-to-wall.js, but this one calls

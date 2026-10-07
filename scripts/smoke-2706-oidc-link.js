@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2706 smoke test — "Link Authentik later" full lifecycle.
+// #2706 smoke test — "Link Authentik later" full lifecycle.
 //
 // What this script captures (writes to verify-out/):
 //   * smoke-2706-db-shape.json — oidc_link_states + identity_links

@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// PHA-2556 acceptance smoke: fresh DB → boot → log in as brandon →
+// #2556 acceptance smoke: fresh DB → boot → log in as brandon →
 // tap Porch → wall opens with composer → post lands. Screenshot
 // required, no DB edits anywhere in the test.
 //
-// PHA-2493 closed green with a smoke test that open-coded an
+// #2493 closed green with a smoke test that open-coded an
 // `INSERT INTO user_groups` to grant brandon media-club membership,
 // then asserted the wall was visible. That bypassed exactly the
-// defect PHA-2556 is fixing. This smoke uses NO direct DB writes —
+// defect #2556 is fixing. This smoke uses NO direct DB writes —
 // the only mutations are POSTs to /api/* endpoints the product ships
 // with. If the seeded wall isn't visible after a fresh boot, this
 // smoke fails the same way a real user would experience it.

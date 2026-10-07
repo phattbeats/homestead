@@ -1,4 +1,4 @@
-// PHA-1619 smoke test (v4): load web-push first to monkey-patch
+// #1619 smoke test (v4): load web-push first to monkey-patch
 // sendNotification via require.cache, then require server.js and
 // explicitly invoke app.listen() (server.js guards app.listen() behind
 // `require.main === module`, which is false when required from this script).

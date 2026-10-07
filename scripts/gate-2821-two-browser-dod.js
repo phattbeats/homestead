@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2821 Definition of Done: two real browser sessions, two different
+// #2821 Definition of Done: two real browser sessions, two different
 // accounts, same wall, side by side — one posts, the other updates without
 // touching anything. Driven through Browserless (real Chrome, CDP) against
 // an ephemeral homestead instance so it proves the actual rendered
@@ -112,7 +112,7 @@ function localRoutableIp() {
 
     await brandonPage.screenshot({ path: path.join(verifyOut, 'gate-2821-brandon-before.png'), fullPage: true });
 
-    const postText = `PHA-2821 live-update proof ${Date.now()}`;
+    const postText = `#2821 live-update proof ${Date.now()}`;
     await adminPage.fill('#textBody', postText);
     await adminPage.click('#postText');
 

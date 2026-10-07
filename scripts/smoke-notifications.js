@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2218 smoke test: boot server.js on an ephemeral port, exercise the
+// #2218 smoke test: boot server.js on an ephemeral port, exercise the
 // new HTTP surface end-to-end — members autocomplete, per-wall level
 // GET/PUT, an @-mentioned post, thread mute/unmute, the badge feed, and
 // seen-clearing. Same boot pattern as scripts/smoke-walls.js.
@@ -58,16 +58,16 @@ async function login(username, password) {
   if (!ready) throw new Error('homestead did not become ready');
   ok('server boots');
 
-  // PHA-2556: the previous version open-coded INSERT INTO user_groups
+  // #2556: the previous version open-coded INSERT INTO user_groups
   // to put brandon + emily into 'media-club', then tested against a
   // wall that wasn't seeded visible to anyone. Same anti-pattern the
-  // PHA-2556 issue flags in scripts/smoke-walls.js. Now both seeded
+  // #2556 issue flags in scripts/smoke-walls.js. Now both seeded
   // users are already in `household` (the seeded wall), so the wall
   // is reachable via the API alone. The remaining DB write below sets
   // notification_prefs.quiet_{start,end}_hour to 0/0 — this is a
   // legitimate test-infrastructure override (the product has no public
   // API for these fields yet), NOT the "missing feature" anti-pattern
-  // the PHA-2556 spec calls out. It exists so the smoke's pass/fail
+  // the #2556 spec calls out. It exists so the smoke's pass/fail
   // doesn't depend on the wall-clock hour it runs at.
   const brandonCookie = await login('brandon', 'smoke-notif-brandon-pw');
   const emilyCookie = await login('emily', 'smoke-notif-emily-pw');

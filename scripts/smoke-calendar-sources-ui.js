@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-1868 smoke test: per-user source config UI surface area.
+// #1868 smoke test: per-user source config UI surface area.
 //
 // Exercises the new endpoints the SPA uses:
 //   * GET    /api/calendar-sources/kinds — provider metadata for the
@@ -16,7 +16,7 @@
 // The test boots server.js in-process against a fake CalDAV sandbox
 // (same pattern as scripts/smoke-calendar-sources.js). It also adds a
 // placeholder ms365 source and confirms the provider allow-list returns
-// both kinds AND marks google as disabled until PHA-1865 merges.
+// both kinds AND marks google as disabled until #1865 merges.
 //
 // Exits 0 on success, 1 on any failure. Designed to fail loudly when
 // the browser-side credentials leak contract is broken (the new PATCH
@@ -149,7 +149,7 @@ fakeCalDav.listen(fakeCalDavPort, '127.0.0.1', () => {
     assertEq(kindIds.includes('ms365'), true, '/kinds lists ms365');
     assertEq(kindIds.includes('google'), true, '/kinds lists google (reserved)');
     const googleKind = (kindsJson.kinds || []).find((k) => k.id === 'google');
-    assertEq(googleKind && googleKind.disabled, true, 'google kind is marked disabled until PHA-1865');
+    assertEq(googleKind && googleKind.disabled, true, 'google kind is marked disabled until #1865');
     const caldavKind = (kindsJson.kinds || []).find((k) => k.id === 'caldav_nextcloud');
     assert(Array.isArray(caldavKind && caldavKind.credentialFields) && caldavKind.credentialFields.length === 1 && caldavKind.credentialFields[0].id === 'app_password', 'caldav_nextcloud kind has app_password credential field');
     const ms365Kind = (kindsJson.kinds || []).find((k) => k.id === 'ms365');
@@ -314,7 +314,7 @@ fakeCalDav.listen(fakeCalDavPort, '127.0.0.1', () => {
     const providerEvents = (merged.events || []).filter((e) => e.origin === 'provider:caldav_nextcloud');
     assert(providerEvents.length >= 1, 'merged feed includes caldav_nextcloud events');
 
-    // Disabled source is excluded from the merged feed (PHA-1867 + lib/calendar-sources).
+    // Disabled source is excluded from the merged feed (#1867 + lib/calendar-sources).
     const disabledPatchRes = await fetch(`http://127.0.0.1:3097/api/calendar-sources/${caldavSourceId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },

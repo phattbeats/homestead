@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2811 regression: POST/PUT /api/tasks must reject when the caller's
+// #2811 regression: POST/PUT /api/tasks must reject when the caller's
 // household doesn't have the `chores` module enabled. Before this fix
 // the row was written to the DB but never rendered anywhere (no nav
 // tab, no home task list) — a silent orphan.

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// PHA-1896 (PHA-1617.3) smoke test: end-to-end against a live server.js.
+// #1896 (#1617.3) smoke test: end-to-end against a live server.js.
 //
 // The token manager is a pure SPA consumer of /api/agent-tokens
-// (PHA-1617.1). This smoke doesn't drive a browser — it exercises the
+// (#1617.1). This smoke doesn't drive a browser — it exercises the
 // three endpoints the SPA calls and asserts the contract the UI
 // depends on:
 //
@@ -10,7 +10,7 @@
 //   * POST   /api/agent-tokens          — issue (returns plaintext ONCE)
 //   * DELETE /api/agent-tokens/:id      — revoke (immediate)
 //
-// And it does a regression check on the existing PHA-1617.1/.2
+// And it does a regression check on the existing #1617.1/.2
 // contract that the UI sits on top of:
 //
 //   * The plaintext format is `homestead_pat_` + 43-char base64url.
@@ -23,7 +23,7 @@
 //     inline error display).
 //
 // Designed to be added to `npm run test:smoke` next to the other
-// PHA-16xx smoke scripts. Boots server.js in-process on an ephemeral
+// #16xx smoke scripts. Boots server.js in-process on an ephemeral
 // port with a tmp DATA_DIR.
 //
 // Run after `npm test`:

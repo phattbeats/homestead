@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// PHA-2444 acceptance tests for the ConnectorSpec schema, validator,
+// #2444 acceptance tests for the ConnectorSpec schema, validator,
 // JSONPath parser, and Komga reference template.
 //
-// Acceptance criteria (from PHA-2444 issue body):
+// Acceptance criteria (from #2444 issue body):
 //   * Schema is versioned (homestead.connector/v1).
 //   * Validator unit tests cover rejection cases:
 //       - POST method
@@ -103,7 +103,7 @@ function freshConnectivityOpt(overrides = {}) {
   }, overrides);
 }
 
-console.log('PHA-2444 ConnectorSpec tests\n');
+console.log('#2444 ConnectorSpec tests\n');
 
 // ---- Schema versioning --------------------------------------------------
 

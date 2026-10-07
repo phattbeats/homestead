@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-1902 (PHA-1617.9) acceptance tests for the snapshot endpoint.
+// #1902 (#1617.9) acceptance tests for the snapshot endpoint.
 //
 // Covers:
 //   * Build shape matches design doc §7 (`user`, `now`, `today`,
@@ -46,7 +46,7 @@ function assertEq(actual, expected, label) {
   if (a === e) ok(label); else ng(label, `expected ${e}, got ${a}`);
 }
 
-console.log('PHA-1902 snapshot tests\n');
+console.log('#1902 snapshot tests\n');
 
 // ---- Pure builder tests (no HTTP) ----
 function freshDb() {
@@ -80,7 +80,7 @@ function freshDb() {
   assert(Array.isArray(out.overdue_tasks), 'overdue_tasks is an array');
   assert(Array.isArray(out.upcoming.events_next_7_days), 'upcoming.events_next_7_days is an array');
   assert(Array.isArray(out.upcoming.chores_due_next_7_days), 'upcoming.chores_due_next_7_days is an array');
-  // PHA-2586: lists primitive now ships; lib/snapshot.js returns
+  // #2586: lists primitive now ships; lib/snapshot.js returns
   // { list_count, open_item_count, active_lists: [...] } via safeListsStats.
   // Even a freshly migrated-but-empty DB still gets an object, never {}.
   assert(out.lists && typeof out.lists === 'object' && !Array.isArray(out.lists), 'lists is an object envelope');

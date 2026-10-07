@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2659 acceptance tests — The Homestead Gazette.
+// #2659 acceptance tests — The Homestead Gazette.
 //
 // Covers the four things the design note (docs/GAZETTE-DESIGN.md) says
 // this issue has to prove:
@@ -90,7 +90,7 @@ const POST = (p, body) => fetch(`http://127.0.0.1:${PORT}${p}`, {
   body: JSON.stringify(body === undefined ? {} : body),
 });
 
-console.log('PHA-2659 Gazette tests\n');
+console.log('#2659 Gazette tests\n');
 
 // -----------------------------------------------------------------------------
 // 1. Registry entry
@@ -101,7 +101,7 @@ console.log('PHA-2659 Gazette tests\n');
   assert(!!g, 'gazette is registered');
   assertEq(g.open_mode, 'sheet', "open_mode === 'sheet'");
   assertEq(g.room, null, 'room === null (claims no nav tab)');
-  // PHA-2853 rework widened this: the typed issue pipeline reads wall
+  // #2853 rework widened this: the typed issue pipeline reads wall
   // activity and merged calendar events directly, so those became hard
   // dependencies alongside the harness.
   assertEq(g.requires, ['agent', 'wall', 'calendar'], "requires === ['agent','wall','calendar']");
@@ -135,14 +135,14 @@ console.log('PHA-2659 Gazette tests\n');
 // 3. The user_modules CHECK-constraint rebuild
 // -----------------------------------------------------------------------------
 {
-  console.log('\nTest 3: migrate() rebuilds a pre-PHA-2659 user_modules CHECK');
+  console.log('\nTest 3: migrate() rebuilds a pre-#2659 user_modules CHECK');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-gz-mig-'));
   const db = new Database(path.join(dir, 'life.db'));
 
   // Build a real, fully-migrated DB first (the rest of the schema —
   // identity, credentials — has to be present for migrate() to run),
   // then DOWNGRADE user_modules to the exact six-key CHECK that
-  // shipped before this issue. That reproduces a live pre-PHA-2659
+  // shipped before this issue. That reproduces a live pre-#2659
   // install far more faithfully than a hand-rolled users table.
   userModel.migrate(db);
   const uid = db.prepare("SELECT id FROM users WHERE username = 'brandon'").get().id;

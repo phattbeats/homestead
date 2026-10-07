@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-1872 acceptance tests for the entity graph (Phase A: schema + read API).
+// #1872 acceptance tests for the entity graph (Phase A: schema + read API).
 //
 // Follows the style of scripts/test-user-model.js / scripts/test-health-checker.js:
 // plain node assert-style harness, no test framework. Schema/DB-level tests
@@ -86,7 +86,7 @@ async function req(base, method, urlPath, body) {
   return { status: r.status, body: json };
 }
 
-console.log('PHA-1872 entity-graph tests\n');
+console.log('#1872 entity-graph tests\n');
 
 (async () => {
 

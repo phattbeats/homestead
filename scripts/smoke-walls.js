@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// PHA-2150 / PHA-2556 smoke test: boot server.js on an ephemeral port
+// #2150 / #2556 smoke test: boot server.js on an ephemeral port
 // and exercise the wall feed against the seeded wall.
 //
-// PHA-2556 rewrote this test to match the new DoD rule (see
+// #2556 rewrote this test to match the new DoD rule (see
 // docs/DEFINITION-OF-DONE.md "fresh-install user outcome"): the test
 // must NOT perform any manual DB writes that the product itself
 // cannot perform. The previous version open-coded an `INSERT INTO
@@ -15,7 +15,7 @@
 // Two cases:
 //   1. Default path — log in as brandon, no DB writes; the seeded
 //      'household' wall shows up. (This is the user-visible outcome
-//      PHA-2556 acceptance criterion.)
+//      #2556 acceptance criterion.)
 //   2. Group-grant path — when a NEW user (not in `household`) gets
 //      added to media-club via the new admin POST /api/walls/:slug/
 //      members route, the membership machinery works the same way.
@@ -77,7 +77,7 @@ const PNG_1X1 = Buffer.from(
   // brandon is seeded in `household`; the seeded wall is
   // visibility=group, group_name=household. The wall is visible
   // immediately. This is the user-visible acceptance criterion from
-  // PHA-2556: "fresh DB → boot → log in as brandon → tap Porch → wall
+  // #2556: "fresh DB → boot → log in as brandon → tap Porch → wall
   // opens with composer → post lands."
   console.log('\nCase 1: fresh install, no DB writes');
   const loginRes = await fetch('http://127.0.0.1:3095/api/login', {

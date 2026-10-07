@@ -12,7 +12,7 @@ dependencies.
 
 ## Commit authorship
 
-Homestead accepts commits authored only by `phattbeats <obiwouldjablowme@protonmail.com>` and rejects every `Co-authored-by` trailer. See [the authorship policy](docs/AUTHORSHIP.md) before contributing.
+Homestead accepts commits authored only by `phattbeats <21150921+phattbeats.noreply.github.com>` and rejects every `Co-authored-by` trailer. See [the authorship policy](docs/AUTHORSHIP.md) before contributing.
 
 ## Glossary
 
@@ -51,7 +51,7 @@ glossary in the same PR.
   [Calendar read-through](#calendar-read-through-universal-caldav--graph--google)
   below for setup.
 - **Entity graph (v0.1.6)** — Phase B-2 Kavita sync worker
-  (PHA-1624 Phase B-2, PHA-1874) walks your Kavita library every 6h
+  (#1624 Phase B-2, #1874) walks your Kavita library every 6h
   and reconciles manga + book series into Homestead's entity graph.
   Kavita authors become `person` entities (lowercased-name dedup per
   design doc §14); Kavita genres + tags become `concept` entities
@@ -62,8 +62,8 @@ glossary in the same PR.
   `GET /api/admin/sync/kavita/status`. Set `KAVITA_API_KEY` (and
   optionally `KAVITA_URL`) in the container env to enable. Skipped
   silently when unset so installs without Kavita keep working.
-- **Entity dedup + review queue (v0.1.11)** — Phase C (PHA-1624 /
-  PHA-1876) decision layer. `lib/dedup/matcher.js` runs a 3-tier
+- **Entity dedup + review queue (v0.1.11)** — Phase C (#1624 /
+  #1876) decision layer. `lib/dedup/matcher.js` runs a 3-tier
   identity check on every new `work` candidate: (1) deterministic
   ID match across `isbn / tmdb_id / audible_id / plex_guid /
   kavita_id`, (2) shared TMDB collection + same year, (3) fuzzy
@@ -77,11 +77,11 @@ glossary in the same PR.
   the **only** path that collapses two entities. A 6h cron
   (`POST /api/admin/sync/sibling-detector`) catches same-title +
   same-author works that aren't linked via `adaptation_of`.
-- **Entity graph (v0.1.5)** — Plex sync worker (PHA-1624 Phase B-1)
+- **Entity graph (v0.1.5)** — Plex sync worker (#1624 Phase B-1)
   walks your Plex library every 6h and reconciles movies / shows /
   seasons / episodes into Homestead's entity graph (`works`, `people`,
   `concepts`) with typed edges (`available_as`, `part_of`,
-  `tagged_with`, `directed_by`). The graph is the meta-agent's (PHA-1617)
+  `tagged_with`, `directed_by`). The graph is the meta-agent's (#1617)
   primary sense organ and powers the cmd-K search palette (Phase A).
   Manual trigger: `POST /api/admin/sync/plex` (admin-only); status:
   `GET /api/admin/sync/plex/status`. Set `PLEX_TOKEN` (and optionally
@@ -102,23 +102,23 @@ glossary in the same PR.
   the full per-service state for agents and monitoring.
 - **Session auth** — `bcrypt`-hashed passwords, signed session cookies,
   90-day rolling expiry.
-- **Per-user personal access tokens (v0.1.15, PHA-1617.3)** — avatar
+- **Per-user personal access tokens (v0.1.15, #1617.3)** — avatar
   menu → **🔌 Connected agents** opens the token manager. Mint a PAT
   to give your own agent (OpenClaw, scripts, anything MCP-speaking)
   bearer-token access with exactly your session's powers. Plaintext is
   shown **once** in a copy-once modal (navigator.clipboard + manual-
   select fallback); Homestead only stores the bcrypt hash. List, view
   the 16-char non-secret prefix, revoke. The PAT layer is the
-  contract for the upcoming chat drawer (PHA-1617.5/.6) and the
-  MCP server (PHA-1617.8). See [Personal access tokens](#personal-access-tokens-pha-16173) below.
-- **The Porch Wall (PHA-2151 + PHA-2206)** — `/porch.html` is the
+  contract for the upcoming chat drawer (#1617.5/.6) and the
+  MCP server (#1617.8). See [Personal access tokens](#personal-access-tokens-pha-16173) below.
+- **The Porch Wall (#2151 + #2206)** — `/porch.html` is the
   standalone thin shell when the wall module is the user's only
   enabled room; when other modules are also enabled, the SAME feed
   surface mounts in-place inside `#page-porch` of the SPA via
   `window.HomesteadFeed.mount(target, opts)`. The shared component
   lives at `public/components/feed.js`. Either way you get a
   chronological, group-scoped photo/video/link/text feed on top of
-  the media (PHA-2149) and walls (PHA-2150) primitives:
+  the media (#2149) and walls (#2150) primitives:
   drag-drop / paste / file-picker upload with progress and a
   friendly "too large" toast, link posts with a best-effort
   server-side title/description preview (`GET /api/link-preview`),
@@ -146,7 +146,7 @@ experience.
 Every module Homestead can render — built-in or third-party — is
 declared in a single registry at `lib/modules.js`. The registry
 ships in source. It is the **shared intake path** for both
-built-in modules and (future) third-party apps per PHA-2201.
+built-in modules and (future) third-party apps per #2201.
 
 The registry holds six built-ins for v0.3.0:
 
@@ -160,7 +160,7 @@ The registry holds six built-ins for v0.3.0:
 | `agent`   | Agent   | drawer    | ❌      | —        |
 
 `wall` is the only module that is enabled for new users (per
-Amendment 2 from PHA-2200, comment `04093be5`). Adding a new
+Amendment 2 from #2200, comment `04093be5`). Adding a new
 module to the registry MUST NOT backfill existing users — see
 the `scripts/test-default-off-future.js` acceptance test for the
 discipline contract.
@@ -218,17 +218,17 @@ adapters behind the same contract:
 
   * **`CalDAVSource`** — Nextcloud and Apple iCloud, one implementation
     parameterized on `base_url` (HTTP Basic auth with an app-password).
-  * **`GraphSource`** (PHA-1864) — Microsoft 365 via Microsoft Graph
+  * **`GraphSource`** (#1864) — Microsoft 365 via Microsoft Graph
     (`/me/calendars/{id}/calendarView`). OAuth2 access + refresh
     tokens; the adapter refreshes on 401 / pre-emptively on
     `expires_at`. Wire with the Azure app registration whose
     `Calendars.Read` offline-access scope was granted.
 
-`GoogleSource` (PHA-1865) is the next child issue — the provider name
+`GoogleSource` (#1865) is the next child issue — the provider name
 is reserved in the API allow-list so the UI can ship before that lands;
-POST is rejected with 501 today. The PHA-1868 per-user source config
+POST is rejected with 501 today. The #1868 per-user source config
 UI lists google in the add-source picker but marks it as
-**coming soon** until PHA-1865 merges.
+**coming soon** until #1865 merges.
 
 ### Setup
 
@@ -320,7 +320,7 @@ UI lists google in the add-source picker but marks it as
   (`lib/calendar-sources.js#publicView`) is the single source of truth
   for what the client sees; the leak check is a load-bearing
   acceptance test.
-- **Phase 2 write-back (v0.1.10, PHA-1866).** Homestead now round-trips
+- **Phase 2 write-back (v0.1.10, #1866).** Homestead now round-trips
   events through CalDAV providers (Nextcloud, Apple iCloud) using
   RFC 4791 PUT/DELETE with `If-None-Match: *` on create and
   `If-Match: <etag>` on update/delete. Create / update / delete an
@@ -334,7 +334,7 @@ UI lists google in the add-source picker but marks it as
   A successful write returns `{ externalId, href, etag }` and fires
   a background re-sync so the next `GET /api/events/merged` picks up
   the change. Provider errors surface as 502 with the upstream status
-  code. Recurrence editing is still deferred to a follow-up (PHA-1620
+  code. Recurrence editing is still deferred to a follow-up (#1620
   step 4: single-VEVENT only).
 
 ## Push notifications
@@ -377,7 +377,7 @@ permission normally.
 
 Non-technical friends don't always know to install a PWA to the Home
 Screen. On the very first login from a fresh browser, Homestead
-auto-opens an install coach sheet (PHA-2219) with platform-specific
+auto-opens an install coach sheet (#2219) with platform-specific
 instructions and an inline visual. Dismiss is sticky: a quiet
 "Set up notifications" chip lives in the avatar menu thereafter and
 opens the same sheet on tap — no nagging.
@@ -390,7 +390,7 @@ painful to reverse, so we don't ask at the door).
 Every step of the funnel (prompt shown → instructions opened →
 installed → permission granted → first push delivered) is recorded
 in `install_funnel_events` via `POST /api/funnel/install`. The
-analytics dashboard (PHA-2210) reads those rows; until that ships,
+analytics dashboard (#2210) reads those rows; until that ships,
 ad-hoc SQL on the table is fine.
 
 ### Testing without a real device
@@ -416,10 +416,10 @@ The endpoint returns `{ userId, username, delivered, skipped, errors }`
 so a CI smoke test can assert on `delivered > 0` once the test client
 has a real subscription.
 
-## Personal access tokens (PHA-1617.3)
+## Personal access tokens (#1617.3)
 
 The token manager is the SPA-side of the per-user PAT backend shipped in
-PHA-1617.1. The user-facing flow lives behind the avatar menu → **🔌
+#1617.1. The user-facing flow lives behind the avatar menu → **🔌
 Connected agents** entry. From there, a user can:
 
 1. **List** every token they own. Each row shows the label, a 16-char
@@ -456,13 +456,13 @@ The UI is a pure SPA consumer of three endpoints that already exist on
 - `DELETE /api/agent-tokens/:id` — revoke (owner-scoped;
   admin-only routes via `/api/users/:username/agent-tokens` are out
   of scope for this UI; the cross-household admin view belongs to
-  the agent_endpoints surface planned for PHA-1617.4).
+  the agent_endpoints surface planned for #1617.4).
 
-The full design contract lives in the PHA-1617 design doc (`doc
+The full design contract lives in the #1617 design doc (`doc
 'meta-agent-socket-design' rev 1`), specifically §4 (PAT auth) and
 §9.1 (this user settings UI). The PAT layer is the foundation for the
-chat drawer (PHA-1617.5/.6), the events webhook (PHA-1617.7), and the
-MCP server wrapper (PHA-1617.8); minting a token here is the only
+chat drawer (#1617.5/.6), the events webhook (#1617.7), and the
+MCP server wrapper (#1617.8); minting a token here is the only
 thing the user has to do to unlock all four.
 
 ## Stack
@@ -472,7 +472,7 @@ thing the user has to do to unlock all four.
 - better-sqlite3 (single-file DB at `/data/life.db`, WAL mode)
 - Plain HTML/CSS/JS frontend (no build step)
 
-## Agent context (PHA-1617 — BYO-harness meta-agent socket)
+## Agent context (#1617 — BYO-harness meta-agent socket)
 
 - **`GET /api/me/snapshot`** (v0.1.18) — single-call morning-brief
   context for the connected harness. Returns the user's profile +

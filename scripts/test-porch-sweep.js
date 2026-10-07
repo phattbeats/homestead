@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2646 acceptance tests for lib/porch/sweep.js: the sweep-cadence
+// #2646 acceptance tests for lib/porch/sweep.js: the sweep-cadence
 // gate, zero-engagement prioritization, daily budget enforcement,
 // per-author cooldown, and jitter spread. Same boot pattern as
 // scripts/test-walls.js (ephemeral DATA_DIR, migrate the primitives
@@ -26,7 +26,7 @@ function assertEq(actual, expected, label) {
   if (a === e) ok(label); else ng(label, `expected ${e}, got ${a}`);
 }
 
-console.log('PHA-2646 porch sweep tests\n');
+console.log('#2646 porch sweep tests\n');
 
 const tmpDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-porch-sweep-test-'));
 process.env.DATA_DIR = tmpDataDir;

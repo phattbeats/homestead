@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PHATT Tech LLC
 
-// PHA-2586 acceptance tests for lib/lists.js: schema migrate, seed,
+// #2586 acceptance tests for lib/lists.js: schema migrate, seed,
 // list CRUD, item CRUD, the publicStats() envelope, and the
 // snapshot.js integration. Defensive grep guard: no ORDER BY in
 // lib/lists.js may sort by anything but (position, created_at), so
@@ -33,7 +33,7 @@ function assertThrowsStatus(fn, status, label) {
   catch (e) { assertEq(e.status, status, label); }
 }
 
-console.log('PHA-2586 lists tests\n');
+console.log('#2586 lists tests\n');
 
 // ---- Guard: every ORDER BY in lib/lists.js must sort by position ----
 console.log('Guard: ORDER BY defensive grep');

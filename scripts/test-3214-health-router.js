@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// PHA-3214 (PHA-1647 / PHA-3198): regression smoke for the second
+// #3214 (#1647 / #3198): regression smoke for the second
 // server.js router extraction. The /api/health and /api/version routes
 // were relocated from server.js to routes/health.js (server.js
 // 4846 -> 4825 lines). The miss-risk here is small but non-zero: if
 // the mount is wrong, Watchtower's health poll goes red and stops
-// auto-rolling — same bug class as PHA-2883 but on the most-probed
+// auto-rolling — same bug class as #2883 but on the most-probed
 // route in the system.
 //
 // What this test asserts (10 assertions):
@@ -26,7 +26,7 @@
 //      extracting first.
 //
 // Behavior must not change relative to the pre-PR server.js. The
-// existing scripts/test-2588-health-default.js (PHA-2588) covers
+// existing scripts/test-2588-health-default.js (#2588) covers
 // the default-install readiness contract; this test covers the
 // relocation specifically (factory + shape + mount + line count).
 
@@ -45,7 +45,7 @@ process.env.PORT = String(port);
 process.env.ADMIN_PASSWORD = '3214-admin-pw-padding-to-meet-min-32-chars';
 // SESSION_SECRET is handled by scripts/_test-bootstrap.js (loaded
 // via `node --require`). Set NODE_ENV here so the production code
-// path is exercised (cookie.secure behavior, PHA-3200 fail-closed).
+// path is exercised (cookie.secure behavior, #3200 fail-closed).
 process.env.NODE_ENV = 'production';
 // Lock commit SHA so the version assertion is deterministic.
 process.env.COMMIT_SHA = '3214-test-sha';
@@ -110,7 +110,7 @@ const healthRouter = require('../routes/health');
     const lineCount = Number(execSync(`wc -l < ${path.join(__dirname, '..', 'server.js')}`).toString().trim());
     assert.ok(lineCount < 4846, `server.js line count dropped below the pre-PR baseline (got ${lineCount}, expected < 4846)`);
 
-    console.log('PHA-3214: routes/health.js extraction passes (10/10)');
+    console.log('#3214: routes/health.js extraction passes (10/10)');
   } finally {
     await new Promise((resolve) => server.close(resolve));
     fs.rmSync(dataDir, { recursive: true, force: true });

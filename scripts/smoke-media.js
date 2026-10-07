@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2149 smoke test: boot server.js on an ephemeral port, log in,
+// #2149 smoke test: boot server.js on an ephemeral port, log in,
 // upload a small PNG fixture via /api/media, fetch + thumb it back,
 // and confirm the 1h private Cache-Control header. Same boot pattern
 // as scripts/smoke-merge-layer.js.

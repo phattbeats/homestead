@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-1617.1/.2 acceptance tests for lib/agent-tokens.js.
+// #1617.1/.2 acceptance tests for lib/agent-tokens.js.
 //
 // Drives `lib/agent-tokens.js` directly against a temp SQLite file (plus
 // a supertest-free HTTP smoke test of the Bearer-PAT middleware branch
@@ -37,7 +37,7 @@ function freshDb() {
   return { db, tmpDir };
 }
 
-console.log('PHA-1617.1/.2 agent-tokens tests\n');
+console.log('#1617.1/.2 agent-tokens tests\n');
 
 // ---- Test 1: issue returns plaintext once, schema fields present ----
 {
@@ -259,9 +259,9 @@ console.log('PHA-1617.1/.2 agent-tokens tests\n');
   });
 }
 
-// ---- Test 8: PHA-2228 — agent_tokens.app_id + installed_apps migration ----
+// ---- Test 8: #2228 — agent_tokens.app_id + installed_apps migration ----
 {
-  console.log('\nTest 8: app_id column + installed_apps table (PHA-2228)');
+  console.log('\nTest 8: app_id column + installed_apps table (#2228)');
   const { db, tmpDir } = freshDb();
   const brandon = db.prepare('SELECT id FROM users WHERE username = ?').get('brandon');
 
@@ -272,10 +272,10 @@ console.log('PHA-1617.1/.2 agent-tokens tests\n');
   assertEq(
     appsCols,
     ['key', 'name', 'manifest_url', 'manifest_json', 'installed_by_user_id', 'installed_at', 'revoked_at'],
-    'installed_apps has the columns from the PHA-2201 §5 design note'
+    'installed_apps has the columns from the #2201 §5 design note'
   );
 
-  // Existing user-level PATs (PHA-1617 behavior) are untouched: app_id
+  // Existing user-level PATs (#1617 behavior) are untouched: app_id
   // defaults NULL, no data loss on re-running migrate() over live data.
   const existing = agentTokens.issue(db, brandon.id, { label: 'user-level' });
   const existingRow = db.prepare('SELECT app_id FROM agent_tokens WHERE id = ?').get(existing.id);
@@ -300,7 +300,7 @@ console.log('PHA-1617.1/.2 agent-tokens tests\n');
   assertEq(scopedRow.app_id, 'dune-tracker', 'app-scoped PAT stores app_id = installed_apps.key');
 
   // The partial index must be the one the planner picks for app-scoped
-  // token lookups (the acceptance criterion from PHA-2228).
+  // token lookups (the acceptance criterion from #2228).
   const plan = db.prepare(`
     EXPLAIN QUERY PLAN
     SELECT * FROM agent_tokens

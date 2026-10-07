@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2201.3 (PHA-2231) acceptance tests for lib/app-api-log.js +
+// #2201.3 (#2231) acceptance tests for lib/app-api-log.js +
 // server.js's write-path hook and GET /api/apps/:key/activity.
 //
 // Drives lib/app-api-log.js directly against a temp SQLite file, plus
@@ -46,7 +46,7 @@ function installApp(db, key, userId) {
     .run(key, key, userId);
 }
 
-console.log('PHA-2201.3 (PHA-2231) app-api-log tests\n');
+console.log('#2201.3 (#2231) app-api-log tests\n');
 
 // ---- Test 1: schema ----
 {
@@ -54,7 +54,7 @@ console.log('PHA-2201.3 (PHA-2231) app-api-log tests\n');
   const { db, tmpDir } = freshDb();
   const cols = db.prepare('PRAGMA table_info(app_api_log)').all().map(c => c.name);
   assertEq(cols, ['id', 'user_id', 'app_id', 'route', 'scopes_used', 'status', 'created_at'],
-    'app_api_log has the columns from the PHA-2201 §5 design note');
+    'app_api_log has the columns from the #2201 §5 design note');
   let rerunThrew = false;
   try { appApiLog.migrate(db); } catch (_) { rerunThrew = true; }
   assert(!rerunThrew, 're-running migrate() over live data is a no-op');
@@ -161,7 +161,7 @@ console.log('PHA-2201.3 (PHA-2231) app-api-log tests\n');
       headers: { Authorization: `Bearer ${userPlaintext}` },
     });
 
-    // An app-scoped PAT, minted directly against the DB (PHA-2229's
+    // An app-scoped PAT, minted directly against the DB (#2229's
     // mint-on-install flow isn't built yet) — its calls MUST be logged.
     const dbPath = path.join(tmpDir, 'life.db');
     const rawDb = new Database(dbPath);

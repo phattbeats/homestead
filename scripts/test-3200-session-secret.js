@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-3200 acceptance: fail-closed session secret.
+// #3200 acceptance: fail-closed session secret.
 //
 // Three stacked problems fixed in this PR:
 //
@@ -185,7 +185,7 @@ async function runHappyPath() {
     });
     assert.equal(meRes.status, 200, 'authenticated /api/version returns 200');
 
-    console.log('PHA-3200: happy-path cookie contract passes');
+    console.log('#3200: happy-path cookie contract passes');
   } finally {
     cleanup();
   }
@@ -253,7 +253,7 @@ async function runSecureBranch() {
     assert.ok(/HttpOnly/i.test(sid), 'production cookie carries HttpOnly flag');
     assert.ok(/SameSite=Lax/i.test(sid), 'production cookie carries SameSite=Lax flag');
 
-    console.log('PHA-3200: production-cookie Secure/HttpOnly/SameSite flags pass');
+    console.log('#3200: production-cookie Secure/HttpOnly/SameSite flags pass');
   } finally {
     try { serverProc.kill('SIGTERM'); } catch (_) {}
     try { fs.rmSync(dataDir, { recursive: true, force: true }); } catch (_) {}
@@ -264,7 +264,7 @@ async function runSecureBranch() {
   await runFailClosedChecks();
   await runHappyPath();
   await runSecureBranch();
-  console.log('PHA-3200: all session-secret checks pass');
+  console.log('#3200: all session-secret checks pass');
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

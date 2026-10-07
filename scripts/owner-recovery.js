@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// scripts/owner-recovery.js — PHA-2708 host-side break-glass CLI
-// (ported forward as PHA-2719).
+// scripts/owner-recovery.js — #2708 host-side break-glass CLI
+// (ported forward as #2719).
 //
 // Homestead's owner has a single break-glass path: a local password
 // verified against `local_credentials.password_hash`. When Authentik is
@@ -11,7 +11,7 @@
 // recovery token directly into the SQLite DB that the server reads.
 //
 // NOTE: this is deliberately a DIFFERENT script from
-// `scripts/reset-owner-password.js` (PHA-2711), which is a
+// `scripts/reset-owner-password.js` (#2711), which is a
 // general-purpose "reset any user's password via --username/--user-id"
 // CLI consumed through POST /api/public/invites/reset. This script is
 // OWNER-ONLY, hardened break-glass, and stores its token in the

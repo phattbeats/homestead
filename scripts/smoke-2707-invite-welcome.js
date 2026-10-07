@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2707 acceptance smoke: fresh DB → boot → admin mints a household
+// #2707 acceptance smoke: fresh DB → boot → admin mints a household
 // invite → a new local account redeems it via
 // POST /api/public/invites/:code/signup → the browser lands on
 // /welcome.html?wall=household and the richer welcome content is
@@ -102,7 +102,7 @@ const consoleErrorSink = [];
       const inv = await fetch('/api/invites', {
         method: 'POST', credentials: 'same-origin',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ wall_slug: 'household', expires_in_days: 7, max_uses: 1, note: 'PHA-2707 smoke' }),
+        body: JSON.stringify({ wall_slug: 'household', expires_in_days: 7, max_uses: 1, note: '#2707 smoke' }),
       });
       if (!inv.ok) throw new Error('mint invite failed: ' + inv.status);
       const body = await inv.json();

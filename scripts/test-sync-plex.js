@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-1873 (PHA-1624 Phase B-1) acceptance tests for the Plex sync worker.
+// #1873 (#1624 Phase B-1) acceptance tests for the Plex sync worker.
 //
 // Pure-DB tests: drive `lib/sync/plex.js` against a temp SQLite file
 // with the entity-graph schema migrated from `lib/sync/_schema.js`. The
@@ -426,6 +426,6 @@ function fakePlexHttpDo({ sections, itemsBySection }) {
     exitCode = 1;
   }
 
-  console.log(`\nPHA-1873 plex sync worker: ${pass} passed, ${fail} failed`);
+  console.log(`\n#1873 plex sync worker: ${pass} passed, ${fail} failed`);
   process.exit(exitCode || (fail === 0 ? 0 : 1));
 })();

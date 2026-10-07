@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Homestead canonical PWA maskable icon (PHA-2846).
+  Homestead canonical PWA maskable icon (#2846).
   One canonical opening-door vector, scaled to fit inside the
   PWA maskable safe zone (the central 80% of the tile, leaving
   ~10% padding on every side so the OS can crop to circles /

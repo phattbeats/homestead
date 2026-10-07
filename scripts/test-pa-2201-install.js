@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-// PHA-2052 dogfood acceptance suite: Popcorn Vote as the first app
-// installed through the PHA-2201 third-party app contract, against a
+// #2052 dogfood acceptance suite: Popcorn Vote as the first app
+// installed through the #2201 third-party app contract, against a
 // fresh test user. HTTP-level, against a live server.js instance —
 // mirrors the harness in scripts/test-app-install.js Test 10, but adds
 // the checks that test suite doesn't cover: scope ENFORCEMENT (not
 // just scope storage/display) and the wall-post/notification path a
 // real app would use to "create posts on the feed."
 //
-// Manifest scope is deliberately smaller than the original PHA-2052
+// Manifest scope is deliberately smaller than the original #2052
 // backlog sketch: no `mcp`, no `webhooks`, no `entity_kinds`. Neither
 // an MCP tool host nor an outbound webhook dispatcher exists anywhere
 // in this codebase (confirmed by grep before writing this suite) —
@@ -41,7 +41,7 @@ function assert(cond, label, detail) {
   if (cond) ok(label); else ng(label, detail);
 }
 
-// The actual PHA-2052 manifest (mirrors the documented stub in
+// The actual #2052 manifest (mirrors the documented stub in
 // lib/modules.js). Hosted URL is a placeholder per the ticket ("TBD
 // until Popcorn Vote has a real home") — the acceptance suite never
 // dials it, it stubs the fetch like every other manifest test in this
@@ -65,7 +65,7 @@ const POPCORN_VOTE_MANIFEST = {
   default_enabled: false,
 };
 
-console.log('PHA-2052 dogfood acceptance: Popcorn Vote through the PHA-2201 app contract\n');
+console.log('#2052 dogfood acceptance: Popcorn Vote through the #2201 app contract\n');
 
 // ---- Check 1: manifest passes lib/registry-validate.js's shape check ----
 {
@@ -117,7 +117,7 @@ try {
   const pass_ = process.env.BRANDON_PASSWORD || process.env.ADMIN_PASSWORD || 'changeme';
 
   // "Fresh test user": brandon is the seeded profile the household
-  // actually uses (PHA-2052 §"authored by Brandon"), but membership is
+  // actually uses (#2052 §"authored by Brandon"), but membership is
   // reset here rather than assumed — the default seed puts brandon in
   // 'household' only (scripts/test-walls.js confirms this), and this
   // suite needs brandon IN media-club (to prove the positive read
@@ -178,7 +178,7 @@ try {
   rawDb.prepare('INSERT OR IGNORE INTO user_groups (user_id, group_id) VALUES (?, ?)').run(brandonId, mediaClubGroup.id);
   rawDb.prepare('INSERT OR IGNORE INTO user_groups (user_id, group_id) VALUES (?, ?)').run(emilyId, mediaClubGroup.id);
 
-  // PHA-3206: the lib/walls.js seed only creates the 'household' wall,
+  // #3206: the lib/walls.js seed only creates the 'household' wall,
   // not a media-club wall. The 'media-club' group is seeded but with
   // no wall row referencing it. The OLD chain skipped this test
   // entirely (it wasn't in package.json's && list), so the missing
@@ -267,7 +267,7 @@ try {
   assertEq(readOnlyReadRes.status, 200, 'the SAME token can still read (its granted scope) — the 403 above is write-specific');
 
   // ---- Check 6: activity log reflects real app-token-authenticated calls ----
-  // app_api_log (PHA-2231) only logs calls authenticated by the app's
+  // app_api_log (#2231) only logs calls authenticated by the app's
   // OWN bearer token (server.js's authenticate(), Bearer branch) —
   // by design it does NOT log the human's consent-screen click or the
   // install call itself (those are session-authenticated, made by

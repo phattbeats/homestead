@@ -37,7 +37,7 @@ Examples of the register:
    Homesteader, agent drawer, calendar, all of it shares the register.
    If a third-party module's copy reads like a different product, the
    install is wrong, not the host — fix it at install time per the
-   PHA-2201 manifest contract.
+   #2201 manifest contract.
 
 3. **No exclamation marks unless something actually happened.**
    Saved a task — "Saved." is fine. Notifications enabled — "On." is
@@ -69,7 +69,7 @@ the bar for "wrong surface" — flatten it.
 
 ## Decision log
 
-- **2026-08-23 — PHA-2498 #4 (kept "Nothing to do. Suspicious.")**
+- **2026-08-23 — #2498 #4 (kept "Nothing to do. Suspicious.")**
   Reviewer flagged that the empty-state voice was charming and within
   the editorial register, but that registering it as an editorial
   surface (rule 1 above) was implicit in the codebase rather than

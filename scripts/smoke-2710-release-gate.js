@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2710 release-gate acceptance: fresh-browser smoke over the
+// #2710 release-gate acceptance: fresh-browser smoke over the
 // invite → welcome UI path, driven through Browserless (real Chrome,
 // CDP) so it proves the actual rendered page rather than jsdom or
 // server-side assertions alone.
@@ -104,7 +104,7 @@ function localRoutableIp() {
     const inviteRes = await fetch(`${base}/api/invites`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie: adminCookie },
-      body: JSON.stringify({ wall_slug: 'household', expires_in_days: 7, max_uses: 1, note: 'PHA-2710 release-gate smoke' }),
+      body: JSON.stringify({ wall_slug: 'household', expires_in_days: 7, max_uses: 1, note: '#2710 release-gate smoke' }),
     });
     assertEq(inviteRes.status, 201, 'mint invite → 201');
     const invite = await inviteRes.json();

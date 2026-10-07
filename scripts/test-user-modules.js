@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// PHA-2202 acceptance tests for the v0.3.0 user_modules table.
+// #2202 acceptance tests for the v0.3.0 user_modules table.
 //
 // Drives `lib/user-model.js` directly against a temp SQLite file. No
 // HTTP server, no subprocess. Each test runs migrate() on a fresh DB
 // so they're independent and idempotent.
 //
-// Acceptance covered (per PHA-2202 issue body):
+// Acceptance covered (per #2202 issue body):
 //   * Migration runs without error on a DB with existing users (brandon, emily).
 //   * After migration, count(user_modules) == count(users) * 6.
 //   * Toggling a module to enabled_at = NULL and back preserves the
@@ -46,7 +46,7 @@ function freshDb() {
 
 const MODULES = ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent'];
 
-console.log('PHA-2202 user-modules tests\n');
+console.log('#2202 user-modules tests\n');
 
 // ---- Test 1: migration creates user_modules + backfills canonical users ----
 {
@@ -203,7 +203,7 @@ console.log('PHA-2202 user-modules tests\n');
   const { db, tmpDir } = freshDb();
   const brandonId = db.prepare(`SELECT id FROM users WHERE username = 'brandon'`).get().id;
   const mods = userModel.getUserModules(db, brandonId);
-  // The map spans the CURRENT registry (7 keys as of PHA-2659), while
+  // The map spans the CURRENT registry (7 keys as of #2659), while
   // the grandfather backfill only ever granted the six pre-modularity
   // modules. Modules registered after that backfill shipped are present
   // in the map but disabled — which is the shape the SPA relies on to

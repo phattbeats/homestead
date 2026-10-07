@@ -1,11 +1,11 @@
 # Homestead local companion (reference CLI)
 
-PHA-2881 (PHA-2855 phase 2). This is a minimal, dependency-free Node
+#2881 (#2855 phase 2). This is a minimal, dependency-free Node
 reference implementation of the companion side of Homestead's
-agent-pairing protocol (`lib/agent-connections.js`, PHA-2880). It exists
+agent-pairing protocol (`lib/agent-connections.js`, #2880). It exists
 to (a) document the wire protocol precisely enough that a real
 OpenClaw/Claude Code/Codex companion can implement it, and (b) give the
-PHA-2855 phase 4 acceptance proof something runnable end to end.
+#2855 phase 4 acceptance proof something runnable end to end.
 
 It is **not** a packaged or distributed binary — no auto-update, no
 keychain integration, single connection at a time.

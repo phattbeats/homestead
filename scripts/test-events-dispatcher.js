@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-1617.7 acceptance tests for the events webhook outbound
+// #1617.7 acceptance tests for the events webhook outbound
 // dispatcher (design doc §6.1/6.5) — task/chore/event/push category
 // fan-out to per-user, per-harness `kind='events'` agent_endpoints,
 // gated by `event_filter` opt-in, with the same HMAC signing +

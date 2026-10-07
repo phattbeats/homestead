@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2827.C acceptance — server-side Hearth runtime.
+// #2827.C acceptance — server-side Hearth runtime.
 //
 // Three test groups (issue acceptance, no real API calls anywhere):
 //
@@ -130,7 +130,7 @@ function freshStack() {
 }
 
 // Force-create a SOUL.md on disk for tests so loadSystemPrompt returns a
-// non-empty prompt without depending on PHA-2828 having shipped.
+// non-empty prompt without depending on #2828 having shipped.
 function plantCanon(rootDir) {
   const agentsDir = path.join(rootDir, 'agents', 'hearth');
   fs.mkdirSync(agentsDir, { recursive: true });

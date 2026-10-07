@@ -19,3 +19,6 @@ build/
 .cache/
 verify-out/
 playwright-report/
+
+# local agent-harness state
+.claude/

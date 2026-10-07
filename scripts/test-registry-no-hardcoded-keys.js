@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PHATT Tech LLC
 
-// PHA-2209 / PHA-2200.8 — Amendment 3 acceptance test:
+// #2209 / #2200.8 — Amendment 3 acceptance test:
 // "No hardcoded module-key literals in render code outside the registry + migrations."
 //
 // Scans the repo for string literals matching the 6 registered
@@ -73,78 +73,78 @@ const EXCLUDE_FILES = new Set([
   'scripts/test-modules-api.js',
   'scripts/test-user-modules.js',
   'scripts/test-registry-no-hardcoded-keys.js',
-  // Sibling acceptance tests (PHA-2209) deliberately use literal keys
+  // Sibling acceptance tests (#2209) deliberately use literal keys
   // to assert against the registry; they are NOT render code.
   'scripts/test-modular-layout.js',
   'scripts/test-disable-reenable.js',
   'scripts/test-requires-cascade.js',
   'scripts/test-default-off-future.js',
   'scripts/test-shared-registry-third-party.js',
-  // PHA-2205 layout-aware SPA smoke — drives the four-mode layout +
+  // #2205 layout-aware SPA smoke — drives the four-mode layout +
   // add-rooms sheet through specific module-key toggles. Same
   // pattern as the sibling tests above; literals are test config,
   // not render code.
   'scripts/smoke-modules-ui.js',
   'CHANGELOG.md',
-  // PHA-2210 analytics-capture test: notification `category: 'wall'` is
+  // #2210 analytics-capture test: notification `category: 'wall'` is
   // test-row data (notification_log row fixture), not a render-time branch
   // against the module registry. Same pattern as the sibling acceptance tests.
   'scripts/test-analytics-capture.js',
   'package-lock.json',
-  // PHA-2201 third-party apps: data writes with the 'apps' module key
+  // #2201 third-party apps: data writes with the 'apps' module key
   // (setUserModule calls to enable/disable the Apps tile after install/revoke).
   // These are NOT render-time branching — they pass the key as an argument
   // to a function whose contract requires it.
   'lib/app-install.js',
-  // PHA-2232 third-party apps smoke test: asserts 'wall' is the default-enabled
+  // #2232 third-party apps smoke test: asserts 'wall' is the default-enabled
   // built-in returned by GET /api/apps. Same category as snapshot envelope
   // categories — a "match by key" assertion, not a render branch.
   'scripts/smoke-apps-settings-ui.js',
-  // PHA-2587 layout-route contract test: drives /api/me/modules/:key/enable
+  // #2587 layout-route contract test: drives /api/me/modules/:key/enable
   // and /api/me/modules/:key/disable through the six module keys to assert
   // the layout API never advertises a 404 HTML route. Same pattern as the
   // sibling acceptance tests above — literals are test config, not render code.
   'scripts/test-2587-layout-route-contract.js',
-  // PHA-2704 identity foundation tests: assert the new identity_links
+  // #2704 identity foundation tests: assert the new identity_links
   // schema (provider/issuer/provider_subject literals) and the local
   // credentials shape. Same pattern as the sibling acceptance tests.
   'scripts/test-2704-identity-foundation.js',
   'scripts/test-2704-identity-api.js',
-  // PHA-2711 invite-signup tests: assert the public invite path uses
+  // #2711 invite-signup tests: assert the public invite path uses
   // 'password' as the auth_provider and 'household' as the seed wall
   // slug. Same pattern as sibling acceptance tests — test fixtures,
   // not render branches.
   'scripts/test-2711-invite-signup.js',
-  // PHA-2708 owner-recovery tests: assert the recovery primitive
+  // #2708 owner-recovery tests: assert the recovery primitive
   // strings ("owner_recovery_minted"/"owner_recovery_consumed"/
   // etc.) and the audit kind enum ("owner_recovery"). Same
   // pattern as the sibling acceptance tests — literals are test
   // config, not render code.
   'scripts/test-2708-owner-recovery.js',
-  // PHA-2706 OIDC link tests: assert the oidc_link_states schema
+  // #2706 OIDC link tests: assert the oidc_link_states schema
   // (provider/issuer/handle literals) and the OIDC link lifecycle
   // (PKCE code_verifier, state, nonce, issuer subject). Same pattern
   // as the sibling acceptance tests — literals are test config, not
   // render code.
   'scripts/test-2706-oidc-link.js',
   'scripts/smoke-2706-oidc-link.js',
-  // PHA-2644 media-context acceptance test: drives the new
+  // #2644 media-context acceptance test: drives the new
   // /api/media/:id/context route through image + video comprehension
   // packages. Same category as the sibling acceptance tests above —
   // literal keys (none currently, but the test asserts on
   // `/api/media/...` paths via string match) are test config, not
   // render code.
   'scripts/test-2644-media-context.js',
-  // PHA-2811 task-module-gate regression test: asserts the `chores`
+  // #2811 task-module-gate regression test: asserts the `chores`
   // module toggle blocks POST/PUT /api/tasks. Same category as the
   // sibling acceptance tests above — literal keys are test config
   // driving /api/me/modules/:key/enable|disable, not render code.
   'scripts/test-2811-task-module-gate.js',
-  // PHA-2829 first-enable test: drives userModel.enableModule(db, brandon.id, 'agent')
+  // #2829 first-enable test: drives userModel.enableModule(db, brandon.id, 'agent')
   // to assert the Hearth first-enable flow. Same category as the sibling
   // acceptance tests above — literal key is test fixture data, not render code.
   'scripts/test-2829-first-enable.js',
-  // PHA-2659 Gazette acceptance test: drives the module toggle, the
+  // #2659 Gazette acceptance test: drives the module toggle, the
   // requires/dependents cascade, and GET /api/me/gazette/today through
   // literal keys. Same category as the sibling acceptance tests above —
   // test config, not render code. Note that the Gazette's PRODUCTION
@@ -153,7 +153,7 @@ const EXCLUDE_FILES = new Set([
   // `open_mode` / the server-sent `sheets[]` rather than naming a key,
   // so they pass the audit on their own merits.
   'scripts/test-2659-gazette.js',
-  // PHA-2823 cross-page bottom-nav component: the `LINKS` array is a separate
+  // #2823 cross-page bottom-nav component: the `LINKS` array is a separate
   // navigation namespace (Wall/Porch/Rooms/Invites/Connect), not the registry
   // namespace. The `'wall'` literal is intentionally kept here as an extra
   // entry alongside the registry-derived nav; it's a separate concern.
@@ -165,13 +165,13 @@ const EXCLUDE_FILES = new Set([
   // excluded from the audit by convention.
   'verify-out/',
   'verify-out/smoke-2704-db-shape.json',
-  // PHA-2852 house-rooms acceptance test: asserts which modules
+  // #2852 house-rooms acceptance test: asserts which modules
   // declare the new optional `room_kinds` field, which means naming
   // 'calendar'/'chores'/'lists' and naming 'wall' as the counter-
   // example that omits it. Same category as the sibling acceptance
   // tests above — the literals ARE the assertion, not a render branch.
   'scripts/test-2852-house-rooms.js',
-  // PHA-2853 Gazette rework: the daily cron job queries
+  // #2853 Gazette rework: the daily cron job queries
   // `user_modules WHERE module_key = 'gazette'` to find which users
   // have the module on — a data-query argument, not a render-time
   // branch. Same category as lib/app-install.js's allow-listed
@@ -191,11 +191,11 @@ function stripComments(src) {
   src = src.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' '));
   // Line comments.
   src = src.replace(/\/\/[^\n]*/g, m => m.replace(/[^\n]/g, ' '));
-  // HTML comments (PHA-2557): render code in HTML files lives next to
+  // HTML comments (#2557): render code in HTML files lives next to
   // <!-- ... --> blocks that document the surrounding markup. The
   // audit's intent is to keep render code reading from the registry,
   // not to police docstrings — strip HTML comments too so a key
-  // mentioned in a `<!-- PHA-2557: ... -->` block doesn't flag.
+  // mentioned in a `<!-- #2557: ... -->` block doesn't flag.
   src = src.replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
   return src;
 }
@@ -224,8 +224,8 @@ function isJsObjectKeyContext(src, matchIndex, matchLen) {
 // + exact match-string). These are NOT violations of the
 // "no-hardcoded-keys" principle — they're different namespaces.
 //
-// These were called out as side-findings in PHA-2203 PR #31 and
-// should be revisited when PHA-2200.4 (SPA bootstrap) lands — the
+// These were called out as side-findings in #2203 PR #31 and
+// should be revisited when #2200.4 (SPA bootstrap) lands — the
 // drawer stream-author namespace and the CalDAV XML element
 // namespace are separate concerns from the module registry, but
 // a future maintainer should not assume "'agent' = registry key"
@@ -236,7 +236,7 @@ const ALLOWED_LEGITIMATE = [
   // 'lists' as snapshot envelope category in tests.
   { file: 'scripts/test-snapshot.js', literal: "'lists'" },
   { file: 'scripts/smoke-snapshot.js', literal: "'lists'" },
-  // PHA-2586: SQLite schema assertion; this is the table namespace,
+  // #2586: SQLite schema assertion; this is the table namespace,
   // not a render-time module-key branch.
   { file: 'scripts/test-lists.js', literal: "'lists'" },
   // 'calendar' as a package.json keyword (repo metadata).
@@ -249,21 +249,21 @@ const ALLOWED_LEGITIMATE = [
   // 'agent' as the drawer stream-author in public/index.html
   // (`appendDrawerStreaming('agent')` — the drawer SSE channel
   // author is 'agent', a separate namespace from the registry
-  // module-key 'agent'). Flagged for PHA-2200.4 to disambiguate.
+  // module-key 'agent'). Flagged for #2200.4 to disambiguate.
   { file: 'public/index.html', literal: "'agent'" },
-  // PHA-2586: 'lists' as a sqlite_master table-name lookup in
+  // #2586: 'lists' as a sqlite_master table-name lookup in
   // lib/snapshot.js (defensive `SELECT name FROM sqlite_master
   // WHERE name='lists'` gate — same pattern as the CalDAV XML
   // element allow-list above; the table name is a SQL identifier,
   // not a render-time module-key branch).
   { file: 'lib/snapshot.js', literal: "'lists'" },
-  // PHA-2811: 'chores' as the argument to ENABLED_MODULE_KEYS.has(...)
+  // #2811: 'chores' as the argument to ENABLED_MODULE_KEYS.has(...)
   // in public/index.html's FAB picker — this IS reading from the
   // registry-derived Set populated by applyLayout(); the literal only
   // selects which key's membership to test, same pattern as
   // lib/app-install.js's allow-listed setUserModule('apps', ...) calls.
   { file: 'public/index.html', literal: "'chores'" },
-  // PHA-2853: public/gazette.html's app-nav script tag carries
+  // #2853: public/gazette.html's app-nav script tag carries
   // `data-active="gazette"` — same pattern as porch.html's
   // `data-active="porch"` (a page-identity attribute the shared nav
   // component reads to highlight the current page), not a registry
@@ -294,7 +294,7 @@ function ok(label) { pass++; console.log(`  ✓ ${label}`); }
 function ng(label, detail) { console.log(`  ✗ ${label}${detail ? ` — ${detail}` : ''}`); fail++; }
 function assert(cond, label, detail) { if (cond) ok(label); else ng(label, detail); }
 
-console.log('PHA-2209 Amendment 3 — registry-no-hardcoded-keys audit\n');
+console.log('#2209 Amendment 3 — registry-no-hardcoded-keys audit\n');
 
 const files = walk(REPO_ROOT, []);
 ok(`scanned ${files.length} files under ${path.relative(process.cwd(), REPO_ROOT)}/`);

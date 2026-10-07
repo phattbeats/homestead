@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2218.4 acceptance tests for lib/notifications.js's @mention system:
+// #2218.4 acceptance tests for lib/notifications.js's @mention system:
 // wall-scoped parsing (parseMentions) and the mentions table's atomic
 // insert (insertMentions), including the CHECK constraint that exactly
 // one of post_id/comment_id is set.
@@ -22,7 +22,7 @@ function assertEq(actual, expected, label) {
   if (a === e) ok(label); else ng(label, `expected ${e}, got ${a}`);
 }
 
-console.log('PHA-2218.4 mentions parser tests\n');
+console.log('#2218.4 mentions parser tests\n');
 
 const tmpDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-mentions-test-'));
 process.env.DATA_DIR = tmpDataDir;

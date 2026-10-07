@@ -20,7 +20,7 @@
         "calendar",
         "sqlite"
     ],
-    "license": "UNLICENSED",
+    "license": "PolyForm-Noncommercial-1.0.0",
     "private": true,
     "dependencies": {
         "bcryptjs": "^3.0.3",

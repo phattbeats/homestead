@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-1623 acceptance tests for the v0.0.6 health checker.
+// #1623 acceptance tests for the v0.0.6 health checker.
 //
 // Drives `lib/health-checker.js` directly against a temp SQLite file.
 // No HTTP server, no subprocess. The `fetch` implementation is
@@ -96,7 +96,7 @@ function stubFetch(behaviors) {
 
 // ---- Tests ----
 
-console.log('PHA-1623 health-checker tests\n');
+console.log('#1623 health-checker tests\n');
 
 // ---- Tests ----
 // Wrap async tests in a single async runner so we can use top-level

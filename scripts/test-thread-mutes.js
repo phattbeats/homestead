@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2218.4 acceptance tests for per-thread mute (lib/notifications.js
+// #2218.4 acceptance tests for per-thread mute (lib/notifications.js
 // muteThread/unmuteThread + the resolver composition already covered in
 // test-notifications-resolver.js): DB-backed persistence, CASCADE on
 // post delete, and that a mute never suppresses the author's own
@@ -25,7 +25,7 @@ function assertEq(actual, expected, label) {
   if (a === e) ok(label); else ng(label, `expected ${e}, got ${a}`);
 }
 
-console.log('PHA-2218.4 thread-mute tests\n');
+console.log('#2218.4 thread-mute tests\n');
 
 const tmpDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-thread-mutes-test-'));
 process.env.DATA_DIR = tmpDataDir;
@@ -102,7 +102,7 @@ assertEq(emilyRow.delivered, 0, 'muted recipient does not get delivered=1');
 assertEq(emilyRow.skipped_reason, 'thread_muted', 'muted recipient row carries skipped_reason=thread_muted');
 
 const brandonSelfRow = db.prepare(`SELECT 1 FROM notification_log WHERE user_id = ? AND url LIKE '%' || ? || '%'`).get(brandon.id, post2Id);
-assert(!brandonSelfRow, 'the author (who did not mute anything) gets no row for their own post, same as before PHA-2218');
+assert(!brandonSelfRow, 'the author (who did not mute anything) gets no row for their own post, same as before #2218');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

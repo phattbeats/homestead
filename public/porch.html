@@ -8,14 +8,14 @@
 <meta name="theme-color" content="#FFFBF5">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/brand.css">
-<!-- PHA-2200.5 / PHA-2206: shared wall feed styles. Same file is also
+<!-- #2200.5 / #2206: shared wall feed styles. Same file is also
      used by index.html's #page-wall mount so both placements render
      identically. -->
 <link rel="stylesheet" href="/porch.css">
 </head>
 <body>
 
-<!-- PHA-2200.5 / PHA-2206: thin shell. The full feed (composer, post
+<!-- #2200.5 / #2206: thin shell. The full feed (composer, post
      list, reactions, comments, "Older" pagination) is rendered into
      #porch-mount by public/components/feed.js — the SAME component
      mounted inside index.html's #page-wall for the meadow layout. The
@@ -40,13 +40,13 @@
           canPost: true,
           canReact: true,
           canComment: true,
-          // PHA-2727: this standalone shell is what a wall-only user lands
+          // #2727: this standalone shell is what a wall-only user lands
           // on (no other modules enabled, no bottom bar, no profile access
           // at all). The index.html #page-wall mount leaves these off since
           // it already has its own fab/avatar/nav chrome.
           primaryFab: true,
           utilityChip: true,
-          // PHA-2822: this standalone shell is the wall-only funnel's
+          // #2822: this standalone shell is the wall-only funnel's
           // landing room — the only place a new user can discover that
           // other rooms exist. Opt-in so the index.html #page-wall mount
           // (which already has its own "+ Add rooms" pill) is unaffected.
@@ -62,7 +62,7 @@
   })();
 </script>
 
-<!-- PHA-2823: persistent cross-page nav (wall/porch/rooms/invites/connectors) -->
+<!-- #2823: persistent cross-page nav (wall/porch/rooms/invites/connectors) -->
 <script src="/components/app-nav.js" data-active="porch"></script>
 
 </body>

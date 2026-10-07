@@ -9,7 +9,7 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/brand.css">
 <style>
-/* PHA-2707 (PHA-2703 child): the welcome screen shown after a new
+/* #2707 (#2703 child): the welcome screen shown after a new
    user redeems an invite. Covers, in order: what Homestead is, the
    Porch as home/feed, the wall they joined + who's there, what the
    invite granted, one contextual first action, and (local-account
@@ -24,7 +24,7 @@
    Reopen: returning users (first_run:false) are redirected straight
    to the Porch UNLESS the URL carries ?revisit=1 — that's the
    explicit-reopen escape hatch for a future "show me that again"
-   link (e.g. PHA-2706's Linked Accounts settings surface). */
+   link (e.g. #2706's Linked Accounts settings surface). */
 :root{
   --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#8A8177;
   --line:rgba(43,38,34,.07);
@@ -99,11 +99,11 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-off
 <script>
 'use strict';
 
-// PHA-2707 (PHA-2703 child): welcome screen bootstrap.
+// #2707 (#2703 child): welcome screen bootstrap.
 //   1. GET /api/me — confirm the user is authenticated (header-trust
 //      or session). If not, the SPA is in the wrong place; bounce
 //      them to GET /api/login (server-side 302 to /?next=, see
-//      PHA-2583) and let SWAG/authentik re-route from there.
+//      #2583) and let SWAG/authentik re-route from there.
 //   2. Parse ?wall=<slug> from the URL — set by /api/invites/:code/redeem
 //      when the user came in via the redemption page. Parse ?revisit=1
 //      — the explicit-reopen override for returning users.

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// PHA-2446 acceptance tests for lib/connector-install.js — the
+// #2446 acceptance tests for lib/connector-install.js — the
 // ConnectorInstallation model + per-user encrypted secret store.
 //
-// Acceptance criteria (from PHA-2446 issue body):
+// Acceptance criteria (from #2446 issue body):
 //   * Install/uninstall flow creates/destroys ConnectorInstallation
 //     without leaking secret material.
 //   * Secret is round-tripped via the existing encrypted per-user
@@ -189,7 +189,7 @@ function specPersistenceTests() {
     );
 
     // Specs NEVER carry credentials or user URLs — the validator
-    // (PHA-2444) already enforces a strict top-level field list.
+    // (#2444) already enforces a strict top-level field list.
     // We assert here that a foreign field on `identity` is rejected
     // up-front.
     const withExtra = validKomgaSpec();
@@ -484,7 +484,7 @@ function visibilityTests() {
 // ----- Module-registry adapter -------------------------------------------
 
 function moduleRegistryAdapterTests() {
-  console.log('— module-registry adapter (PHA-2200 integration) —');
+  console.log('— module-registry adapter (#2200 integration) —');
   const { db, tmpDir } = freshDb();
   try {
     const user = freshUser(db, 'brandon');

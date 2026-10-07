@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// PHA-2218.4 acceptance tests for lib/notifications.js's resolve(): the
+// #2218.4 acceptance tests for lib/notifications.js's resolve(): the
 // per-wall level gate, thread-mute override, and quiet-hours composition
-// (level decides IF, quiet hours decide WHEN — see the PHA-2218 design
+// (level decides IF, quiet hours decide WHEN — see the #2218 design
 // comment §2). Unit-level: calls resolve() directly against a bare DB,
 // not through walls.createPost(), so these don't depend on wall/post
 // plumbing at all.
@@ -23,7 +23,7 @@ function assertEq(actual, expected, label) {
   if (a === e) ok(label); else ng(label, `expected ${e}, got ${a}`);
 }
 
-console.log('PHA-2218.4 notifications resolver tests\n');
+console.log('#2218.4 notifications resolver tests\n');
 
 const tmpDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-notif-resolver-test-'));
 process.env.DATA_DIR = tmpDataDir;

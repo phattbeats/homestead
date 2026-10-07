@@ -1,204 +1,102 @@
-# Contributing to Homestead
+# Contributing
 
-This document captures the engineering practices every Homestead change goes
-through. It exists because the 2026-08-23 design review found four closed
-"done" issues with no code in `main`, an acceptance suite that "passed" against
-endpoints returning 404, a repo head that bricks the SPA login, and a flagship
-feature unreachable by any user. Reports about work are not work. Every green
-check now has to come with artifact-grade evidence.
+Thanks for looking. Small, focused fixes are the fastest way to get merged.
+Bigger changes: open an issue first and describe what you want to solve.
 
-## Definition of Done — the standing policy (PHA-2501)
+These rules apply to every contributor, human or AI. If you are an AI agent
+reading this file, every rule below is an instruction to you.
 
-**An issue moves to `done` only when its closing comment contains
-artifact-grade evidence:**
+## 1. Search first
 
-| Work type | Required evidence |
-|---|---|
-| **UI work** (any HTML/CSS/JS/frontend change) | A **screenshot** of the actual rendered result at **mobile viewport (390px-class)** captured from a **REAL running instance** (scratch container or staging, booted from the branch). Playwright + Chromium is the standard tool; the `scripts/smoke-postlogin-screenshot.js` smoke is the template. |
-| **API work** (any new/changed HTTP route or schema) | The **actual curl/HTTP transcript** against a running instance: request + response body. Not "the endpoint was added" — the bytes. |
-| **All code work** | The **commit SHA(s) in `main`** (or the merged PR link). No SHA in `main` = not done. Board status must trace to the artifact. |
-| **Migrations** | Evidence of a boot over a **REAL copied database** (not just fresh), with the row counts before/after. |
-| **Deploys / infra** | The verification curl from **OUTSIDE** (public URL), same as the Sonarr pattern (`browser 302 + API 200`). |
+Before you start, search this repo's issues and pull requests for the same
+area. If a PR already exists, help that one instead of opening a parallel one.
+Link related issues in your PR body.
 
-Self-review does not count as verification. The evidence must be reproducible
-by someone else from what is posted. **An issue closed without evidence gets
-reopened by whoever notices, no discussion needed — the policy is the
-authority.**
+## 2. One PR, one change
 
-### Fresh-install acceptance (PHA-2556 amendment)
+- Fix one clear thing. Touch the fewest files that do it.
+- Tests must pass locally before you push, and CI must be green.
+- Keep the diff reviewable. A reviewer should understand it in one sitting.
 
-Acceptance criteria must be phrased as a **user-visible outcome from a fresh
-install**. A verification script may not perform setup the product itself
-cannot perform: if the script needs an `INSERT INTO user_groups` (or any
-similar hand-rolled DB grant) to reach the state under test, that grant is
-the missing feature, and the script should fail loudly until the API exposes
-the same operation.
+## 3. No internal references
 
-The only legitimate test-infrastructure DB writes are: a quiet-hours
-override so a smoke's pass/fail doesn't depend on the wall-clock hour; a
-fresh-DB seed (the seed path is itself a product surface); and schema
-mirrors in the test harness that don't affect what the running server
-delivers. See `docs/DEFINITION-OF-DONE.md` for the full rule + boundary
-cases.
+Many of us run our own issue trackers and agent platforms. Those IDs and links
+mean nothing to anyone else and show up as clutter or broken links.
 
-### Closing-comment template
+In PR titles, descriptions, commit messages, branch names, code comments and
+docs, reference **only public GitHub issues and PRs** in this repo:
+`#123`, `Fixes #123`, `Closes #123`, or a full `https://github.com/...` URL.
 
-Every closing comment follows this shape so the audit is mechanical:
+Do **not** include:
 
-```
-## WHAT changed
-<one short paragraph describing the actual change shipped>
+- Internal ticket ids of any `{PREFIX}-{NUMBER}` form that is not a public
+  GitHub issue number in this repo.
+- Links into a private tracker, agent dashboard, `localhost`, a private IP,
+  or a tailnet.
+- Paths from the machine the work happened on (`/paperclip/...`, `/root/...`,
+  `C:\Users\...`).
+- Names, emails, or handles of people who are not already public
+  contributors to this repo.
 
-## SHA in main
-<commit SHA(s), or merged PR link>
+If an internal ticket held useful context, restate it in plain English.
 
-## EVIDENCE
-- screenshot: ./verify-out/postlogin-390.png  (UI work)
-- transcript: <paste curl request + response bytes>  (API work)
-- migration: <before/after row counts on the copied DB>  (migrations)
-- public URL: <curl output from outside>  (deploys)
-```
+## 4. Branch names describe the change, not your tooling
 
-The same shape is used for agent-issued comments and human-issued comments.
-When the proof is short, paste it inline. When it's a long log, link the file
-in the PR description.
-
-## Local verify — the lazy path is the honest path
-
-`scripts/verify.sh` runs the full Definition of Done evidence chain in one
-command:
+Tooling often names branches after an internal task (`ABC-42-fix-thing`).
+Rename before you push:
 
 ```bash
-PLAYWRIGHT_BROWSERS_PATH=0 ./scripts/verify.sh
+git branch -m fix/short-description
+git push -u origin fix/short-description
 ```
 
-It boots a scratch Homestead instance on an ephemeral port with a fresh DB,
-runs the SPA page-error guard (catches duplicate top-level declarations like
-the PHA-2494 bug), runs the post-login 390px mobile screenshot smoke, and
-prints a `/api/health` curl transcript. Screenshots land in `./verify-out/`.
+Use `fix/`, `feat/`, `docs/`, or `chore/` plus a short kebab-case summary.
 
-If you change anything UI-shaped, run `./scripts/verify.sh` before opening the
-PR. If the PR review asks "where's the screenshot?", point at
-`./verify-out/postlogin-390.png` and the verify.sh transcript.
+## 5. Commit authorship
 
-## CI gate — release gate enforcement
+- Commits are authored by **one** identity: the GitHub account opening the PR.
+- **No `Co-authored-by` trailers. No tool or session trailers** of any kind
+  (`<Tool>-Session`, `Generated-by`, `Signed-off-by: <bot>`, and so on).
+  If your harness adds them, turn that off (for example
+  `includeCoAuthoredBy: false`) and amend them out before pushing.
+- Commit messages say what changed and why, in the imperative. Not what tool
+  wrote them.
 
-The `.github/workflows/test.yml` workflow runs:
+Maintainer commits in this repo use
+`phattbeats <21150921+phattbeats@users.noreply.github.com>`.
 
-1. `npm ci`
-2. `npx playwright install --with-deps chromium`
-3. `npm test` (the existing 30-test chain)
-4. `node scripts/smoke-spa-pageerrors.js` (PHA-2494 regression guard)
-5. `node scripts/smoke-postlogin-screenshot.js` (PHA-2501 evidence smoke)
+## 6. Disclose AI involvement in the PR body
 
-**Tags don't get cut with the smoke red.** If the smoke fails on a PR, the PR
-is not mergeable. The release workflow (`.github/workflows/release.yml`)
-fires on `v*` tags — the upstream Docker image publish depends on a clean
-test workflow.
+Every PR includes a **Model used** line. State the provider and model (and
+agent platform, if any) that produced or assisted the change, or write
+`None — human-authored`. This is a disclosure, not a judgment. Undisclosed AI
+authorship is grounds for closing the PR.
 
-## Author identity (PHA-2352)
+## 7. Write the PR body for a human
 
-Every Homestead commit must have author/committer
-`phattbeats <obiwouldjablowme@protonmail.com>` and contain no `Co-authored-by`
-trailer of any identity. `npm run hooks:install` (run by `npm install` via the
-`prepare` step) wires the local hook that enforces this. The
-`.github/workflows/authorship-check.yml` workflow enforces it again on every
-PR.
+Short sentences. Active voice. Four sections:
 
-If you operate Claude Code, set `includeCoAuthoredBy: false`. If a trailer
-appears anyway, amend it off before pushing. See `docs/AUTHORSHIP.md` for the
-full policy and pre-push audit command.
+1. **What changed** — the diff in one or two paragraphs.
+2. **Why** — the problem it solves and how you know it was a problem.
+3. **Verification** — what you ran, what you saw. Paste commands, not claims.
+4. **Risks** — what could break and what you did not test.
 
-## How to work a Homestead issue
+## 8. Code conventions
 
-1. **Read the issue twice.** Look at `parentId`, `ancestors`, prior
-   `comments`. The body usually has the WHY; the comments usually have the
-   edge cases that bit the prior agent.
-2. **Check existing code.** Read `lib/`, `scripts/`, `server.js`. The horror
-   of rebuilding something that's already there is one you will not
-   experience twice.
-3. **Branch off the latest commit on the relevant branch.** Don't base off
-   `main` if your work depends on open PR work — base off the most relevant
-   branch tip instead.
-4. **Implement clean.** Comments explain *why*, not just *what*.
-5. **Run `./scripts/verify.sh`** locally. Attach `./verify-out/postlogin-390.png`
-   to the PR description or comment.
-6. **Open a PR.** Describe the WHAT / SHA / EVIDENCE shape in the PR body.
-7. **Squash-merge after CI is green + reviewer approves.** Delete the
-   feature branch on merge.
-8. **Move the issue to `done` only after the merge** — with the closing
-   comment in the WHAT / SHA / EVIDENCE shape, and the SHA actually in
-   `main`.
+Match the style of the surrounding code. Do not reformat files you did not
+otherwise change. Do not add dependencies without saying why in the PR body.
+Do not commit secrets, `.env` files, local config, or editor and agent-harness
+state directories (`.claude/`, `.cursor/`, `.vscode/`, and friends).
 
-## Continuous deployment (PHA-2971)
+## 9. License
 
-Brandon's directive (2026-09-02): every merge to `main` should reach prod as
-a new `x.x.x` version, tested live. There is currently no staging
-environment — that tradeoff is accepted, not an oversight.
+By contributing you agree your contribution is licensed under this repo's
+`LICENSE`. Check it before you start; it may be noncommercial. Do not paste in
+code whose license is incompatible with it.
 
-Correction (2026-09-02, same day): the first cut of this automated tagging
-in CI (`auto-tag.yml`, since removed). That workflow fired on every push to
-`main` and needed a verify+retry `workflow_dispatch` dance to work around
-GitHub's anti-recursion rule (a tag pushed with the default `GITHUB_TOKEN`
-doesn't trigger other workflows' `push: tags:` filters) — two extra Actions
-runs, with polling loops, on every merge. Brandon flagged that as
-overengineered for a repo with no paid Actions budget to spend. **Tagging
-is now a manual step an agent takes as part of merging to `main`**, not a
-CI job.
+## 10. Be kind
 
-**Versioning policy.** After merging a PR to `main`, tag it yourself and
-push the tag:
+Review comments are about the code. Thank people who help you land a PR.
+Credit the original author if you pick up their stalled branch.
 
-```bash
-git fetch --tags
-latest=$(git tag --list 'v*' --sort=-v:refname | head -n1)
-# bump PATCH, e.g. v0.5.14 -> v0.5.15
-git tag -a vX.Y.Z -m "vX.Y.Z"
-git push origin vX.Y.Z
-```
-
-Because this is a real push (your own credentials, not the Actions bot's
-`GITHUB_TOKEN`), `release.yml`'s ordinary `push: tags:` trigger fires with
-no extra plumbing — it builds the image, publishes it to
-`ghcr.io/phattbeats/homestead:<tag>` and `:latest`, and cuts a GitHub
-release.
-
-- MAJOR/MINOR bumps stay manual too: tag `vX.Y.0` (or `vX.0.0`) instead of
-  a PATCH bump if a change warrants it.
-- `package.json`'s `"version"` field is not auto-bumped — it drifts
-  intentionally; the git tag is the source of truth for what's deployed.
-  Bump it by hand in a PR when it matters for a release note.
-
-**Deploy mechanism.** A `watchtower-homestead` container runs on the Unraid
-host (`root@10.0.0.100`), scoped by container name to `homestead` only
-(no label, no blast radius to other containers on the box). It polls GHCR
-every 300s and recreates the `homestead` container when the `:latest`
-digest changes, keeping the existing bind mount (`/mnt/user/appdata/homestead`
-→ `/data`) and port mapping (`3081:3080`) via `--cleanup` recreation. No
-GitHub Actions SSH secret is required — this was the reason Watchtower was
-chosen over an SSH-based `deploy.yml`, since no deploy credentials exist in
-the repo today.
-
-**End-to-end timing.** merge → tag push (~10s) → image build+publish
-(~2-4 min) → Watchtower picks up new digest (next poll, ≤5 min) → container
-recreated. Budget ~5-9 minutes worst case from merge to live.
-
-**Smoke recipe** (run after any merge-triggered deploy, from outside):
-
-```bash
-curl -sf http://10.0.0.100:3081/api/health
-curl -sfo /dev/null -w '%{http_code}\n' http://10.0.0.100:3081/favicon.svg
-curl -sfo /dev/null -w '%{http_code}\n' http://10.0.0.100:3081/sw.js
-curl -s http://10.0.0.100:3081/api/version   # confirm COMMIT_SHA matches origin/main HEAD
-```
-
-## Related
-
-- `docs/GLOSSARY.md` — canonical names for every Homestead surface (PHA-2635)
-- `docs/AUTHORSHIP.md` — author identity policy (PHA-2352)
-- `docs/DEFINITION-OF-DONE.md` — extended rationale and policy history
-- `.github/workflows/test.yml` — CI smoke gate
-- `.github/workflows/authorship-check.yml` — author-identity gate
-- `.github/workflows/release.yml` — build + publish + GitHub release on tag push (tag it yourself after merging to `main`, see above)
-- `scripts/verify.sh` — one-shot local verification
-- `scripts/smoke-postlogin-screenshot.js` — 390px post-login screenshot smoke
+Questions: open an issue.

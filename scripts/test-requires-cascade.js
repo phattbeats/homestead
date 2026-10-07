@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// PHA-2209 / PHA-2200.8 — Cascade enable/disable acceptance test.
-// (AC5 from PHA-2200 §7: enable/disable cascades via requires[].)
+// #2209 / #2200.8 — Cascade enable/disable acceptance test.
+// (AC5 from #2200 §7: enable/disable cascades via requires[].)
 //
 // Verifies the cross-cutting cascade behavior at the lib/user-model.js
 // layer (no HTTP needed — same shape the API surface uses):
@@ -41,7 +41,7 @@ function assertEq(actual, expected, label) {
   if (a === e) ok(label); else ng(label, `expected ${e}, got ${a}`);
 }
 
-console.log('PHA-2209 AC5 — enable/disable cascade\n');
+console.log('#2209 AC5 — enable/disable cascade\n');
 
 function freshDb() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-cascade-'));

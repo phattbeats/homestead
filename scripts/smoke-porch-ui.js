@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PHATT Tech LLC
 
-// PHA-2200.5 / PHA-2206 smoke test (extends PHA-2151's smoke-porch-ui):
+// #2200.5 / #2206 smoke test (extends #2151's smoke-porch-ui):
 // verify BOTH placements of the wall feed component — /porch.html (the
 // standalone thin shell) and /index.html (the in-place #page-wall
 // mount) — load the SAME /components/feed.js and reference the SAME
@@ -14,7 +14,7 @@
 //      logic in porch.html).
 //   2. The shared component file is reachable as /components/feed.js
 //      and exposes window.HomesteadFeed.
-//   3. The /api/link-preview backend route (added in PHA-2151) still
+//   3. The /api/link-preview backend route (added in #2151) still
 //      works (composer depends on it).
 //   4. /index.html references /components/feed.js for the in-place
 //      mount and the wall module visibility check.
@@ -200,7 +200,7 @@ function startFixtureServer() {
 
     // ---- 7. End-to-end: components/feed.js's whole flow against the real walls/
     //         media API (upload -> post -> react -> comment -> feed). ----
-    // PHA-2556: the previous version open-coded an INSERT INTO user_groups
+    // #2556: the previous version open-coded an INSERT INTO user_groups
     // to put brandon in `media-club`, then tested against a wall the
     // product never made visible to anyone on a fresh boot. Same
     // anti-pattern as scripts/smoke-walls.js. Now brandon is already in

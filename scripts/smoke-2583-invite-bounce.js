@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2583 acceptance smoke: unauthenticated visitor opens /invite/{code}
+// #2583 acceptance smoke: unauthenticated visitor opens /invite/{code}
 // and lands on the Homestead login form (not a JSON 404). After signing
 // in they bounce back to /invite/{code} and the wall-card renders.
 //
@@ -84,7 +84,7 @@ async function waitForHealth(port) {
     assert(/text\/html/.test(inviteCT), `GET /invite/<code> serves HTML (got ${inviteCT})`);
     assert(/<title>.*invite/i.test(inviteBody) || /Join a wall/i.test(inviteBody),
       'GET /invite/<code> body contains the invite page chrome');
-    // PHA-2583: BEFORE the fix this was JSON {error:not_found}. Now it
+    // #2583: BEFORE the fix this was JSON {error:not_found}. Now it
     // must be HTML.
     assert(!/^\s*\{/.test(inviteBody.trim()),
       'GET /invite/<code> body is NOT a JSON 404');
@@ -100,7 +100,7 @@ async function waitForHealth(port) {
     assert(loginLoc.includes(encodeURIComponent(`/invite/${fakeCode}`)),
       `GET /api/login Location preserves next=/invite/<code> (got "${loginLoc}")`);
 
-    // PHA-2583 open-redirect hardening: an off-origin next must be stripped.
+    // #2583 open-redirect hardening: an off-origin next must be stripped.
     const evilRes = await fetch(`http://127.0.0.1:${port}/api/login?next=//evil.example.com/`, {
       redirect: 'manual',
     });

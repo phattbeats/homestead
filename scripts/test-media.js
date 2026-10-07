@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2149 acceptance tests for lib/media.js: happy path upload + fetch +
+// #2149 acceptance tests for lib/media.js: happy path upload + fetch +
 // thumb, retention expiry, oversized rejection, mime allowlist, and
 // double-insert dedupe (sha collision -> same id). Drives lib/media.js
 // directly against a temp SQLite file + temp DATA_DIR, same pattern as
@@ -30,7 +30,7 @@ const PNG_1X1 = Buffer.from(
   'base64'
 );
 
-console.log('PHA-2149 media tests\n');
+console.log('#2149 media tests\n');
 
 (async () => {
   const tmpDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-media-test-'));
@@ -44,7 +44,7 @@ const analytics = require('../lib/analytics');
   const db = new Database(dbPath);
   userModel.migrate(db);
   media.migrate(db);
-  // PHA-2210: lib/media.js calls analytics.logEvent on every upload. The
+  // #2210: lib/media.js calls analytics.logEvent on every upload. The
   // analytics layer is best-effort so a missing table wouldn't fail the
   // test, but the noise in stderr is ugly.
   analytics.migrate(db);

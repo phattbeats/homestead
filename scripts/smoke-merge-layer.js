@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-1867 merge-layer smoke test: end-to-end against a live server.js.
+// #1867 merge-layer smoke test: end-to-end against a live server.js.
 //
 //   1. Boot server.js in-process with CALENDAR_CRED_KEY + a fake CalDAV.
 //   2. Add a calendar source + sync it.
@@ -196,7 +196,7 @@ const fakeCalDav = http.createServer((req, res) => {
     if (multiday) {
       assert(typeof multiday.start === 'string' && multiday.start < multiday.end, 'multi-day event has start < end');
       // allDay detection for VALUE=DATE multi-day events is broken in the
-      // caldav iCal parser (PHA-1620): it parses the date into a full ISO
+      // caldav iCal parser (#1620): it parses the date into a full ISO
       // timestamp, losing the date-only signal. The merge layer faithfully
       // passes through whatever allDay the source adapter reports; the fix
       // belongs in lib/caldav-source.js's parseICalDate (separate PR).

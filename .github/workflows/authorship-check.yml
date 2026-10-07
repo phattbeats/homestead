@@ -21,7 +21,7 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          expected='phattbeats <obiwouldjablowme@protonmail.com>'
+          expected='phattbeats <21150921+phattbeats.noreply.github.com>'
 
           if [ "$EVENT_NAME" = pull_request ]; then
             commits=$(git rev-list "$PR_BASE_SHA..$PR_HEAD_SHA")

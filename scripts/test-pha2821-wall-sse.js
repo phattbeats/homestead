@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2821 smoke: two sessions, one wall, SSE live-update. Verifies the
+// #2821 smoke: two sessions, one wall, SSE live-update. Verifies the
 // GET /api/walls/:slug/events stream actually delivers a `post` event
 // when a different member posts, without either side polling.
 

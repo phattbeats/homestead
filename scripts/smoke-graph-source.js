@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-1864 calendar-sources smoke test (Graph / MS365):
+// #1864 calendar-sources smoke test (Graph / MS365):
 // boot server.js in-process with a fake Microsoft Graph server, mint
 // an admin session via /api/login, add an ms365 calendar source, kick
 // a refresh, hit /api/events/merged, and verify the provider events

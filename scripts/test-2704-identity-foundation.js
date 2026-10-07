@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2704 acceptance tests for the canonical identity foundation.
+// #2704 acceptance tests for the canonical identity foundation.
 //
 // What this script guards:
 //   * local_credentials and identity_links tables exist and have the
@@ -52,7 +52,7 @@ function freshDb() {
   return { db, tmpDir, dbPath };
 }
 
-console.log('PHA-2704 identity foundation tests\n');
+console.log('#2704 identity foundation tests\n');
 
 // ---- Test 1: schema exists with expected shape ----
 {
@@ -193,7 +193,7 @@ console.log('PHA-2704 identity foundation tests\n');
 
   // Now rename the username. The identity_links row still points at
   // the same user_id but the username no longer matches the
-  // provider_subject. This simulates the PHA-2703 "link Authentik later"
+  // provider_subject. This simulates the #2703 "link Authentik later"
   // scenario where the user changed their display name and the
   // external identity subject is the stable canonical key.
   db.prepare('UPDATE users SET username = ? WHERE id = ?').run('casey-renamed', caseyId);

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-1617.6 acceptance tests for the drawer backend (HMAC-signed
+// #1617.6 acceptance tests for the drawer backend (HMAC-signed
 // outbound POST + SSE/JSON consumer + retry/backoff + circuit breaker)
 // at /api/drawer, design doc §6.2–6.5.
 //

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// PHA-2498 (UX batch #1) smoke: install coach must NOT auto-fire on
+// #2498 (UX batch #1) smoke: install coach must NOT auto-fire on
 // login transition.
 //
 // Previously the install coach fired as a full-screen sheet on the
 // login transition, covering the feed before the user had seen
-// anything. PHA-2219's decided rule is "situated" — the coach
+// anything. #2219's decided rule is "situated" — the coach
 // arms only after a real signal (first action, 60–90s dwell, or
 // second session), never on login. After the fix
 // maybeShowInstallCoach() arms timers/listeners instead of opening
@@ -85,7 +85,7 @@ async function main() {
 
     await page.waitForSelector('#app', { state: 'visible', timeout: 10000 });
 
-    // PHA-2584: a first-run user sees the welcome sheet on login.
+    // #2584: a first-run user sees the welcome sheet on login.
     // That's a separate overlay from the install coach; dismiss it
     // before asserting the coach didn't fire. The welcome sheet
     // stamps `first_run_completed_at` server-side and the coach
@@ -93,7 +93,7 @@ async function main() {
     //
     // CRITICAL: do NOT use page.click('#welcomeDismiss') here —
     // clicking ANYWHERE triggers installCoach's capture-phase
-    // `first_action` listener (arm #2 in PHA-2498), which would
+    // `first_action` listener (arm #2 in #2498), which would
     // open the install coach sheet and make the assertion below
     // fail for the wrong reason. Dismiss via the API the SPA itself
     // calls (same path as smoke-2556's defensive fallback). Then
@@ -114,7 +114,7 @@ async function main() {
         null,
         { timeout: 5000 },
       );
-      console.log('✓ dismissed first-run welcome sheet (PHA-2584) before coach-deferral assertion');
+      console.log('✓ dismissed first-run welcome sheet (#2584) before coach-deferral assertion');
     } catch (_) {
       console.log('✓ no first-run welcome sheet present (admin already completed first-run)');
     }

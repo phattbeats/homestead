@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PHA-1619 — apply all push-notification work to pha-1619-web-push and commit.
+# #1619 — apply all push-notification work to pha-1619-web-push and commit.
 # Single-shot script so the work is durable regardless of concurrent stomp events.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -92,7 +92,7 @@ echo "  public/sw.js: $(wc -l < public/sw.js) lines"
 echo "=== STEP 4: write smoke test ==="
 mkdir -p scripts
 cat > scripts/smoke-push.js <<'SMOKEEOF'
-// PHA-1619 smoke test: real push delivery + 410 prune.
+// #1619 smoke test: real push delivery + 410 prune.
 const http = require('http');
 const Module = require('module');
 const fakePort = 4099;

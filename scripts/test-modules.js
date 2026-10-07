@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2203 acceptance tests for the v0.3.0 module registry.
+// #2203 acceptance tests for the v0.3.0 module registry.
 //
 // Drives `lib/modules.js`, `lib/registry-validate.js`, and the new
 // `getEnabledModules` / `getDefaultEnabledModules` helpers in
@@ -7,7 +7,7 @@
 // subprocess. Each test runs migrate() on a fresh DB so they're
 // independent and idempotent.
 //
-// Acceptance covered (per PHA-2203 issue body):
+// Acceptance covered (per #2203 issue body):
 //   * lib/modules.js exports REGISTRY + DEFAULT_ENABLED = ['wall'].
 //   * Six built-in entries present: wall, lists, calendar, chores,
 //     apps, agent.
@@ -21,9 +21,9 @@
 //   * DEFAULT_ENABLED references are valid registered keys.
 //
 // Out of scope (these are PHAs 2200.3 / 2200.4 / 2201 etc.):
-//   * HTTP API routes (PHA-2200.3)
-//   * Frontend rendering (PHA-2200.4)
-//   * Third-party install flow (PHA-2201 children)
+//   * HTTP API routes (#2200.3)
+//   * Frontend rendering (#2200.4)
+//   * Third-party install flow (#2201 children)
 
 'use strict';
 
@@ -56,7 +56,7 @@ function freshDb() {
   return { db, tmpDir, dbPath };
 }
 
-// The grandfathered six: the pre-modularity modules PHA-2202's
+// The grandfathered six: the pre-modularity modules #2202's
 // one-time backfill grants to users that exist at migration time. This
 // list is HISTORY and does not grow — a module registered after that
 // backfill shipped is never retroactively enabled for anyone.
@@ -68,7 +68,7 @@ const SIX = ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent'];
 // this line, which is exactly the point.
 const REGISTERED = [...SIX, 'gazette'];
 
-console.log('PHA-2203 module-registry tests\n');
+console.log('#2203 module-registry tests\n');
 
 // -----------------------------------------------------------------------------
 // 1. Registry shape — six built-ins + DEFAULT_ENABLED = ['wall'].
@@ -95,7 +95,7 @@ console.log('PHA-2203 module-registry tests\n');
 }
 
 // -----------------------------------------------------------------------------
-// 2. Required fields per the PHA-2201 manifest contract.
+// 2. Required fields per the #2201 manifest contract.
 // -----------------------------------------------------------------------------
 {
   console.log('\nTest 2: every built-in has all 16 required fields with correct types');
@@ -155,7 +155,7 @@ console.log('PHA-2203 module-registry tests\n');
   assert(!!brandon, 'brandon user exists after migrate');
 
   let enabled = userModel.getEnabledModules(db, brandon.id);
-  // Backfill from PHA-2202 enables everything. So all six should be enabled, in order.
+  // Backfill from #2202 enables everything. So all six should be enabled, in order.
   assertEq(enabled.map(e => e.key), SIX, 'brandon has all six modules enabled, in registry order');
   // Each enabled entry must carry the full registry entry + enabled_at.
   for (const e of enabled) {
@@ -180,7 +180,7 @@ console.log('PHA-2203 module-registry tests\n');
   const newUser = db.prepare('SELECT id FROM users WHERE username LIKE ? ORDER BY id DESC LIMIT 1').get('test-new-user-%');
   assert(!!newUser, 'test-new-user provisioned');
   // Backfill only runs at migrate() time, so a fresh provisionOrClaim has no rows yet.
-  // getEnabledModules should return []. (The PHA-2202 backfill does run at migrate()
+  // getEnabledModules should return []. (The #2202 backfill does run at migrate()
   // for the seeded users; for users created later via provisionOrClaim, the new
   // DEFAULT_ENABLED provision happens in a later PHA — out of scope here.)
   enabled = userModel.getEnabledModules(db, newUser.id);
@@ -284,12 +284,12 @@ console.log('PHA-2203 module-registry tests\n');
   const defaults = userModel.getDefaultEnabledModules();
   assertEq(defaults.map(e => e.key), ['wall'], 'getDefaultEnabledModules returns [{ key: "wall", ...full registry entry }]');
   const wall = defaults[0];
-  // PHA-2846: built-in icons are now SVG paths under /modules/ rather than
+  // #2846: built-in icons are now SVG paths under /modules/ rather than
   // emoji literals (third-party manifests still use emoji strings — see
   // the dispatch rule in public/modules.html + public/index.html). The
-  // 16-field contract (PHA-2201) is preserved: `icon` is still a non-empty
+  // 16-field contract (#2201) is preserved: `icon` is still a non-empty
   // string. The registry's wall entry is the source of truth.
-  assert(wall && wall.key === 'wall' && wall.name === 'Porch' && wall.icon === '/modules/porch.svg', 'default entry is the full wall registry entry (wall icon is /modules/porch.svg per PHA-2846)');
+  assert(wall && wall.key === 'wall' && wall.name === 'Porch' && wall.icon === '/modules/porch.svg', 'default entry is the full wall registry entry (wall icon is /modules/porch.svg per #2846)');
 }
 
 // -----------------------------------------------------------------------------
@@ -317,5 +317,5 @@ console.log('PHA-2203 module-registry tests\n');
   assertEq(userModel.USER_MODULE_KEYS, REGISTERED, 'userModel.USER_MODULE_KEYS matches the registry');
 }
 
-console.log(`\nPHA-2203: ${pass} passed, ${fail} failed`);
+console.log(`\n#2203: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

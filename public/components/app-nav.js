@@ -1,10 +1,10 @@
-/* PHA-2823: persistent cross-page navigation.
+/* #2823: persistent cross-page navigation.
  *
  * Homestead ships several standalone HTML entry points (porch.html,
  * modules.html, invites.html, connectors.html, ...) alongside the
  * index.html SPA. Each standalone page only had a "back" arrow to "/",
  * so a user who navigated into one had no way to reach the others
- * without knowing the URL (Tyler feedback on PHA-2804). This component
+ * without knowing the URL (Tyler feedback on #2804). This component
  * is a small bottom bar of links to the main app destinations, dropped
  * into a page with a single script tag:
  *
@@ -46,7 +46,7 @@
       '#hs-app-nav .hs-ico{font-size:19px;line-height:1}' +
       // Nav is fixed/opaque at z-index:50, so it physically covers the
       // bottom ~64px of viewport and sits above anything with a lower
-      // z-index there (PHA-2821 gate script caught it eating clicks on
+      // z-index there (#2821 gate script caught it eating clicks on
       // porch.html's compose FAB). Fixed-position controls near the
       // bottom read this var to shift clear of the bar instead of
       // guessing its height.

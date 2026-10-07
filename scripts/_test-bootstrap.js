@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-// PHA-3200: test-process environment shim.
+// #3200: test-process environment shim.
 //
 // Loaded via `node --require ./scripts/_test-bootstrap.js` from every
 // `node scripts/test-*.js` invocation in `npm test`. Centralizes the
 // three env vars Homestead now requires to boot on a workstation:
 //
-//   - SESSION_SECRET: a 64-char random hex string. PHA-3200 made the
+//   - SESSION_SECRET: a 64-char random hex string. #3200 made the
 //     server fail-closed on a missing/placeholder/short secret. Most
-//     pre-PHA-3200 tests relied on the silent fallback
+//     pre-#3200 tests relied on the silent fallback
 //     (`process.env.SESSION_SECRET || 'life-app-secret-change-me'`)
 //     and never set it; this shim keeps those tests running without
 //     touching every file. Tests that explicitly want to exercise the

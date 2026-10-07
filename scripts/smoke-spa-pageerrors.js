@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Regression guard for PHA-2494: public/index.html loads plain scripts, so
+// Regression guard for #2494: public/index.html loads plain scripts, so
 // duplicate top-level lexical declarations can stop the SPA before login
 // renders. A real browser is required to catch parser/runtime page errors.
 

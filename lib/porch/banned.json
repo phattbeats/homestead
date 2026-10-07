@@ -1,5 +1,5 @@
 {
-  "_comment": "PHA-2645 banned lexicon. Generic engagement-slop, refused at the contract layer regardless of register. Ledger proposes edits; Brandon signs off in PR (no separate audit log — PR history is the log). Hot-reloaded by lib/porch/participation-contract.js without a server restart; substrings are matched case-insensitively after punctuation is stripped, so 'great post!' and 'GREAT POST' both match the entry 'great post'.",
+  "_comment": "#2645 banned lexicon. Generic engagement-slop, refused at the contract layer regardless of register. Ledger proposes edits; Brandon signs off in PR (no separate audit log — PR history is the log). Hot-reloaded by lib/porch/participation-contract.js without a server restart; substrings are matched case-insensitively after punctuation is stripped, so 'great post!' and 'GREAT POST' both match the entry 'great post'.",
   "version": 1,
   "phrases": [
     "great post",

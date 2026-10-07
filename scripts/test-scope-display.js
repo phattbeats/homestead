@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// PHA-2201.2 (PHA-2230) acceptance tests for lib/scope-display.js.
+// #2201.2 (#2230) acceptance tests for lib/scope-display.js.
 //
 // Pure logic, no DB, no server — drives the module directly. Covers
 // the acceptance checklist from the issue:
-//   * every scope in the PHA-2201 §3 vocabulary has a mapped phrase
+//   * every scope in the #2201 §3 vocabulary has a mapped phrase
 //   * an unmapped scope throws rather than rendering raw
 //
 // Run: node scripts/test-scope-display.js
@@ -26,7 +26,7 @@ function assertThrows(fn, label) {
   }
 }
 
-console.log('PHA-2201.2 scope-display tests\n');
+console.log('#2201.2 scope-display tests\n');
 
 // ---- Test 1: every fixed §3 scope has a phrase, none render raw ----
 {

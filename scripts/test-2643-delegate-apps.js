@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2643 acceptance test for the admin "delegate apps to users" endpoint
+// #2643 acceptance test for the admin "delegate apps to users" endpoint
 // (PUT /api/admin/services/:id/owner). Live server.js smoke test, same
 // boot/login pattern as scripts/test-feed-component.js.
 

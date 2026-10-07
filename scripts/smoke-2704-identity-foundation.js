@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2704 end-to-end smoke for the identity foundation.
+// #2704 end-to-end smoke for the identity foundation.
 //
 // Boots server.js on an ephemeral port against a fresh SQLite DB,
 // drives the full /api/me/identities surface + /api/login round-trip,

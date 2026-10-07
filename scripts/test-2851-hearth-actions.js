@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2851 acceptance — Hearth's inbound action surface.
+// #2851 acceptance — Hearth's inbound action surface.
 //
 // The drawer demo promises "queue Part Two" and "tell him the meme was
 // mid" do something. This asserts they do, and — just as important —

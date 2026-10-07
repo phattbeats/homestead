@@ -44,7 +44,7 @@ each one is either a tile in the home grid or a tab in the top strip.
   the people the user shares a wall with. Photos, videos, link
   shares, and plain text. Idempotent emoji reactions and inline
   comments. The Porch is the only module enabled for new users
-  (per PHA-2200 Amendment 2) — every fresh install lands here. The
+  (per #2200 Amendment 2) — every fresh install lands here. The
   module key is `wall`; the deep link is `/porch.html`; the in-SPA
   page div is `#page-porch`. The decision to call the surface
   "Porch" instead of "Feed" or "Wall" was editorial — the wall is
@@ -82,7 +82,7 @@ each one is either a tile in the home grid or a tab in the top strip.
   media-club wall when it's a separate module from `wall`. The
   current code uses a single `wall` module with multiple wall kinds
   (including `media_club`); promoting it to its own module is a
-  PHA-2152 follow-up.
+  #2152 follow-up.
 
 - **The Meadow** — the **home layout** when four or more rooms are
   enabled. The Meadow is the dense tile grid in the centre of the
@@ -201,7 +201,7 @@ each one is either a tile in the home grid or a tab in the top strip.
 
 ## Agent and connector surfaces
 
-- **Bring It Home** *(PHA-2819)* — the canonical name for the
+- **Bring It Home** *(#2819)* — the canonical name for the
   three-tier pipeline by which a self-hosted service already
   running in the household (Plex, Kavita, Sonarr, a Popcorn-Vote-
   style side app, anything) gets adopted into Homestead instead of
@@ -218,7 +218,7 @@ each one is either a tile in the home grid or a tab in the top strip.
      services in."
   2. **Direct API connection** — Homestead talks to the service's
      API on the user's behalf instead of just framing its UI.
-     Shipped: **Connector Forge** (PHA-2444 / PHA-2446, below) — a
+     Shipped: **Connector Forge** (#2444 / #2446, below) — a
      connector spec declares GET-only probes and field mappings,
      runs as a per-user `ConnectorInstallation`, and surfaces as a
      first-class `connector:<spec_id>` room in the Meadow grid.
@@ -228,8 +228,8 @@ each one is either a tile in the home grid or a tab in the top strip.
      reimplemented natively as a Homestead module (in-app,
      `apps.html` tile registry) or, for larger scope, as its own
      Docker/Unraid-deployed service that plugs into the same module
-     registry contract. Shipped example: Popcorn Vote (PHA-2201 /
-     PHA-2052) — the first third-party app built against the
+     registry contract. Shipped example: Popcorn Vote (#2201 /
+     #2052) — the first third-party app built against the
      manifest/consent/scoped-token contract rather than run as an
      external service. This rung is the most work and is scoped
      per-service, not attempted for everything.
@@ -244,23 +244,23 @@ each one is either a tile in the home grid or a tab in the top strip.
   the Agent module, with a personality persisted in the repo at
   `agents/hearth/SOUL.md` and `agents/hearth/IDENTITY.md`, and
   mirrored to a per-user row at first-enable. Hearth is a
-  drawer-mode agent (PHA-1617.6) and a registered porch
-  character (PHA-2645 / PHA-2646). The avatar is the
+  drawer-mode agent (#1617.6) and a registered porch
+  character (#2645 / #2646). The avatar is the
   forest-green enamel oil lantern in
   `brand/hearth-agent-homestead-icon.png`. Spec:
-  PHA-2827 / PHA-2828. *(Renamed from "Hearth (planned) — the
-  analytics read API" by PHA-2828; the read API took the name
+  #2827 / #2828. *(Renamed from "Hearth (planned) — the
+  analytics read API" by #2828; the read API took the name
   "Analytics API" instead.)*
 
 - **Analytics API** *(planned)* — the read surface behind PAT for
   Homestead analytics. The write path is `lib/analytics.js`
   (closed-enum `KINDS`); the read API is referenced in
-  PHA-2210 follow-ups but has not shipped. When the read API
+  #2210 follow-ups but has not shipped. When the read API
   lands, this entry becomes canonical. *(Renamed from the
-  planned "Hearth" surface name by PHA-2828 — Brandon's call
+  planned "Hearth" surface name by #2828 — Brandon's call
   was that "Hearth" stays the name of the agent.)*
 
-- **The socket** — the meta-agent socket (PHA-1617). The
+- **The socket** — the meta-agent socket (#1617). The
   authenticated API surface that connected agents and CLIs use
   to drive Homestead. Three concrete layers:
 
@@ -273,7 +273,7 @@ each one is either a tile in the home grid or a tab in the top strip.
 
   - **Agent endpoints** — the routes that read or mutate on the
     user's behalf behind a PAT. The first slice is
-    `GET /api/me/snapshot` (PHA-1617.3) — single-call morning
+    `GET /api/me/snapshot` (#1617.3) — single-call morning
     context: profile + groups, today's tasks and events,
     upcoming week, recent activity. The same builder will back
     the future MCP tool (`homestead_get_user_context`).
@@ -286,7 +286,7 @@ each one is either a tile in the home grid or a tab in the top strip.
     will expose tools.
 
 - **Connector Forge** — the user-facing name for the third-party
-  app install path (PHA-2444 / PHA-2446). A "connector" is a
+  app install path (#2444 / #2446). A "connector" is a
   data-only spec that declares probes (GET-only, allow-listed
   headers, DNS-rebinding-pinned) and field mappings (restricted
   JSONPath), gets validated by `lib/connector-spec.js`, then
@@ -335,7 +335,7 @@ each one is either a tile in the home grid or a tab in the top strip.
   the name doesn't match exactly, and is closed at the
   character-class level (no nested brackets, no pipe-aliased
   aliases). The render path is in `public/index.html` under the
-  `PHA-1872` entity-graph marker.
+  `#1872` entity-graph marker.
 
 ---
 
@@ -395,6 +395,6 @@ each one is either a tile in the home grid or a tab in the top strip.
 
 ---
 
-*Last verified against `main` @ `da84273` (PHA-2587 + PHA-2588 —
+*Last verified against `main` @ `da84273` (#2587 + #2588 —
 v0.4.3). If a term disagrees with the code, the code wins and
 this file gets a follow-up PR.*

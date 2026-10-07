@@ -4,14 +4,14 @@
 # node-gyp install hook auto-fired by npm needs python3/make/g++ to
 # evaluate binding.gyp even when the prebuilt N-API binary is used.
 #
-# PHA-2640: install git in the deps stage so npm's `prepare` script
+# #2640: install git in the deps stage so npm's `prepare` script
 # (which runs `npm run hooks:install` → `git config core.hooksPath
-# .githooks`, added in PHA-2354) can complete. Without git the
+# .githooks`, added in #2354) can complete. Without git the
 # prepare hook exits 127 and `npm ci` fails — every release from
 # v0.3.0.1 through v0.4.3 was silently broken. Adding git here keeps
 # the prepare hook as the single source of truth for hook setup.
 #
-# PHA-2644: install ffmpeg in the deps stage. The media-comprehension
+# #2644: install ffmpeg in the deps stage. The media-comprehension
 # package uses ffmpeg's scene-change keyframe extraction (`select=gt
 # (scene,0.4)`) and whisper-class audio-track extraction
 # (`-ac 1 -ar 16000 -acodec pcm_s16le`). Both are required for the
@@ -43,7 +43,7 @@ COPY server.js ./
 # lib/agent-endpoints, lib/drawer-dispatcher, lib/media). server.js
 # requires './lib/user-model' at boot, so dropping this directory in
 # the runtime stage leaves the container unable to start with
-# `Error: Cannot find module './lib/user-model'` (PHA-2001).
+# `Error: Cannot find module './lib/user-model'` (#2001).
 COPY lib ./lib
 COPY jobs ./jobs
 # Route factories are required directly by server.js. Keep this explicit
@@ -52,8 +52,8 @@ COPY jobs ./jobs
 # MODULE_NOT_FOUND as soon as a route is extracted from server.js.
 COPY routes ./routes
 COPY public ./public
-# PHA-2971: release.yml passes --build-arg COMMIT_SHA so /api/version
-# (PHA-1706) reports the real deployed commit instead of null. A build-arg
+# #2971: release.yml passes --build-arg COMMIT_SHA so /api/version
+# (#1706) reports the real deployed commit instead of null. A build-arg
 # alone isn't visible to the running process -- it must be promoted to an
 # ENV to survive into the container's runtime environment.
 ARG COMMIT_SHA

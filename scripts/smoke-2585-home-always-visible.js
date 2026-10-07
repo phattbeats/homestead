@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// PHA-2585 acceptance smoke: after applyLayout() runs, the Home tab
+// #2585 acceptance smoke: after applyLayout() runs, the Home tab
 // in the bottom nav MUST remain visible (no data-disabled="1") and
 // the #page-home MUST also be visible — independent of which modules
-// the user has enabled. PHA-2557's tighten-SPA-catch-all change hid
+// the user has enabled. #2557's tighten-SPA-catch-all change hid
 // Home because data-p="home" is not a module room. This smoke boots a
 // fresh server, logs in as brandon, asserts that:
 //   1. The Home button in #appNav is visible (not hidden via
@@ -13,7 +13,7 @@
 //   4. Tapping Home shows the Today + On the list landing content.
 //   5. Other tabs (Tasks, Lists, Calendar, Apps, Porch) still hide
 //      when their module is disabled — i.e. we didn't break the
-//      PHA-2557 "render every frame-mode module as a tab" behavior.
+//      #2557 "render every frame-mode module as a tab" behavior.
 //   6. 390x844 mobile-viewport screenshot of the post-login nav that
 //      INCLUDES the Home tab, captured by Playwright Chromium. We
 //      capture the screenshot on a fresh-install (all modules) state
@@ -117,7 +117,7 @@ const consoleErrorSink = [];
 
     // Dismiss any first-run welcome sheet so subsequent assertions
     // about the bottom nav have a clear viewport. The dismiss
-    // handler is wired to #welcomeDismiss.onclick (PHA-2584); use
+    // handler is wired to #welcomeDismiss.onclick (#2584); use
     // the same path the SPA uses. Per MEMORY lesson #139, NEVER
     // click install-coach trigger buttons in this smoke — only the
     // welcome sheet dismiss is safe.
@@ -257,7 +257,7 @@ const consoleErrorSink = [];
     // 6b. Screenshot — fresh install (all modules enabled). This is
     // the durable evidence that the bottom nav shows Home next to
     // the enabled modules. The 390x844 mobile viewport per
-    // PHA-2501 standing DoD.
+    // #2501 standing DoD.
     // Wait one more time for the welcome sheet to be gone; some
     // boot paths re-show it after a brief delay.
     await page.waitForFunction(
@@ -284,7 +284,7 @@ const consoleErrorSink = [];
 
     // 7. Disable most modules (keep tasks + porch) via API, then
     //    confirm Home STILL stays visible. This is the actual
-    //    regression: PHA-2557 hid Home precisely because no module
+    //    regression: #2557 hid Home precisely because no module
     //    has room='home'.
     //
     //    We keep TWO modules enabled (not just feed) so the SPA
@@ -369,7 +369,7 @@ const consoleErrorSink = [];
 
       // Module tabs (Apps, Porch) should still be enabled in
       // this reduced layout; other modules should be data-disabled
-      // and visually hidden. PHA-2557 contract: "render every
+      // and visually hidden. #2557 contract: "render every
       // frame-mode module as a tab; hide when disabled".
       const appsDisabled = await page.evaluate(() => {
         const btn = document.querySelector('#appNav button[data-p="svc"]');

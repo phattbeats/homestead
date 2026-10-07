@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// PHA-2209 / PHA-2200.8 — Amendment 2 acceptance test:
+// #2209 / #2200.8 — Amendment 2 acceptance test:
 // "Adding a new module to the registry does NOT backfill user_modules
 // rows for existing users; new users see {wall} only."
 //
-// Per PHA-2202 (migration discipline) + PHA-2203 (registry), the
+// Per #2202 (migration discipline) + #2203 (registry), the
 // DEFAULT_ENABLED list is the SINGLE source of truth for what a
 // brand-new account sees. Adding a 7th module to the registry (e.g.
 // 'recipes') MUST NOT cause existing users to receive a row in
@@ -27,7 +27,7 @@
 //      module does NOT include an INSERT-backfill for existing
 //      users. We assert this by inspecting the migration text in
 //      lib/user-model.js — no INSERT OR IGNORE INTO user_modules
-//      with the new key should exist outside the v3 PHA-2202
+//      with the new key should exist outside the v3 #2202
 //      backfill (which uses INSERT OR IGNORE on the cross-join of
 //      existing users × all current keys, NOT a per-key
 //      INSERT-into-existing-users).
@@ -57,7 +57,7 @@ function assertEq(actual, expected, label) {
   if (a === e) ok(label); else ng(label, `expected ${e}, got ${a}`);
 }
 
-console.log('PHA-2209 Amendment 2 — default-OFF for future first-party modules\n');
+console.log('#2209 Amendment 2 — default-OFF for future first-party modules\n');
 
 function freshDb() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-default-off-'));
@@ -105,7 +105,7 @@ const SYNTHETIC_ORDER = [...modules.REGISTRY_ORDER, 'recipes'];
   assertEq(r.key, 'recipes', 'recipes.key === "recipes"');
   // Derived, not a frozen count: this test simulates adding ONE more
   // module to whatever the registry currently holds, so it must not
-  // re-break every time a real module lands (PHA-2659 added gazette).
+  // re-break every time a real module lands (#2659 added gazette).
   assertEq(SYNTHETIC_ORDER.length, modules.REGISTRY_ORDER.length + 1,
     'synthetic order is the live registry plus one');
 }
@@ -203,7 +203,7 @@ const SYNTHETIC_ORDER = [...modules.REGISTRY_ORDER, 'recipes'];
 {
   console.log('\nTest 4: migration discipline');
   // Inspect lib/user-model.js for the canonical migration text.
-  // The v3 (PHA-2202) migration backfills ALL existing users
+  // The v3 (#2202) migration backfills ALL existing users
   // against ALL current module keys — that's a one-time cross-join
   // for the initial rollout. It MUST NOT be repeated per-module.
   //

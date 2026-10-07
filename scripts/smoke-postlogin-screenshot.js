@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2501 standing policy enforcement smoke — Definition of Done guard.
+// #2501 standing policy enforcement smoke — Definition of Done guard.
 //
 // Per Brandon's 2026-08-23 directive, every UI-touching issue must ship with
 // a 390px-class mobile-viewport screenshot of the actual rendered result
@@ -37,7 +37,7 @@ process.env.NODE_ENV = 'production';
 // production-only Secure-cookie transport flag. The bootstrap helper used by
 // the unit-test chain already sets this test-only opt-out; keeping it here
 // makes the standalone `node scripts/smoke-postlogin-screenshot.js` entry
-// point behave the same way after PHA-3200.
+// point behave the same way after #3200.
 process.env.HOMESTEAD_INSECURE_TEST_COOKIES = '1';
 
 function formatPageError(error) {
@@ -110,7 +110,7 @@ async function main() {
       throw new Error(`SPA root returned ${root ? root.status() : 'no response'}`);
     }
 
-    // Log in as admin. The LAN fallback /api/login (PHA-1574) seeds admin
+    // Log in as admin. The LAN fallback /api/login (#1574) seeds admin
     // on first boot from ADMIN_PASSWORD.
     await page.waitForSelector('#username', { state: 'visible', timeout: 5000 });
     await page.fill('#username', 'admin');

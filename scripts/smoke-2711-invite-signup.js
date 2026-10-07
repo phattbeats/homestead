@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2711 smoke for the public invite-signup vertical path.
+// #2711 smoke for the public invite-signup vertical path.
 //
 // Boots an isolated server, mints an invite, walks the full path:
 //   1. GET /api/public/invites/:code        → 200 + inviter + remaining
@@ -119,7 +119,7 @@ async function main() {
     if (!adminCookie) { console.error('no session cookie from admin login'); throw new Error('no_admin_cookie'); }
 
     // 2. Mint a fresh household invite (max_uses=2 so we can signin as the new user later with a fresh invite too).
-    const newInv = await request(port, { method: 'POST', path: '/api/invites', headers: { cookie: adminCookie }, body: { wall_slug: 'household', expires_in_days: 7, max_uses: 2, note: 'PHA-2711 smoke' } });
+    const newInv = await request(port, { method: 'POST', path: '/api/invites', headers: { cookie: adminCookie }, body: { wall_slug: 'household', expires_in_days: 7, max_uses: 2, note: '#2711 smoke' } });
     assertEq(newInv.status, 201, 'mint invite → 201');
     const code = newInv.body.id;
     record('smoke-2711-invite-mint', newInv.body);
@@ -128,7 +128,7 @@ async function main() {
     const peek = await request(port, { path: '/api/public/invites/' + code });
     assertEq(peek.status, 200, 'public peek → 200');
     assertEq(peek.body.wall_slug, 'household', 'peek returns wall_slug');
-    assertEq(peek.body.note, 'PHA-2711 smoke', 'peek returns admin note');
+    assertEq(peek.body.note, '#2711 smoke', 'peek returns admin note');
     assertEq(peek.body.remaining, 2, 'peek returns remaining');
     record('smoke-2711-peek', peek.body);
 
@@ -155,7 +155,7 @@ async function main() {
     assertEq(meCleared.body.user, null, '/api/me after logout → user null');
 
     // 8. Re-signin via the public path with a fresh invite.
-    const newInv2 = await request(port, { method: 'POST', path: '/api/invites', headers: { cookie: adminCookie }, body: { wall_slug: 'household', expires_in_days: 7, max_uses: 1, note: 'PHA-2711 re-signin' } });
+    const newInv2 = await request(port, { method: 'POST', path: '/api/invites', headers: { cookie: adminCookie }, body: { wall_slug: 'household', expires_in_days: 7, max_uses: 1, note: '#2711 re-signin' } });
     assertEq(newInv2.status, 201, 'mint second invite → 201');
     const code2 = newInv2.body.id;
     const signin = await request(port, { method: 'POST', path: '/api/public/invites/' + code2 + '/signin', body: { username: 'smokeuser', password: 'smoke-pass-1234' } });

@@ -1,4 +1,4 @@
-/* Homestead brand foundation (PHA-2777).
+/* Homestead brand foundation (#2777).
  *
  * The canonical wordmark is the carved-wood vector traced from
  * `homestead/canonical/homestead-logo-canonical.png` (Brandon's lock 2026-08-28).
@@ -10,7 +10,7 @@
  *
  * The brand-spec-v3 specified Fraunces SemiBold 600 as a fallback for places
  * the vector wouldn't render, but the second-pass correction (Brandon's
- * "STILL NOT THE RIGHT ASSETS" comment on PHA-2777) replaced that hedge with
+ * "STILL NOT THE RIGHT ASSETS" comment on #2777) replaced that hedge with
  * the canonical SVG. Fraunces is kept only for the login tagline (Fraunces
  * Italic 400) — the tagline was always typeset, never part of the lockup art.
  *
@@ -45,7 +45,7 @@
   --brand-hearth:#C4703C;
   --brand-hearth-canonical:#ad5c05;
   --brand-brass:#d49a40;
-  /* PHA-2777 acceptance: muted label token darkened from #8A8177 (3.71:1)
+  /* #2777 acceptance: muted label token darkened from #8A8177 (3.71:1)
    * to #7a7269 (4.59:1) so muted labels and button text pass WCAG AA. */
   --muted:#7a7269;
   /* The canonical wordmark color (carved wood). Use currentColor in the SVG

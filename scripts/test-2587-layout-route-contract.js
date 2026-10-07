@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2587 acceptance — layout-route contract live evidence.
+// #2587 acceptance — layout-route contract live evidence.
 //
 // Issue body requires:
 //   "curl of /api/me/layout plus GET of each advertised route
@@ -134,7 +134,7 @@ async function disable(cookie, key, body) {
 }
 
 async function main() {
-  console.log('=== PHA-2587 layout-route contract — live evidence ===');
+  console.log('=== #2587 layout-route contract — live evidence ===');
   console.log(`SHA in main: 23a777e (PR #75, pha-2587-layout-contract)`);
   console.log(`DATA_DIR:   ${DATA_DIR}`);
   await waitForBoot();

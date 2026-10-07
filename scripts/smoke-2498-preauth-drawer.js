@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2498 (UX batch #3) smoke: drawerFab must NOT render pre-auth.
+// #2498 (UX batch #3) smoke: drawerFab must NOT render pre-auth.
 //
 // Previously #drawerFab was a top-level DOM element, so it appeared
 // on the login page and overlapped the submit button on small widths.
@@ -83,7 +83,7 @@ async function main() {
     if (drawerFabVisible) {
       throw new Error('UX FAIL: #drawerFab is visible on the LOGIN screen — pre-auth leak not closed');
     }
-    console.log('✓ drawerFab is hidden on the login screen (PHA-2498 #3)');
+    console.log('✓ drawerFab is hidden on the login screen (#2498 #3)');
 
     // Assertion 2: submit button is fully visible at 390x844.
     const submitBox = await page.locator('#loginBtn').boundingBox();
@@ -109,7 +109,7 @@ async function main() {
     }
     console.log('✓ no page errors, no blocking console errors');
 
-    // Screenshot for PHA-2501 evidence.
+    // Screenshot for #2501 evidence.
     fs.mkdirSync(verifyOut, { recursive: true });
     const outPath = path.join(verifyOut, 'pha-2498-preauth-390.png');
     await page.screenshot({ path: outPath, fullPage: false });

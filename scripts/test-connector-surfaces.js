@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Homestead — tests for lib/connector-surfaces.js (PHA-2447).
+// Homestead — tests for lib/connector-surfaces.js (#2447).
 //
-// Coverage (mapped to the PHA-2447 acceptance bullets):
+// Coverage (mapped to the #2447 acceptance bullets):
 //
 //   1. tile — health row updates within one cycle; status transitions
 //      from healthy → degraded → healthy follow the probe value.
@@ -16,7 +16,7 @@
 //      dispatcher (we don't bypass it; the test asserts the wall
 //      post lands in the same shape the dispatcher consumes).
 //   5. spec validator — surfaces with unknown surface types are
-//      rejected by the spec validator (already shipped by PHA-2444;
+//      rejected by the spec validator (already shipped by #2444;
 //      covered here to lock the integration).
 //   6. placeholder grammar — closed grammar accepts
 //      `{name}` only; rejects `{{...}}`, `${...}`, nested braces,
@@ -100,11 +100,11 @@ function freshDb() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-connector-surfaces-test-'));
   const db = new Database(path.join(tmpDir, 'surfaces.db'));
   userModel.migrate(db);
-  // PHA-2149: media_uploads table. walls.wall_posts has a FK to
+  // #2149: media_uploads table. walls.wall_posts has a FK to
   // media_uploads(id); better-sqlite3 validates that FK at
   // db.prepare() time, so we must install media before walls.
   require('../lib/media').migrate(db);
-  // PHA-1872: entity-graph schema is a sibling of the connector
+  // #1872: entity-graph schema is a sibling of the connector
   // tables. The runner and the entities adapter both depend on it.
   require('../lib/sync/_schema').migrate(db);
   walls.migrate(db);
@@ -129,7 +129,7 @@ function seedUser(db, username, isAdmin = 0) {
 }
 
 async function main() {
-  console.log('=== PHA-2447 Connector Forge surface adapters ===\n');
+  console.log('=== #2447 Connector Forge surface adapters ===\n');
 
   // ----- 1. tile: health row updates within one cycle -----------------
   await testAsync('1. tile — health row upserts with classified status', async () => {
@@ -460,7 +460,7 @@ async function main() {
   });
 
   // ----- 6. placeholder grammar: closed, no general template --------
-  console.log('\n=== PHA-2447 placeholder grammar (closed) ===\n');
+  console.log('\n=== #2447 placeholder grammar (closed) ===\n');
 
   // 6a: accepted
   assertEq(placeholder.resolve('{name}', { name: 'Saga' }), 'Saga', 'accepts {name}');

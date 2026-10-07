@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// PHA-2150 acceptance tests for lib/walls.js: schema migrate, the
+// #2150 acceptance tests for lib/walls.js: schema migrate, the
 // group/direct membership gate, post create/list/delete, reaction
 // toggle idempotence, comment create/list/1k cap, the new
-// admin wall-CRUD + member-management routes (PHA-2556), and an
+// admin wall-CRUD + member-management routes (#2556), and an
 // activity-feed wiring check. Also a defensive grep guard: no ORDER BY
 // in lib/walls.js may sort by anything but created_at, so a future
 // "sort by reactions" PR fails CI outright.
@@ -32,7 +32,7 @@ function assertThrowsStatus(fn, status, label) {
   }
 }
 
-console.log('PHA-2150 walls tests\n');
+console.log('#2150 walls tests\n');
 
 // ---- Guard: every ORDER BY in lib/walls.js must sort by created_at ----
 console.log('Guard: ORDER BY defensive grep');
@@ -46,7 +46,7 @@ while ((m = orderByRe.exec(wallsSrc))) {
 }
 assert(!badOrderBy, 'no ORDER BY sorts by anything other than created_at', badOrderBy);
 
-// ---- Guard (PHA-2153): the activity-feed query (recentActivity, backing
+// ---- Guard (#2153): the activity-feed query (recentActivity, backing
 // activity_recent in lib/snapshot.js) is held to the same chronological-
 // only contract as the wall itself. Scoped to that one function — the rest
 // of snapshot.js legitimately sorts tasks/events by due_date/date.
@@ -79,7 +79,7 @@ assert(!badSnapshotOrderBy, 'recentActivity() ORDER BY sorts by created_at only'
   media.migrate(db);
   walls.migrate(db);
   walls.seed(db);
-  // PHA-2210: dual-write helpers in lib/walls.js (wall_post_created,
+  // #2210: dual-write helpers in lib/walls.js (wall_post_created,
   // wall_reaction_added, wall_comment_added) hit both notification_log
   // and analytics_events. Mirror the inline CREATE TABLE in server.js so
   // the test DB has both — the analytics layer is best-effort so a missing
@@ -110,7 +110,7 @@ assert(!badSnapshotOrderBy, 'recentActivity() ORDER BY sorts by created_at only'
 
   // ---- Test 1: seed + group membership gate ----
   console.log('\nTest 1: seed + group membership gate');
-  // PHA-2556: the seeded wall is now 'household' (visibility=group,
+  // #2556: the seeded wall is now 'household' (visibility=group,
   // group_name=household). brandon + emily + admin are all in
   // 'household' from lib/user-model.js's seed, so assertMember passes
   // immediately — that's the user-visible acceptance criterion.
@@ -128,7 +128,7 @@ assert(!badSnapshotOrderBy, 'recentActivity() ORDER BY sorts by created_at only'
 
   // ---- Test 2: admin createWall + adminAddMember machinery ----
   console.log('\nTest 2: admin createWall + member management');
-  // PHA-2556: validateWallInput rejects bad input, createWall inserts
+  // #2556: validateWallInput rejects bad input, createWall inserts
   // the row, adminAddMember is idempotent and group-aware.
   assertThrowsStatus(() => walls.createWall(db, admin.id, { slug: 'Bad Slug!', name: 'X', visibility: 'group', group_name: 'household' }), 400, 'createWall rejects bad slug');
   assertThrowsStatus(() => walls.createWall(db, admin.id, { slug: 'ok', name: '', visibility: 'group', group_name: 'household' }), 400, 'createWall rejects empty name');
@@ -263,7 +263,7 @@ assert(!badSnapshotOrderBy, 'recentActivity() ORDER BY sorts by created_at only'
 
   assertThrowsStatus(() => walls.createComment(p2.id, stranger.id, 'nope'), 404, 'non-member cannot comment');
 
-  // ---- Test 8: activity-feed wiring (PHA-2153) ----
+  // ---- Test 8: activity-feed wiring (#2153) ----
   console.log('\nTest 8: activity-feed wiring');
   const snapshot = require('../lib/snapshot');
   const notifications = require('../lib/notifications');
@@ -291,8 +291,8 @@ assert(!badSnapshotOrderBy, 'recentActivity() ORDER BY sorts by created_at only'
   const selfRow = brandonActivity.find((a) => a.tag === `wall_post:household:bundle`);
   assert(!selfRow, 'author does not get an activity row for their own post');
 
-  // ---- Test 9: PHA-2218 default level gates plain activity ----
-  console.log('\nTest 9: PHA-2218 default level (mentions) suppresses a plain post');
+  // ---- Test 9: #2218 default level gates plain activity ----
+  console.log('\nTest 9: #2218 default level (mentions) suppresses a plain post');
   db.prepare("INSERT OR IGNORE INTO users (username, display, color, pass_hash, is_admin) VALUES ('kevin','Kevin','#111',?,0)").run('x');
   const kevin = db.prepare('SELECT id FROM users WHERE username = ?').get('kevin');
   // Put kevin in the household group so he's a wall member, then

@@ -1,4 +1,4 @@
-// PHA-2648 — CI wrapper around scripts/seed-porch-smoke.mjs.
+// #2648 — CI wrapper around scripts/seed-porch-smoke.mjs.
 //
 // The seed script is also runnable standalone (`npm run smoke:porch`) with
 // its own pass/fail counters and a printed evidence bundle — useful for a
@@ -15,7 +15,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runSmoke } from '../../scripts/seed-porch-smoke.mjs';
 
-test('PHA-2648 Porch DoD smoke: throwaway post + agent reaction with specific-reference verification', async () => {
+test('#2648 Porch DoD smoke: throwaway post + agent reaction with specific-reference verification', async () => {
   const result = await runSmoke();
 
   assert.equal(result.fail, 0, `seed-porch-smoke reported failures: ${result.failures.join(', ')}`);

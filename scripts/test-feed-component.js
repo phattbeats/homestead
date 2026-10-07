@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// PHA-2200.5 / PHA-2206 — Feed component acceptance test.
+// #2200.5 / #2206 — Feed component acceptance test.
 //
 // Exercises the placement-agnostic feed component extracted from
-// porch.js (PHA-2151). Two layers:
+// porch.js (#2151). Two layers:
 //
 //   1. Pure-helper unit tests via vm.runInContext — runs the inlined
 //      helpers from public/components/feed.js in a Node sandbox with
-//      mocked DOM/window globals. This is the same boundary PHA-2219
+//      mocked DOM/window globals. This is the same boundary #2219
 //      used for its inlined install-coach helpers, and matches the
 //      "vanilla JS, no build" reality of Homestead's public/ folder.
 //
@@ -108,8 +108,8 @@ assert(/components\/feed\.js/.test(indexHtml), 'index.html loads /components/fee
 assert(/components\/feed\.js/.test(swSrc), 'sw.js precaches /components/feed.js');
 
 // Size budget — the component must stay small (vanilla JS, no framework).
-// Bumped from 40 KB to 50 KB during PHA-2846 cleanup: PHA-2657 (delete-own-post)
-// tipped it to 40,862 bytes and PHA-2831 (Hearth on the Porch) to 41,248.
+// Bumped from 40 KB to 50 KB during #2846 cleanup: #2657 (delete-own-post)
+// tipped it to 40,862 bytes and #2831 (Hearth on the Porch) to 41,248.
 // 50 KB is the next clean plateau; reconfirm when the next 5 KB tier is hit.
 const FEED_COMPONENT_MAX_BYTES = 50 * 1024;
 const componentBytes = componentSrc.length;
@@ -267,7 +267,7 @@ process.env.NODE_ENV = 'production';
       'served /components/feed.js exposes window.HomesteadFeed');
 
     // Login + ensure brandon is in household (the seeded wall).
-    // PHA-2556: brandon is already in household via lib/user-model.js's
+    // #2556: brandon is already in household via lib/user-model.js's
     // seed — no DB write needed.
     const brandonCookie = await login('brandon', 'feed-test-brandon-pw');
 
@@ -302,7 +302,7 @@ process.env.NODE_ENV = 'production';
     });
     assertEq(r6.status, 200, 'POST comment returns 200');
 
-    // PHA-2656: notifyLevel <select> save/load round trip. feed.js's
+    // #2656: notifyLevel <select> save/load round trip. feed.js's
     // #notifyLevel dropdown was rendered but never wired to a save handler
     // (decorative-only). It now GETs on boot/wall-switch and PUTs on
     // change — exercise the exact request pair it issues, and confirm the

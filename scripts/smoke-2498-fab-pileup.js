@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2498 (UX batch #2) smoke: FAB pileup must be resolved.
+// #2498 (UX batch #2) smoke: FAB pileup must be resolved.
 //
 // Previously two competing circular buttons lived in the bottom-right
 // corner (#fab and #drawerFab). On a 390px screen they stacked on top
@@ -82,7 +82,7 @@ async function main() {
 
     await page.waitForSelector('#app', { state: 'visible', timeout: 10000 });
 
-    // PHA-2584: a first-run user sees the welcome sheet on login.
+    // #2584: a first-run user sees the welcome sheet on login.
     // The sheet is a `#modal.on` overlay that intercepts pointer
     // events across the entire viewport — meaning the nav click
     // (`button[data-p="tasks"]` below) would never reach the button
@@ -102,7 +102,7 @@ async function main() {
         null,
         { timeout: 5000 },
       );
-      console.log('✓ dismissed first-run welcome sheet (PHA-2584) so nav clicks land');
+      console.log('✓ dismissed first-run welcome sheet (#2584) so nav clicks land');
     } catch (_) {
       console.log('✓ no first-run welcome sheet present (admin already completed first-run)');
     }

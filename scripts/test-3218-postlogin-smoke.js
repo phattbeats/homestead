@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// PHA-3218 regression: a standalone post-login smoke must boot a real
+// #3218 regression: a standalone post-login smoke must boot a real
 // Homestead instance and retain the post-login session while it loads the
-// SPA. PHA-3200 made production cookies Secure; the smoke talks to its
+// SPA. #3200 made production cookies Secure; the smoke talks to its
 // scratch instance over plain HTTP and therefore sets the explicit
 // test-only transport opt-out before requiring server.js.
 
@@ -125,7 +125,7 @@ async function main() {
     await stopServer();
   }
 
-  console.log('PHA-3218: post-login session transport contract passes');
+  console.log('#3218: post-login session transport contract passes');
 }
 
 main().catch((error) => {

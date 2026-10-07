@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-1620 calendar-sources smoke test (v1): boot server.js in-process
+// #1620 calendar-sources smoke test (v1): boot server.js in-process
 // with a fake CalDAV server, mint an admin session via /api/login, add
 // a calendar source, kick a refresh, hit /api/events/merged, and
 // verify the provider events flow through. Designed to fail loudly
@@ -33,7 +33,7 @@ if (!process.env.CALENDAR_CRED_KEY) {
 }
 
 // ---- 1. Boot a tiny fake CalDAV server on a free port ---------------
-// PHA-1866: the fake now also handles PUT/DELETE for write-back so the
+// #1866: the fake now also handles PUT/DELETE for write-back so the
 // round-trip create → update → delete flow can be exercised end-to-end
 // against the provider sandbox. The server keeps an in-memory list of
 // created events so the next REPORT returns them alongside the seed.
@@ -209,7 +209,7 @@ function assertEq(actual, expected, label) {
     const calDavBody = JSON.stringify(calDavHits);
     assert(!calDavBody.includes(APP_PW), 'plaintext app_password never appears in any CalDAV request body or URL');
 
-    // ---- PHA-1866: Phase 2 write-back round-trip ----
+    // ---- #1866: Phase 2 write-back round-trip ----
     // Create an event on the provider, verify it surfaces in the merged
     // feed, update it, verify the update, then delete it and verify
     // the deletion. The fake CalDAV server keeps the new event in

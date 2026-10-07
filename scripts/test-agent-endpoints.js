@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-1617.4 acceptance tests for lib/agent-endpoints.js.
+// #1617.4 acceptance tests for lib/agent-endpoints.js.
 //
 // Drives `lib/agent-endpoints.js` directly against a temp SQLite file
 // (plus a supertest-free HTTP integration test of the /api/agent-endpoints
@@ -39,7 +39,7 @@ function freshDb() {
   return { db, tmpDir };
 }
 
-console.log('PHA-1617.4 agent-endpoints tests\n');
+console.log('#1617.4 agent-endpoints tests\n');
 
 // ---- Test 1: create() returns HMAC secret plaintext once ----
 {

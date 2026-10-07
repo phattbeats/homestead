@@ -1,16 +1,16 @@
 #!/usr/bin/env node
-// PHA-3206: `npm test` runner — discover and run every `scripts/test-*.js`
+// #3206: `npm test` runner — discover and run every `scripts/test-*.js`
 // and every `test/**/*.test.mjs` without manual `&&` chains in package.json.
 //
 // Replaces the 5,242-character `&&` chain in package.json's `"test"` script.
 // Adding a new `scripts/test-foo.js` now runs on `npm test` with **zero**
 // package.json edits — fixing the silent-skip class of regression that bit
-// PHA-2883 (events route shipped 404 while `scripts/test-companion-cli.js`
+// #2883 (events route shipped 404 while `scripts/test-companion-cli.js`
 // went green against a throwaway listener).
 //
 // Behavior parity with the old chain:
 //   - Sequential (matches the `&&` semantics: stop at first failure).
-//   - Each script gets the PHA-3200 bootstrap shim via `--require`.
+//   - Each script gets the #3200 bootstrap shim via `--require`.
 //   - Pass/fail exit code matches the script's own `process.exit`.
 //   - Prints the failing script name + exit code, then exits non-zero.
 //
@@ -52,7 +52,7 @@ const porchDir = path.join(repoRoot, 'test', 'porch');
 const bootstrap = path.join(__dirname, '_test-bootstrap.js');
 
 if (!fs.existsSync(bootstrap)) {
-  console.error(`PHA-3206: bootstrap shim missing at ${bootstrap}`);
+  console.error(`#3206: bootstrap shim missing at ${bootstrap}`);
   process.exit(2);
 }
 
@@ -65,7 +65,7 @@ const testFiles = entries
   .sort();
 
 if (testFiles.length === 0) {
-  console.error('PHA-3206: no scripts/test-*.js files matched. Aborting.');
+  console.error('#3206: no scripts/test-*.js files matched. Aborting.');
   console.error('         cwd:', process.cwd());
   console.error('         scanned:', scriptsDir);
   process.exit(2);
@@ -78,14 +78,14 @@ if (testFiles.length === 0) {
 const MIN_EXPECTED = 50;
 if (testFiles.length < MIN_EXPECTED) {
   console.error(
-    `PHA-3206: glob matched ${testFiles.length} files, expected >= ${MIN_EXPECTED}. ` +
+    `#3206: glob matched ${testFiles.length} files, expected >= ${MIN_EXPECTED}. ` +
       'A test file probably moved or was deleted without updating this floor. ' +
       'If intentional, update MIN_EXPECTED in scripts/run-tests.js.'
   );
   process.exit(2);
 }
 
-console.log(`PHA-3206 runner: ${testFiles.length} scripts/test-*.js + porch tests`);
+console.log(`#3206 runner: ${testFiles.length} scripts/test-*.js + porch tests`);
 
 // ----- Run each script sequentially with the bootstrap shim ----------------
 
@@ -120,7 +120,7 @@ function runOne(rel) {
     });
     child.on('error', (err) => {
       clearTimeout(killTimer);
-      console.error(`PHA-3206: spawn error for ${rel}: ${err.message}`);
+      console.error(`#3206: spawn error for ${rel}: ${err.message}`);
       resolve({ status: 1, killed: false, ms: Date.now() - t0 });
     });
   });
@@ -137,10 +137,10 @@ async function main() {
       failed += 1;
       if (r.killed) {
         console.error(
-          `\nPHA-3206: ${rel} killed after ${SCRIPT_TIMEOUT_MS}ms wall-clock (hang or stuck I/O)`
+          `\n#3206: ${rel} killed after ${SCRIPT_TIMEOUT_MS}ms wall-clock (hang or stuck I/O)`
         );
       } else {
-        console.error(`\nPHA-3206: ${rel} exited with code ${r.status} in ${r.ms}ms`);
+        console.error(`\n#3206: ${rel} exited with code ${r.status} in ${r.ms}ms`);
       }
       console.error('Aborting remaining tests (matches `&&` chain semantics).');
       break;
@@ -148,7 +148,7 @@ async function main() {
   }
 
   if (failed > 0) {
-    console.error(`\nPHA-3206: ${failed} test script(s) failed in ${Date.now() - t0}ms`);
+    console.error(`\n#3206: ${failed} test script(s) failed in ${Date.now() - t0}ms`);
     process.exit(1);
   }
 
@@ -163,7 +163,7 @@ async function main() {
 
     if (mjsFiles.length > 0) {
       console.log(`\n=== porch (node --test, ${mjsFiles.length} files) ===`);
-      // PHA-3206: pass --require so the PHA-3200 bootstrap shim
+      // #3206: pass --require so the #3200 bootstrap shim
       // sets SESSION_SECRET / HOMESTEAD_INSECURE_TEST_COOKIES / NODE_ENV
       // before any test module imports server.js. Without it the
       // fail-closed loadSessionSecret throws "too short" on the porch
@@ -174,16 +174,16 @@ async function main() {
         env: process.env,
       });
       if (r.status !== 0) {
-        console.error(`\nPHA-3206: porch tests exited with code ${r.status}`);
+        console.error(`\n#3206: porch tests exited with code ${r.status}`);
         process.exit(1);
       }
     }
   }
 
-  console.log(`\nPHA-3206: all tests passed in ${Date.now() - t0}ms`);
+  console.log(`\n#3206: all tests passed in ${Date.now() - t0}ms`);
 }
 
 main().catch((e) => {
-  console.error('PHA-3206 runner crashed:', e && e.stack || e);
+  console.error('#3206 runner crashed:', e && e.stack || e);
   process.exit(2);
 });

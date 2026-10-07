@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2584 acceptance smoke: fresh DB → boot → log in as brandon →
+// #2584 acceptance smoke: fresh DB → boot → log in as brandon →
 // the first-run welcome sheet is actually visible (modal gets the
 // .on class) → screenshot → dismiss → POST first-run-complete →
 // /api/me returns first_run:false → screenshot.

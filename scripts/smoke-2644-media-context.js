@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PHATT Tech LLC
 
-// PHA-2644 end-to-end smoke: boot server.js from a clean DATA_DIR,
+// #2644 end-to-end smoke: boot server.js from a clean DATA_DIR,
 // log in as brandon, upload an image (with caption) + a synthetic
 // video, hit /api/media/:id/context on both, capture the JSON
 // responses into verify-out/. Curl transcript is the durable

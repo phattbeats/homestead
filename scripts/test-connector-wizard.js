@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-2448 acceptance tests: shipped templates + wizard validation/preview.
+// #2448 acceptance tests: shipped templates + wizard validation/preview.
 'use strict';
 
 const wizard = require('../lib/connector-wizard');
@@ -9,7 +9,7 @@ let pass = 0; let fail = 0;
 function check(ok, label) { if (ok) { pass++; console.log(`  ✓ ${label}`); } else { fail++; console.log(`  ✗ ${label}`); } }
 function throws(fn, code, label) { try { fn(); check(false, label); } catch (e) { check(e.code === code || (e.message || '').includes(code), label); } }
 
-console.log('PHA-2448 Connector Forge wizard tests');
+console.log('#2448 Connector Forge wizard tests');
 for (const t of templates.listTemplates()) {
   const r = wizard.validate(t.id, { baseUrl: t.defaults.baseUrl, secretRef: t.defaults.secretRef, apiKey: 'test-key', installName: `My ${t.name}` });
   check(r.spec.schema === 'homestead.connector/v1', `${t.name} ships a versioned ConnectorSpec`);

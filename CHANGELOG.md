@@ -1,39 +1,39 @@
-## v0.5.24 (2026-09-07) — fix missing routes/ in runtime image (PHA-3327)
+## v0.5.24 (2026-09-07) — fix missing routes/ in runtime image (#3327)
 
-**PHA-3327:** same failure class as v0.5.20's `jobs/` miss. Router extraction (PHA-3214's `routes/health.js`, then `routes/agent-connections.js`) moved `server.js` dependencies into `routes/`, but the Dockerfile's runtime stage never `COPY`'d that directory, so the container crash-looped on boot (`Cannot find module './routes/agent-connections'`) — this is what took prod down this morning. Fix is `COPY routes ./routes` alongside the existing `lib`/`jobs`/`public` copies, plus `scripts/test-dockerfile-runtime-routes.js` to catch the next router extraction before it ships the same way. Version jumps from v0.5.20 to v0.5.24: tags v0.5.21–v0.5.23 exist on GitHub pointing at earlier untagged-in-`package.json` commits (never bumped here), so this release claims the next free number rather than reusing one.
+**#3327:** same failure class as v0.5.20's `jobs/` miss. Router extraction (#3214's `routes/health.js`, then `routes/agent-connections.js`) moved `server.js` dependencies into `routes/`, but the Dockerfile's runtime stage never `COPY`'d that directory, so the container crash-looped on boot (`Cannot find module './routes/agent-connections'`) — this is what took prod down this morning. Fix is `COPY routes ./routes` alongside the existing `lib`/`jobs`/`public` copies, plus `scripts/test-dockerfile-runtime-routes.js` to catch the next router extraction before it ships the same way. Version jumps from v0.5.20 to v0.5.24: tags v0.5.21–v0.5.23 exist on GitHub pointing at earlier untagged-in-`package.json` commits (never bumped here), so this release claims the next free number rather than reusing one.
 
-## Unreleased — npm test runner: discover every test, not just the ones someone remembered to splice in (PHA-3206)
+## Unreleased — npm test runner: discover every test, not just the ones someone remembered to splice in (#3206)
 
-**PHA-3206:** replaces the 5,242-character `&&` chain in `package.json` `"test"` with `node scripts/run-tests.js` — a tiny glob-discovery runner that picks up every `scripts/test-*.js` and every `test/porch/*.test.mjs` automatically, exits non-zero on first failure, enforces a 50-file floor so an empty glob can't "pass", and applies a per-script 120s wall-clock timeout so a hanging test can't burn the 6-hour CI window. Adding a new `scripts/test-foo.js` now runs on `npm test` with **zero package.json edits**.
+**#3206:** replaces the 5,242-character `&&` chain in `package.json` `"test"` with `node scripts/run-tests.js` — a tiny glob-discovery runner that picks up every `scripts/test-*.js` and every `test/porch/*.test.mjs` automatically, exits non-zero on first failure, enforces a 50-file floor so an empty glob can't "pass", and applies a per-script 120s wall-clock timeout so a hanging test can't burn the 6-hour CI window. Adding a new `scripts/test-foo.js` now runs on `npm test` with **zero package.json edits**.
 
-**Why it matters (the bug it fixes):** the OLD chain had a silent-skip class of regression. Any test not spliced into the `&&` string didn't run in CI. PHA-2883 was the canonical hit — `scripts/test-companion-cli.js` went green against a throwaway listener while prod `POST /api/agent-connections/:id/events` was 404, because the events route test was never appended to the chain. Discovery is the durable fix.
+**Why it matters (the bug it fixes):** the OLD chain had a silent-skip class of regression. Any test not spliced into the `&&` string didn't run in CI. #2883 was the canonical hit — `scripts/test-companion-cli.js` went green against a throwaway listener while prod `POST /api/agent-connections/:id/events` was 404, because the events route test was never appended to the chain. Discovery is the durable fix.
 
 **Latent test bugs the runner surfaced on first CI run** (all fixed in the same PR):
 
 - `scripts/test-companion-cli.js` — `execFileSync` hangs indefinitely on this Node version; switched to `spawn` + Promise + explicit `process.exit(0)`.
 - `scripts/test-pa-2201-install.js` — test assumed a `media-club` wall row exists; `lib/walls.js#seed()` only creates the `household` wall, so the media-club GROUP row had no wall referencing it. Test now seeds the wall fixture the same way it already seeds the family wall.
-- `test/porch/*.test.mjs` — the porch `node --test` invocation wasn't getting `--require ./scripts/_test-bootstrap.js`, so `loadSessionSecret` failed-closed under PHA-3200. Plus `scripts/seed-porch-smoke.mjs` unconditionally set `SESSION_SECRET = 'porch-…cret'` (17 chars); bumped to a 63-char string.
+- `test/porch/*.test.mjs` — the porch `node --test` invocation wasn't getting `--require ./scripts/_test-bootstrap.js`, so `loadSessionSecret` failed-closed under #3200. Plus `scripts/seed-porch-smoke.mjs` unconditionally set `SESSION_SECRET = 'porch-…cret'` (17 chars); bumped to a 63-char string.
 - `scripts/seed-porch-smoke.mjs` vote-off section — wrong button class (`agent-vote-off` vs the actual `vote-off`), `postHtml` called with 1 arg instead of 3 so the `isAgent && isAdmin` branch never rendered, opt-out endpoint is `requireAdmin`-gated but the test called it as `brandonCookie`, and opt-out clear is `POST .../opt-in` not `DELETE .../opt-out`.
 
 **Discovery property verified:** 70 `scripts/test-*.js` + 2 `test/porch/*.test.mjs` all run under the new runner (vs 66 + 1 under the OLD chain — 4 tests were silently skipped). CI green: https://github.com/phattbeats/homestead/actions/runs/34112336092 (test pass + validate-commit-range pass). Merged via squash PR #139 → `92954cec`.
 
 **Compatibility:** the existing `scripts/test-*.js` files were not rewritten — they remain the per-PHA evidence. The runner just discovers them. `test:smoke` and `scripts/verify.sh` stay separate (need a booted instance).
 
-## v0.5.20 (2026-09-05) — fix missing jobs/ in runtime image (PHA-2853)
+## v0.5.20 (2026-09-05) — fix missing jobs/ in runtime image (#2853)
 
-**PHA-2853 follow-up:** v0.5.19 shipped `require('./jobs/gazette-daily')` in `server.js` but the Dockerfile's runtime stage never `COPY`'d the new `jobs/` directory, so the container crash-looped on boot (`Cannot find module './jobs/gazette-daily'`) the moment it was deployed. Caught while getting a live screenshot for PHA-2853's own acceptance criteria — the fix is one line: `COPY jobs ./jobs` alongside the existing `lib`/`public` copies.
+**#2853 follow-up:** v0.5.19 shipped `require('./jobs/gazette-daily')` in `server.js` but the Dockerfile's runtime stage never `COPY`'d the new `jobs/` directory, so the container crash-looped on boot (`Cannot find module './jobs/gazette-daily'`) the moment it was deployed. Caught while getting a live screenshot for #2853's own acceptance criteria — the fix is one line: `COPY jobs ./jobs` alongside the existing `lib`/`public` copies.
 
-## v0.5.19 (2026-09-05) — Gazette typed cron+back-issue design (PHA-2853)
+## v0.5.19 (2026-09-05) — Gazette typed cron+back-issue design (#2853)
 
-**PHA-2853:** ships PR #133 — the typed `gazette_issues` pipeline, `jobs/gazette-daily.js` cron, `GET /api/gazette/today` and `/api/gazette/:date`, `POST /api/gazette/ask`, and the standalone `public/gazette.html` page (masthead, Rotation Desk, Arts & Media, The Porch, Today's Listings). Sits alongside the existing PHA-2659 agent-authored `/api/me/gazette/today` sheet rather than replacing it. Feature-gated behind the `gazette` module (`default_enabled: false`) for internal dogfooding before wider rollout.
+**#2853:** ships PR #133 — the typed `gazette_issues` pipeline, `jobs/gazette-daily.js` cron, `GET /api/gazette/today` and `/api/gazette/:date`, `POST /api/gazette/ask`, and the standalone `public/gazette.html` page (masthead, Rotation Desk, Arts & Media, The Porch, Today's Listings). Sits alongside the existing #2659 agent-authored `/api/me/gazette/today` sheet rather than replacing it. Feature-gated behind the `gazette` module (`default_enabled: false`) for internal dogfooding before wider rollout.
 
-## v0.5.18 (2026-09-05) — CD recipe, companion CLI, Gazette room listings (PHA-3083)
+## v0.5.18 (2026-09-05) — CD recipe, companion CLI, Gazette room listings (#3083)
 
-**PHA-3083:** first tagged deploy since v0.5.8 went live. Merges: PR #130 (PHA-2971, simplified CD — drop auto-tag CI workflow, tag manually), PR #124 (PHA-2881, companion-side pairing protocol + reference CLI), and PR #132 (PHA-2853, Gazette listings keyed by house room). Also rolls up the accumulated Hearth actions, Gazette, and visual-asset work below that was sitting unreleased.
+**#3083:** first tagged deploy since v0.5.8 went live. Merges: PR #130 (#2971, simplified CD — drop auto-tag CI workflow, tag manually), PR #124 (#2881, companion-side pairing protocol + reference CLI), and PR #132 (#2853, Gazette listings keyed by house room). Also rolls up the accumulated Hearth actions, Gazette, and visual-asset work below that was sitting unreleased.
 
-## Unreleased — Hearth can act, not just talk (PHA-2851)
+## Unreleased — Hearth can act, not just talk (#2851)
 
-**PHA-2851:** the drawer demo promised Hearth could take real action across the house ("queue Part Two", "tell him the meme was mid"), but the server-side runtime (PHA-2830) shipped text-only — no tool calls, nothing behind the promise. Hearth now has an inbound action surface.
+**#2851:** the drawer demo promised Hearth could take real action across the house ("queue Part Two", "tell him the meme was mid"), but the server-side runtime (#2830) shipped text-only — no tool calls, nothing behind the promise. Hearth now has an inbound action surface.
 
 - **Two house-actions.** `lib/hearth-actions.js` — `enqueue_media` (writes a `media_queue` row and announces it on the caller's default wall) and `mention_user` (posts an `@`-mention on a wall the two share, through the existing mention/notification machinery). Not an MCP server host: these are Hearth's own first-party actions, and third-party tool registration stays out of scope.
 - **`set_lights` deliberately not shipped.** The porch has no lights integration and the screenshot never promised one. An endpoint that returns `ok` for hardware nobody wired is the exact failure this issue exists to fix.
@@ -44,40 +44,40 @@
 - **Not shipped: email.** The issue's acceptance mentions "notification row + email". This repo has no mail transport — no SMTP config, no sender identity. The wired delivery surface is the notification row plus web-push. Adding a mailer is its own issue, not a no-op that reports "sent".
 - Analytics gains `hearth_action_invoked` / `hearth_action_failed` (closed enum, now 25 kinds). Acceptance: `scripts/test-2851-hearth-actions.js` (77 assertions).
 
-## Unreleased — Homestead visual asset pack + canonical opening-door repair (PHA-2846)
+## Unreleased — Homestead visual asset pack + canonical opening-door repair (#2846)
 
-**PHA-2846 follow-up:** Brandon reopened PHA-2846 (`live on prod?` then `its not fixed everywehre`) pointing out that the persistent bottom-nav across `/` and `/porch.html` still rendered emoji literals (`🏠 ✓ 📝 📅 🛰️ 📸`) and that the favicon needed to land on the canonical icon. v0.5.9 (PR #115) shipped the canonical opening-door + Add Rooms SVG icons but left the bottom-nav on its emoji defaults because that nav predated PHA-2209's no-hardcoded-keys audit. v0.5.10 layers the bottom-nav onto the same canonical asset set without re-shipping any module icon.
-
-- **Bottom-nav icon migration.** `public/index.html` replaces the six emoji `<span class="ico">🏠</span>` literals with `<span class="ico"><img src="/icon.svg" alt="" width="22" height="22"></span>` (and one of the six built-in module SVGs for each module-backed tab). Mapping: `home` → `/icon.svg` (canonical opening-door, same file `/favicon.svg` serves), `tasks` → `/modules/chores.svg`, `r-lists` → `/modules/lists.svg`, `r-calendar` → `/modules/calendar.svg`, `svc` → `/modules/apps.svg`, `porch` → `/modules/porch.svg`. No new assets for those tabs — the SVGs already shipped in v0.5.9.
-- **Nav CSS rule update.** `public/index.html` line 184 adds `nav .ico{display:inline-flex;align-items:center;justify-content:center;line-height:1;width:24px;height:24px}` and `nav .ico img{display:block;width:22px;height:22px;object-fit:contain}` so the SVG renders at the same visual size the emoji (font-size:20px) used. `gap:3px` between icon and label is preserved.
-- **Favicon alternate PNG.** `public/favicon-32.png` (32×32 PNG, MD5 `1b94b09d…`) generated from `public/icon.svg` via `rsvg-convert` for browsers that ask `/favicon.ico` before `/favicon.svg`. `public/index.html` `<head>` adds `<link rel="alternate icon" href="/favicon-32.png" type="image/png" sizes="32x32">` and `<link rel="apple-touch-icon" href="/icon-512.png">` so iOS Safari's home-screen install path (which doesn't accept SVG) also shows the canonical mark.
-- **Service worker cache bump.** `public/sw.js` bumps from `homestead-v5` to `homestead-v6`. v5 is dropped on `activate`, which guarantees a returning PWA user doesn't keep the emoji tab bar offline. New asset `/favicon-32.png` added to `PRECACHE_URLS`.
-
-## Unreleased — bottom-nav icon migration to canonical opening-door + module SVGs (PHA-2846 / v0.5.10)
-
-**PHA-2846 follow-up:** Brandon reopened PHA-2846 (`live on prod?` then `its not fixed everywehre`) pointing out that the persistent bottom-nav across `/` and `/porch.html` still rendered emoji literals (`🏠 ✓ 📝 📅 🛰️ 📸`) and that the favicon needed to land on the canonical icon. v0.5.9 (PR #115) shipped the canonical opening-door + Add Rooms SVG icons but left the bottom-nav on its emoji defaults because that nav predated PHA-2209's no-hardcoded-keys audit. v0.5.10 layers the bottom-nav onto the same canonical asset set without re-shipping any module icon.
+**#2846 follow-up:** Brandon reopened #2846 (`live on prod?` then `its not fixed everywehre`) pointing out that the persistent bottom-nav across `/` and `/porch.html` still rendered emoji literals (`🏠 ✓ 📝 📅 🛰️ 📸`) and that the favicon needed to land on the canonical icon. v0.5.9 (PR #115) shipped the canonical opening-door + Add Rooms SVG icons but left the bottom-nav on its emoji defaults because that nav predated #2209's no-hardcoded-keys audit. v0.5.10 layers the bottom-nav onto the same canonical asset set without re-shipping any module icon.
 
 - **Bottom-nav icon migration.** `public/index.html` replaces the six emoji `<span class="ico">🏠</span>` literals with `<span class="ico"><img src="/icon.svg" alt="" width="22" height="22"></span>` (and one of the six built-in module SVGs for each module-backed tab). Mapping: `home` → `/icon.svg` (canonical opening-door, same file `/favicon.svg` serves), `tasks` → `/modules/chores.svg`, `r-lists` → `/modules/lists.svg`, `r-calendar` → `/modules/calendar.svg`, `svc` → `/modules/apps.svg`, `porch` → `/modules/porch.svg`. No new assets for those tabs — the SVGs already shipped in v0.5.9.
 - **Nav CSS rule update.** `public/index.html` line 184 adds `nav .ico{display:inline-flex;align-items:center;justify-content:center;line-height:1;width:24px;height:24px}` and `nav .ico img{display:block;width:22px;height:22px;object-fit:contain}` so the SVG renders at the same visual size the emoji (font-size:20px) used. `gap:3px` between icon and label is preserved.
 - **Favicon alternate PNG.** `public/favicon-32.png` (32×32 PNG, MD5 `1b94b09d…`) generated from `public/icon.svg` via `rsvg-convert` for browsers that ask `/favicon.ico` before `/favicon.svg`. `public/index.html` `<head>` adds `<link rel="alternate icon" href="/favicon-32.png" type="image/png" sizes="32x32">` and `<link rel="apple-touch-icon" href="/icon-512.png">` so iOS Safari's home-screen install path (which doesn't accept SVG) also shows the canonical mark.
 - **Service worker cache bump.** `public/sw.js` bumps from `homestead-v5` to `homestead-v6`. v5 is dropped on `activate`, which guarantees a returning PWA user doesn't keep the emoji tab bar offline. New asset `/favicon-32.png` added to `PRECACHE_URLS`.
 
-## Unreleased — The Homestead Gazette (PHA-2659)
+## Unreleased — bottom-nav icon migration to canonical opening-door + module SVGs (#2846 / v0.5.10)
 
-**PHA-2659:** the Gazette was on the teaser but had zero code in the repo — the product now catches up to its own advertising. A morning edition the user's own BYOK harness writes from what actually happened in the house, opened from a launcher beside the chat FAB, generated on the first open of the day and cached per user. Design record and divergences: `docs/GAZETTE-DESIGN.md`.
+**#2846 follow-up:** Brandon reopened #2846 (`live on prod?` then `its not fixed everywehre`) pointing out that the persistent bottom-nav across `/` and `/porch.html` still rendered emoji literals (`🏠 ✓ 📝 📅 🛰️ 📸`) and that the favicon needed to land on the canonical icon. v0.5.9 (PR #115) shipped the canonical opening-door + Add Rooms SVG icons but left the bottom-nav on its emoji defaults because that nav predated #2209's no-hardcoded-keys audit. v0.5.10 layers the bottom-nav onto the same canonical asset set without re-shipping any module icon.
+
+- **Bottom-nav icon migration.** `public/index.html` replaces the six emoji `<span class="ico">🏠</span>` literals with `<span class="ico"><img src="/icon.svg" alt="" width="22" height="22"></span>` (and one of the six built-in module SVGs for each module-backed tab). Mapping: `home` → `/icon.svg` (canonical opening-door, same file `/favicon.svg` serves), `tasks` → `/modules/chores.svg`, `r-lists` → `/modules/lists.svg`, `r-calendar` → `/modules/calendar.svg`, `svc` → `/modules/apps.svg`, `porch` → `/modules/porch.svg`. No new assets for those tabs — the SVGs already shipped in v0.5.9.
+- **Nav CSS rule update.** `public/index.html` line 184 adds `nav .ico{display:inline-flex;align-items:center;justify-content:center;line-height:1;width:24px;height:24px}` and `nav .ico img{display:block;width:22px;height:22px;object-fit:contain}` so the SVG renders at the same visual size the emoji (font-size:20px) used. `gap:3px` between icon and label is preserved.
+- **Favicon alternate PNG.** `public/favicon-32.png` (32×32 PNG, MD5 `1b94b09d…`) generated from `public/icon.svg` via `rsvg-convert` for browsers that ask `/favicon.ico` before `/favicon.svg`. `public/index.html` `<head>` adds `<link rel="alternate icon" href="/favicon-32.png" type="image/png" sizes="32x32">` and `<link rel="apple-touch-icon" href="/icon-512.png">` so iOS Safari's home-screen install path (which doesn't accept SVG) also shows the canonical mark.
+- **Service worker cache bump.** `public/sw.js` bumps from `homestead-v5` to `homestead-v6`. v5 is dropped on `activate`, which guarantees a returning PWA user doesn't keep the emoji tab bar offline. New asset `/favicon-32.png` added to `PRECACHE_URLS`.
+
+## Unreleased — The Homestead Gazette (#2659)
+
+**#2659:** the Gazette was on the teaser but had zero code in the repo — the product now catches up to its own advertising. A morning edition the user's own BYOK harness writes from what actually happened in the house, opened from a launcher beside the chat FAB, generated on the first open of the day and cached per user. Design record and divergences: `docs/GAZETTE-DESIGN.md`.
 
 - **Gazette is a module, not a perk.** Own registry key (`lib/modules.js`), own `user_modules` row, own add-a-room toggle — per the "users can add / remove it as a module just like everything else" instruction, which overrode the original "module-gated by `agent`" framing. It declares `requires: ['agent']` (no harness, no edition), so disabling the agent module while the Gazette is on trips the existing `dependents_active` 409 — a new edge in the existing dependency graph, no new cascade logic.
 - **New `open_mode: 'sheet'`.** Full-screen, non-nav, opened on demand. None of `frame`/`drawer`/`tab` fit. `computeLayout` emits enabled sheet modules in a new `sheets[]` array (derived from `open_mode`, never from a key literal) and the SPA renders one launcher per entry — a second sheet module needs no layout change.
 - **The `user_modules` CHECK constraint is now derived from the registry.** The hardcoded six-key literal was itself the drift that constraint existed to prevent. `migrate()` generates the CHECK from `modules.MODULE_KEYS`, compares it against the stored DDL on every boot, and does a table rebuild (SQLite cannot ALTER a CHECK in place) when they disagree — preserving rows, `enabled_at` semantics, and the index. Idempotent; the next module to land needs no migration work.
-- **Agent-authored, never templated.** `lib/gazette.js` assembles the context (the PHA-1902 snapshot plus overnight Porch activity, entity arrivals, and degraded tile health from `lib/health-checker.js`) and hands the VOICE.md rules to the harness directly — no separate editor persona, per VOICE.md Rule 2. `lib/agent-runtime.js` gains `composeGazette`, reusing the same provider wire as the drawer rather than opening a second LLM path.
+- **Agent-authored, never templated.** `lib/gazette.js` assembles the context (the #1902 snapshot plus overnight Porch activity, entity arrivals, and degraded tile health from `lib/health-checker.js`) and hands the VOICE.md rules to the harness directly — no separate editor persona, per VOICE.md Rule 2. `lib/agent-runtime.js` gains `composeGazette`, reusing the same provider wire as the drawer rather than opening a second LLM path.
 - **Thin-edition rule, enforced on both sides.** Sections with an empty context slice are never offered to the harness, and a brief the harness invents for one is dropped on parse. A day where nothing happened prints one line and never calls the provider at all. The layout reserves no space for absent sections.
 - **Editions are structured JSON, rendered through `esc()`.** Harness prose never reaches `innerHTML`. A failed generation caches as `unavailable` for the day (so a missing key doesn't re-dial the provider on every open) but is served `retryable` so the sheet explains itself and offers a re-run.
-- `GET /api/me/gazette/today` (`?refresh=1` to re-mint), gated by `requireModuleEnabled` — the same gate PHA-2811 put on `POST /api/tasks`.
-- `scripts/test-2659-gazette.js`: 73 assertions covering the registry entry, the layout payload, the CHECK rebuild against a downgraded pre-PHA-2659 database, section availability, parse-time whitelisting, and the route end-to-end (gate → cascade 409 → thin day → generate → cache hit → broken-harness recovery) against a fake SSE provider.
+- `GET /api/me/gazette/today` (`?refresh=1` to re-mint), gated by `requireModuleEnabled` — the same gate #2811 put on `POST /api/tasks`.
+- `scripts/test-2659-gazette.js`: 73 assertions covering the registry entry, the layout payload, the CHECK rebuild against a downgraded pre-#2659 database, section availability, parse-time whitelisting, and the route end-to-end (gate → cascade 409 → thin day → generate → cache hit → broken-harness recovery) against a fake SSE provider.
 
-## Unreleased — Homestead visual asset pack + canonical opening-door repair (PHA-2846 / v0.5.9)
+## Unreleased — Homestead visual asset pack + canonical opening-door repair (#2846 / v0.5.9)
 
-**PHA-2846:** the live header icon was a flat closed-arch mark that didn't match the canonical opening-door brand asset. The app also shipped inconsistent emoji icons in the Add Rooms picker and the Settings → Apps sheet for built-in modules. Brandon attached the canonical source art (the OUT NOW poster, two teasers, Hearth's avatar + corrected six-frame animation sheet, six module SVGs, the live-icon-mismatch screenshot).
+**#2846:** the live header icon was a flat closed-arch mark that didn't match the canonical opening-door brand asset. The app also shipped inconsistent emoji icons in the Add Rooms picker and the Settings → Apps sheet for built-in modules. Brandon attached the canonical source art (the OUT NOW poster, two teasers, Hearth's avatar + corrected six-frame animation sheet, six module SVGs, the live-icon-mismatch screenshot).
 
 - **Canonical opening-door mark.** `public/icon.svg`, `public/favicon.svg`, `public/icon-192.png`, `public/icon-512.png`, `public/icon-maskable.svg`, `public/icon-maskable-512.png` now derive from one canonical SVG (`public/icon.svg`). Composition: arched doorway reveal on the viewer-left, sage door slab hinged at the right jamb and swung open toward viewer-right, brass handle on the free right edge, warm amber hearth glow visible inside, dark olive rounded-square background. Maskable variant is scaled to fit the 70% safe-zone.
 - **Built-in module icons.** Six new SVGs under `public/modules/` (porch, lists, calendar, chores, apps, agent) — same brand palette (`#4b4624`, `#6d7b59`, `#f6e4c3`, `#ad5c05`, `#d49a40`) so they read as one household vocabulary. `lib/modules.js` registry's `icon` field is now a path string (`/modules/{key}.svg`); the 16-field contract is preserved (icon is still a non-empty string). The Add Rooms picker (`public/modules.html`) and the Settings → Apps sheet + App detail header (`public/index.html`) detect the `/modules/` prefix and render an `<img>`; third-party manifests still ship emoji strings and pass through as escaped text.
@@ -86,9 +86,9 @@
 - **Teasers (durable).** `docs/brand/teasers/teaser-out-now.png` and `docs/brand/teasers/teaser-add-rooms.png` placed in a versioned brand path with descriptive names.
 - **Asset index.** `docs/brand/ASSETS.md` written — single source of truth for which brand file is canonical and where it is consumed.
 
-## v0.5.17 (2026-09-05) — Wire POST /api/agent-connections/:id/events (PHA-3116)
+## v0.5.17 (2026-09-05) — Wire POST /api/agent-connections/:id/events (#3116)
 
-- **`server.js`** — PHA-3116: new route `POST /api/agent-connections/:id/events`
+- **`server.js`** — #3116: new route `POST /api/agent-connections/:id/events`
   authenticates the inbound companion CLI's `relay-one-event` calls via
   `agentConnections.verifySignature()` (HMAC-SHA256 over
   `timestamp + "." + rawBody`, same header trio as `agent-endpoints.js`'s
@@ -117,10 +117,10 @@
 
 ## v0.5.7 (2026-08-30) — Porch wall live-updates via SSE
 
-**PHA-2821:** first real two-human usage caught the wall not behaving like a
+**#2821:** first real two-human usage caught the wall not behaving like a
 shared room — Tyler posted, Brandon's open session showed nothing until a
 manual reload. Adds `GET /api/walls/:slug/events`, a long-lived SSE stream
-keyed per wall (`lib/wall-events.js`), reusing the wire format PHA-1899
+keyed per wall (`lib/wall-events.js`), reusing the wire format #1899
 established for the drawer rather than a second realtime mechanism.
 `walls.createPost`/`walls.createComment` publish after a successful write;
 `feed.js` opens a native `EventSource` per mounted wall, prepends new posts,
@@ -131,10 +131,10 @@ presence, and read receipts remain out of scope entirely.
 
 ## v0.5.6 (2026-08-30) — Discoverable add-a-room affordance on the wall-only funnel
 
-**PHA-2822:** first outside tester (Brandon + Tyler on PHA-2804) landed on the
+**#2822:** first outside tester (Brandon + Tyler on #2804) landed on the
 wall-only `/porch.html` shell and had no way to find or enable any other
 module — the door to `/modules.html` (already built, already wired to
-`/api/me/modules/:key/enable` via PHA-2205) only existed inside the SPA's
+`/api/me/modules/:key/enable` via #2205) only existed inside the SPA's
 `#page-wall` mount, which a brand-new single-module user never reaches
 because `boot()` redirects straight to the standalone shell. Adds a quiet
 "+ Add a room" text pill to that shell (`public/porch.html`,
@@ -147,14 +147,14 @@ ever needs to cover the single-module case.
 ## v0.5.5 (2026-08-30) — Brand system + BYOK modal fix + chore-module gate + wall notify wiring
 
 Rolls up everything landed on `main` since v0.5.4 for the real-usage feedback
-loop on PHA-2804: the brand system apply pass below, plus **PHA-2804: fix
+loop on #2804: the brand system apply pass below, plus **#2804: fix
 BYOK token modal stuck after Stored** (the modal no longer hangs after a
-successful token save), **PHA-2811: gate chore creation on the chores
+successful token save), **#2811: gate chore creation on the chores
 module being enabled** (fixes the orphaned "help me make homestad" chore
-Tyler couldn't close), and **PHA-2656: wire the wall notify-level dropdown**
+Tyler couldn't close), and **#2656: wire the wall notify-level dropdown**
 to `GET/PUT /api/walls/:slug/notifications`.
 
-## Homestead brand system lands (PHA-2777)
+## Homestead brand system lands (#2777)
 
 Brandon's canonical README (`vault/PHATT-TECH/Projects/homestead-app/canonical/homestead-logo-canonical.png`,
 locked 2026-08-28) makes the carved-wood lettering in the lockup the wordmark itself —
@@ -232,16 +232,16 @@ the tagline. Apply pass lands:
 Guardrails honored: body text stays Plus Jakarta Sans (readable sans);
 the painterly mark only lives on login, splash, store, and README —
 no teaser imagery in feeds, lists, settings, or Porch cards.
-## v0.5.4 (2026-08-29) — Link Authentik later: OIDC self-service identity linking (PHA-2706, landed via PHA-2719)
+## v0.5.4 (2026-08-29) — Link Authentik later: OIDC self-service identity linking (#2706, landed via #2719)
 
 The standalone-Homestead user who registered with username + password
 can now add Authentik (or any RFC-compliant OIDC provider) as a
 SECOND sign-in path without migrating or replacing their account.
-Built on top of PHA-2704's canonical identity foundation (which
-landed on `main` separately via PHA-2711 before this port). PHA-2706
+Built on top of #2704's canonical identity foundation (which
+landed on `main` separately via #2711 before this port). #2706
 was originally built on a stale point in history and never merged;
-PHA-2719 ports it forward onto current `main`, alongside the
-PHA-2708 owner-recovery cascade above.
+#2719 ports it forward onto current `main`, alongside the
+#2708 owner-recovery cascade above.
 
 ### What's new
 
@@ -288,7 +288,7 @@ PHA-2708 owner-recovery cascade above.
 - **`POST /api/me/identities/:linkId/unlink`** — self-service
   unlink by identity_links.id. Delegates to `identity.unlinkIdentity`
   so the no_login_path / would_lock_out_owner rules (the latter from
-  the PHA-2708 port above) are uniform across admin and self-service
+  the #2708 port above) are uniform across admin and self-service
   paths.
 - **`public/identities-link.html`** — three-screen SPA: start
   (verify local password + click Continue), confirm (names both
@@ -355,14 +355,14 @@ OIDC_SCOPES, OIDC_LINK_TTL_MS (default 600000 / 10min, max 15min),
 and OIDC_AUTHORIZE_URL / OIDC_TOKEN_URL / OIDC_ID_TOKEN_PEM are
 optional overrides.
 
-## v0.5.4 (2026-08-29) — Owner recovery: audited break-glass + Authentik outage resilience (PHA-2708, landed via PHA-2719)
+## v0.5.4 (2026-08-29) — Owner recovery: audited break-glass + Authentik outage resilience (#2708, landed via #2719)
 
-**Prevent another owner lockout.** Builds on the PHA-2704 identity
+**Prevent another owner lockout.** Builds on the #2704 identity
 foundation. The owner (`is_admin = 1`) is the household's break-glass
-target; PHA-2708 closes the three loops that made them lockable:
+target; #2708 closes the three loops that made them lockable:
 
 1. **Authentik unreachable** — owner still signs in via the LAN
-   password fallback (`/api/login` already worked; PHA-2708 ships
+   password fallback (`/api/login` already worked; #2708 ships
    tests for the outage path so we don't lose coverage).
 2. **Owner forgot the password** — new host-side CLI
    (`scripts/owner-recovery.js`) mints a 1h, one-shot,
@@ -374,24 +374,24 @@ target; PHA-2708 closes the three loops that made them lockable:
    (409). The owner recovery CLI is the only sanctioned way to
    rotate their local credential.
 
-PHA-2708 was originally built on a stale point in history and never
-merged; PHA-2719 ports the same feature forward onto current `main`.
+#2708 was originally built on a stale point in history and never
+merged; #2719 ports the same feature forward onto current `main`.
 In the meantime `main` had independently absorbed a general-purpose,
-any-user password-reset flow (PHA-2711:
+any-user password-reset flow (#2711:
 `scripts/reset-owner-password.js`, `POST /api/public/invites/reset`,
 `lib/invites.js` `createResetToken`/`consumeResetToken`) that shares
 a filename convention and the `local_credentials` table with this
-feature. To land both without collision, PHA-2708's storage was
+feature. To land both without collision, #2708's storage was
 moved to two DEDICATED columns — `owner_recovery_token_hash` /
 `owner_recovery_token_expires_at` — and its CLI was renamed to
-`scripts/owner-recovery.js`. PHA-2711's `reset-owner-password.js`
+`scripts/owner-recovery.js`. #2711's `reset-owner-password.js`
 and its `recovery_token_hash` / `recovery_token_expires_at` columns
 are untouched and remain the general-purpose reset path for
 non-owner accounts.
 
 ### What's new
 
-- **`lib/identity.js` PHA-2708 section.** Adds `findOwnerUserId`,
+- **`lib/identity.js` #2708 section.** Adds `findOwnerUserId`,
   `isOwner`, `mintOwnerRecoveryToken`, `clearOwnerRecoveryToken`,
   `consumeOwnerRecoveryToken`, `auditOwnerRecovery`, and
   `parseExpiresAt`/`parseIsoUtc`. Strengthens `unlinkIdentity` to
@@ -425,7 +425,7 @@ non-owner accounts.
 - **`docs/OWNER-RECOVERY.md`** — operational runbook. No hashes,
   tokens, or passwords. Maps every behavior to the test that
   guards it, and calls out how this mechanism differs from
-  PHA-2711's `reset-owner-password.js`.
+  #2711's `reset-owner-password.js`.
 
 ### Migration
 
@@ -433,7 +433,7 @@ Additive: `local_credentials` gains `owner_recovery_token_hash` and
 `owner_recovery_token_expires_at` columns via a guarded
 `ALTER TABLE ... ADD COLUMN`, applied once per install. The existing
 `recovery_token_hash` / `recovery_token_expires_at` columns are
-untouched and keep serving PHA-2711's general-purpose reset flow.
+untouched and keep serving #2711's general-purpose reset flow.
 
 ### Known Limitations
 
@@ -441,22 +441,22 @@ untouched and keep serving PHA-2711's general-purpose reset flow.
   model simple; the operator can wait for expiry or `--revoke`).
 - The recovery path is for the owner only. Family-member
   reset uses the existing `/api/users/:username/password`
-  admin path or PHA-2711's `reset-owner-password.js`.
+  admin path or #2711's `reset-owner-password.js`.
 - CLI does not validate the DB schema before writing. If you
   point it at a half-migrated DB, the helper functions throw
   but the row may have been written. Always take a backup
   before running on a production instance.
 
-## v0.5.3 (2026-08-29) — invite-redemption welcome screen (PHA-2707)
+## v0.5.3 (2026-08-29) — invite-redemption welcome screen (#2707)
 
-## v0.4.5 (2026-08-29) — Media-comprehension package (PHA-2644)
+## v0.4.5 (2026-08-29) — Media-comprehension package (#2644)
 
 **The Porch needs agents that can see, not just text-match.** A
 participation contract that only reads the caption misses the
 substance of a friend's post — a meme's joke, a video's
-scene-cut, the line someone actually said. PHA-2644 lands the
-comprehension package that the Porch trigger loop (PHA-2646) and
-identity UI (PHA-2647) will build on:
+scene-cut, the line someone actually said. #2644 lands the
+comprehension package that the Porch trigger loop (#2646) and
+identity UI (#2647) will build on:
 
 - **`lib/media.js`** — new `getMediaContext(id)` builds the
   comprehension package per media id: `{kind, file, thumb,
@@ -481,7 +481,7 @@ identity UI (PHA-2647) will build on:
   surfaced verbatim by both `publicView` and the comprehension
   package.
 - **`server.js`** — `GET /api/media/:id/context` mounted next to
-  the existing PHA-2149 routes (auth-gated). `GET
+  the existing #2149 routes (auth-gated). `GET
   /api/media-frames/:mediaId/:filename` serves extracted
   keyframes; both `mediaId` and `filename` are validated against
   `..` / `/` / `\` traversal before the path join. The upload
@@ -498,20 +498,20 @@ identity UI (PHA-2647) will build on:
   migration (`ALTER TABLE` against a v0.4.4-shape legacy DB
   via a child Node process so the module-level `_db` doesn't
   rebind mid-test). Wired into `npm test` adjacent to
-  `test-media.js` (PHA-2209 Amendment-3 ordering) and into
+  `test-media.js` (#2209 Amendment-3 ordering) and into
   `test:smoke`.
 - **`scripts/test-registry-no-hardcoded-keys.js`** — allow-list
   entry for the new test file (same category as the
-  PHA-2209 / PHA-2587 sibling acceptance tests).
+  #2209 / #2587 sibling acceptance tests).
 - **`package.json`** — version bump `0.4.4 → 0.4.5`.
 
 **Out of scope (deliberately):** entity extraction from the
 comprehension package (separate concern; goes via the
 entity-graph service), search indexing, and the agent
-participation trigger loop itself (covered by the PHA-2646
+participation trigger loop itself (covered by the #2646
 sibling).
 
-## v0.4.4 (2026-08-28) — Shared lists primitive lands + repo consolidation (PHA-2586 + PHA-2640)
+## v0.4.4 (2026-08-28) — Shared lists primitive lands + repo consolidation (#2586 + #2640)
 
 **Lists is no longer a dead-end.** Every seeded user had Lists
 enabled, but `GET /api/lists` returned 404 — the chip-row rendered
@@ -545,14 +545,14 @@ release lands the full shared-lists primitive:
   journey: a household user opens Lists on mobile (390×844), adds
   an item, screenshot lands in `verify-out/`. Wired into
   `verify.sh` step 6/7 and `.github/workflows/test.yml` as the
-  PHA-2586 acceptance smoke.
+  #2586 acceptance smoke.
 - **`README.md`** — Shared lists now documented as a first-class
   feature.
 - **`package.json`** — `test` chain gains `scripts/test-lists.js`
-  adjacent to `test-walls.js` (PHA-2209 Amendment-3 ordering).
+  adjacent to `test-walls.js` (#2209 Amendment-3 ordering).
   Version bump `0.4.3 → 0.4.4`.
 
-**Repo consolidation (PHA-2640).** Closed the last open PR
+**Repo consolidation (#2640).** Closed the last open PR
 (#76 lists primitive) and pruned 49 stale branches from `origin`
 whose owning issues were already `done`. Local clones no longer
 see pre-v0.3 release archaeology; the kept set is the active v0.3
@@ -560,12 +560,12 @@ modular stack and recent in-flight work.
 
 # Changelog
 
-## v0.4.3 (2026-08-25) — Layout-route contract repair (PHA-2587 + PHA-2588)
+## v0.4.3 (2026-08-25) — Layout-route contract repair (#2587 + #2588)
 
 `GET /api/me/layout` used to emit `/lists.html`, `/calendar.html`,
 `/chores.html`, `/apps.html`, `/onboarding.html` as `route` values —
 pages that have never existed since the SPA swallow took over. After
-PHA-2557's static-handler tightening (`fallthrough:false`), each of
+#2557's static-handler tightening (`fallthrough:false`), each of
 those URLs now 404s on a fresh install. Clients that honor
 `layout.route` (deep links, third-party agents, the help index) hit a
 dead end. The SPA itself navigates via `room`/`data-p` so in-app tabs
@@ -593,7 +593,7 @@ This release fixes both halves:
   `null` (not `/onboarding.html`). Wired into the `npm test` chain
   adjacent to `test-modular-layout` and `test-2588-health-default`.
 
-### Acceptance coverage (PHA-2587 / PHA-2588 issue bodies)
+### Acceptance coverage (#2587 / #2588 issue bodies)
 
 - **No layout.route 404s on a fresh install.** SPA tabs still work.
 - **`/api/health` returns `ok:true`** without a calendar key on
@@ -601,9 +601,9 @@ This release fixes both halves:
   remains visible for ops dashboards.
 
 EOF
-## v0.4.2 (2026-08-23) — Connector Forge surface adapters (PHA-2447)
+## v0.4.2 (2026-08-23) — Connector Forge surface adapters (#2447)
 
-Wires the four fixed output adapters the engine (PHA-2445) calls into
+Wires the four fixed output adapters the engine (#2445) calls into
 the persistent stores. Reuses existing engines where they exist
 (entity graph via `lib/sync/_schema.js`, wall/feed via `lib/walls.js`)
 and adds the missing ones (per-installation tile health, room-card
@@ -633,7 +633,7 @@ the floodgates to a general template language.
   covering all five acceptance bullets plus the placeholder grammar
   contract. Wired into the `npm test` chain (52/52 pass).
 
-### Acceptance coverage (PHA-2447 issue body)
+### Acceptance coverage (#2447 issue body)
 
 - **Tile updates within 1 poll cycle on state change.** `tile_json` +
   `last_ok_at` refresh on every cycle; classification covers
@@ -644,22 +644,22 @@ the floodgates to a general template language.
   `"{count} {label} · {recent_added} added this week"` template.
 - **Entity graph upsert creates comic_series nodes + available_at
   edges + deep links.** Reuses `entities` + `entity_edges` tables from
-  PHA-1624. Each installation also gets a `connector_installation`
+  #1624. Each installation also gets a `connector_installation`
   entity so edges have a stable `from_id`.
 - **Feed event emitted exactly once per
   `(installation_id, event_fingerprint)`.** Dedupe ledger gates every
   `wall_posts` INSERT. The dispatcher (`lib/notifications.js`) reads
   `wall_notification_prefs` per recipient, so we don't bypass it.
 - **Adapters reject unknown surface types in the spec validator.**
-  Locked in by PHA-2444 (`ALLOWED_SURFACES_FIELDS = ['tile','card','entities','feed']`);
+  Locked in by #2444 (`ALLOWED_SURFACES_FIELDS = ['tile','card','entities','feed']`);
   covered in test 5.
 
 EOF
-## v0.4.1 (2026-08-21) — Events webhook outbound dispatcher (PHA-1900 / PHA-1617.7)
+## v0.4.1 (2026-08-21) — Events webhook outbound dispatcher (#1900 / #1617.7)
 
-Design doc §6.1/6.5. Depends on PHA-1617.4 (`agent_endpoints`, already
+Design doc §6.1/6.5. Depends on #1617.4 (`agent_endpoints`, already
 shipped) and reuses the exact HTTP/retry/circuit-breaker mechanics
-from the drawer dispatcher (PHA-1617.6/PHA-1899) via
+from the drawer dispatcher (#1617.6/#1899) via
 `drawerDispatch.httpPostOnce` so both dispatchers share one HTTP/SSE/
 JSON parser and can't drift.
 
@@ -699,12 +699,12 @@ JSON parser and can't drift.
   fire-and-forget boundary), retry/backoff, and circuit-breaker
   auto-disable independent of the drawer's streak map.
 
-## v0.4.0 (2026-08-21) — Notification granularity + @mentions (PHA-2218)
+## v0.4.0 (2026-08-21) — Notification granularity + @mentions (#2218)
 
-Sequenced after v0.3.0's module work (PHA-2202/PHA-2203) so wall
+Sequenced after v0.3.0's module work (#2202/#2203) so wall
 membership and module gating were stable underneath it. Design doc
 (schema + resolution + bundling rules) posted and approved on the
-PHA-2218 issue before implementation started.
+#2218 issue before implementation started.
 
 - **Per-wall notification level.** New `wall_notification_prefs
   (wall_id, user_id, level, via)` table — `level` is `all` |
@@ -731,7 +731,7 @@ PHA-2218 issue before implementation started.
   that the user explicitly asked to stop hearing about this one
   thread.
 - **Resolver (`lib/notifications.js`, new).** `resolve()` composes
-  level → thread mute → quiet hours (PHA-1619), in that order —
+  level → thread mute → quiet hours (#1619), in that order —
   level decides *if*, quiet hours decide *when*. A quiet-hours skip
   still leaves an audit row (`delivered=0, skipped_reason
   ='quiet_hours'`) so nothing is silently lost, it just doesn't push.
@@ -744,7 +744,7 @@ PHA-2218 issue before implementation started.
   posts on `direct`-visibility walls never bundle — the act of
   addressing someone is its own trigger, distinct from ambient
   activity.
-- **Badge-clearing (PHA-1617 promise).** `notification_log.seen_at`
+- **Badge-clearing (#1617 promise).** `notification_log.seen_at`
   (additive column). Three clear paths: opening the push target
   (service worker's `notificationclick` now posts to
   `/api/me/notifications/seen`), the activity feed's bulk clear
@@ -773,18 +773,18 @@ PHA-2218 issue before implementation started.
   member and does correctly gate a fresh joiner without a mention.
 
 
-## v0.3.0 (2026-08-21) — Modular Homestead: user_modules + module registry + invite-to-wall (PHA-2202, PHA-2203, PHA-2204, PHA-2207, PHA-2209)
+## v0.3.0 (2026-08-21) — Modular Homestead: user_modules + module registry + invite-to-wall (#2202, #2203, #2204, #2207, #2209)
 
-### Module registry (PHA-2203 / PHA-2200.2)
+### Module registry (#2203 / #2200.2)
 
 - **Static module registry.** New `lib/modules.js` exports
   `REGISTRY` (six built-in entries: `wall`, `lists`, `calendar`,
   `chores`, `apps`, `agent`) plus `DEFAULT_ENABLED = ['wall']`.
-  Every entry carries the full 16-field PHA-2201 manifest contract
+  Every entry carries the full 16-field #2201 manifest contract
   (`key, name, description, icon, room, requires, tier, version,
   author, url, open_mode, scopes, mcp, webhooks, entity_kinds,
   default_enabled`). Third-party apps merge into the same shape via
-  the PHA-2201 install flow — built-ins dogfood the same contract.
+  the #2201 install flow — built-ins dogfood the same contract.
   Pure data, no DB access, no plugin loader. Frozen at module load
   so a bug can't silently extend the whitelist.
 - **`lib/registry-validate.js`** — runtime sanity check. Validates
@@ -811,7 +811,7 @@ PHA-2218 issue before implementation started.
   skip-unknown, helper purity (mutation isolation), live
   `validateAndThrow` against the live DB.
 
-### Per-user module enablement (PHA-2202)
+### Per-user module enablement (#2202)
 
 - **Per-user module enablement.** New `user_modules(user_id, module_key,
   enabled_at)` table with `(user_id, module_key)` PK and FK cascade on
@@ -827,36 +827,36 @@ PHA-2218 issue before implementation started.
   `isUserModuleKey(key)`, `getUserModules(db, userId)` (returns full
   keyed map), and `setUserModule(db, userId, key, enabled)` (upsert
   via `INSERT ... ON CONFLICT DO UPDATE`). The HTTP surface
-  (`/api/me/modules`, `/api/me/layout`) lands in PHA-2200.3.
+  (`/api/me/modules`, `/api/me/layout`) lands in #2200.3.
 - **Tests.** `scripts/test-user-modules.js` covers 44 assertions:
   schema creation, index, backfill row count = users * 6, idempotent
   re-migration, disable+re-enable preserves data tables (tasks /
   events), unknown module_key rejection in JS + by CHECK constraint,
   new user picked up on next boot, deterministic
   `getUserModules` shape, `ON DELETE CASCADE` purge.
-- **Schema note.** The PHA-2202 spec uses the `VALUES (...) AS
+- **Schema note.** The #2202 spec uses the `VALUES (...) AS
   alias(col)` syntax from the issue body; the runtime uses the
   equivalent portable `SELECT ... UNION ALL` subquery because the
   better-sqlite3 prebuilt ships a SQLite build that does not accept
   `VALUES (...) AS alias` via `db.exec`. Semantically identical,
   supported on every SQLite since 3.7.
 
-### Settings → Apps UI (PHA-2201.4 / PHA-2232)
+### Settings → Apps UI (#2201.4 / #2232)
 
 - **Apps list, per-app detail, revoke, install — the user-facing
   surface for the whole install/consent/revoke contract.** Avatar menu
   → **📦 Apps** opens the new Settings → Apps sheet.
 - **Unified apps list.** `lib/app-install.js`'s `listApps()`/`getApp()`
-  now merge BOTH halves of the PHA-2201 dogfood contract through the
+  now merge BOTH halves of the #2201 dogfood contract through the
   same read path: enabled built-in modules (`user_modules`, tagged
   `builtin: true`) and active third-party installs (`agent_tokens.app_id`,
   tagged `builtin: false`). `getApp()` also returns `entity_kinds` so
   the client can describe generic entity-CRUD scopes (`read:{kind}`)
   without a second lookup.
 - **Per-app detail** renders "what this app can do" via the shared
-  `lib/scope-display.js` mapping (PHA-2230) and, for third-party apps,
+  `lib/scope-display.js` mapping (#2230) and, for third-party apps,
   a paginated **Activity** view over real `app_api_log` rows
-  (PHA-2231, `GET /api/apps/:key/activity`, "Load more" accumulates
+  (#2231, `GET /api/apps/:key/activity`, "Load more" accumulates
   pages). Built-ins show neither Activity nor Revoke — they have no
   app-scoped token to log or kill; the UI states this rather than
   hitting an endpoint that would 404.
@@ -864,14 +864,14 @@ PHA-2218 issue before implementation started.
   `POST /api/apps/:key/revoke` directly — no separate disable step —
   and returns to the (now tile-free) Apps list on success.
 - **Install flow** (paste manifest URL → resolve → consent → install)
-  reuses the PHA-2230 consent screen's `window.HomesteadConsent.
+  reuses the #2230 consent screen's `window.HomesteadConsent.
   renderConsentScreen` verbatim, embedded in a Settings sheet instead
   of standalone `consent.html` — same copy, same scope mapping, no
   reimplementation. `public/consent.js`'s demo `boot()` gained a guard
   (`if (!document.getElementById('demoBanner')) return;`) so it's safe
   to load as a shared script on a page (`index.html`) that also has an
   `id="app"` root. The freshly-minted app token is shown once via the
-  existing copy-once reveal modal (PHA-1617.3 pattern).
+  existing copy-once reveal modal (#1617.3 pattern).
 - **`lib/scope-display.js` gained `read:services`** (the `apps`
   built-in's scope per design note §6) — an existing vocabulary gap
   that only surfaced once built-ins started rendering through this
@@ -886,7 +886,7 @@ PHA-2218 issue before implementation started.
   on its very next call, all within one run.
 
 
-### Invite-to-wall flow (PHA-2207 / PHA-2200.6)
+### Invite-to-wall flow (#2207 / #2200.6)
 
 - **`lib/invites.js`** — new module. `invites` table
   (`id`, `wall_slug`, `created_by`, `created_at`, `expires_at`,
@@ -907,7 +907,7 @@ PHA-2218 issue before implementation started.
   avatar stack.
 - **`POST /api/invites`** (admin only) — body
   `{wall_slug, expires_in_days?, note?}`. `wall_slug` is REQUIRED:
-  a missing `wall_slug` returns 400 with a hint referencing PHA-1575
+  a missing `wall_slug` returns 400 with a hint referencing #1575
   (the wall-less legacy path). `expires_in_days` defaults to 7,
   max 90. Response carries `url: https://life.phatt.vip/invite/{code}`.
 - **`GET /api/invites`** (admin only) — outstanding invites by
@@ -939,7 +939,7 @@ PHA-2218 issue before implementation started.
   request would call `reconcileGroups` and wipe the media-club
   group that the invite just granted. Documented inline.
 - **Tests.** `scripts/test-invite-to-wall.js` covers 50 assertions:
-  admin-only create, wall_slug required (legacy PHA-1575 → 400),
+  admin-only create, wall_slug required (legacy #1575 → 400),
   valid create returns 201 + URL, redemption grants membership +
   first_run state, already-redeemed → 410, unknown code → 404,
   `first-run-complete` is idempotent, existing-user redemption
@@ -947,17 +947,17 @@ PHA-2218 issue before implementation started.
   assertMember, invalid wall_slug / bad expires_in_days, no-auth
   redeem → 401.
 
-### Acceptance suite + release (PHA-2209 / PHA-2200.8)
+### Acceptance suite + release (#2209 / #2200.8)
 
 Six new acceptance scripts gate the v0.3.0 release. They cover the
 three amendments from comments `1afbe170` + `04093be5` and the
-acceptance criteria rolled up from PHA-2200 design-note §7.
+acceptance criteria rolled up from #2200 design-note §7.
 
 - **`scripts/test-modular-layout.js`** — synthetic-user HTTP suite.
   Boots server.js on `:3192` and exercises the three layout shapes
   (`empty` / `feed-only` / `feed-tabs` / `meadow`) plus the welcome
-  sheet (`first_run` lifecycle, PHA-2200.6), the agent-drawer flag
-  (PHA-2200.7), the `+ Add rooms` pill (`addRoomVisible`), and the
+  sheet (`first_run` lifecycle, #2200.6), the agent-drawer flag
+  (#2200.7), the `+ Add rooms` pill (`addRoomVisible`), and the
   tab/page shape contract that the SPA bootstrap relies on. 63
   assertions.
 - **`scripts/test-disable-reenable.js`** — empty-state acceptance
@@ -984,7 +984,7 @@ acceptance criteria rolled up from PHA-2200 design-note §7.
 - **`scripts/test-shared-registry-third-party.js`** — Amendment 1
   (registry is the shared intake path). Built-in entries and a
   representative third-party-shaped entry (`popcorn_vote` per
-  PHA-2201 manifest contract) both pass `validateEntryShape`.
+  #2201 manifest contract) both pass `validateEntryShape`.
   Deliberately malformed third-party entries fail. Verifies the
   16-field manifest contract and that the validator treats both
   shapes symmetrically. 37 assertions.
@@ -1013,9 +1013,9 @@ acceptance criteria rolled up from PHA-2200 design-note §7.
   `npm test` now exercises the full v0.3.0 acceptance surface.
 
 
-### Third-party app install flow (PHA-2201.1 / PHA-2229)
+### Third-party app install flow (#2201.1 / #2229)
 
-- **Six endpoints**, the server-side state machine from the PHA-2201
+- **Six endpoints**, the server-side state machine from the #2201
   design note §2/§7: `POST /api/apps/resolve`, `POST
   /api/apps/consent`, `POST /api/apps/install`, `GET /api/apps`, `GET
   /api/apps/:key`, `POST /api/apps/:key/revoke`, `POST
@@ -1051,7 +1051,7 @@ acceptance criteria rolled up from PHA-2200 design-note §7.
   and enables the `apps` launcher module for the installing user
   (`user_modules` is CHECK-constrained to the six built-in keys —
   third-party apps launch from the existing `apps` tiled launcher,
-  PHA-1863, rather than minting their own `user_modules` row). Any
+  #1863, rather than minting their own `user_modules` row). Any
   failure rolls back everything, including the consent-token
   consumption.
 - **Revoke** soft-deletes this user's app-scoped token(s) (immediate
@@ -1069,10 +1069,10 @@ acceptance criteria rolled up from PHA-2200 design-note §7.
   consent -> install -> tile appears in `GET /api/apps` -> token
   authenticates a real call -> revoke -> 401 on the very next call).
 
-### Scope enforcement + Popcorn Vote dogfood (PHA-2052)
+### Scope enforcement + Popcorn Vote dogfood (#2052)
 
 - **Scope enforcement was missing.** Bearer app tokens minted by the
-  PHA-2201 install flow carried scopes, but no route ever checked
+  #2201 install flow carried scopes, but no route ever checked
   them — `authenticate()` synthesized the same full-access
   `session.user` for an app token as for the underlying household
   member. New `requireScope(scope)` / `requireWallReadScope`
@@ -1082,7 +1082,7 @@ acceptance criteria rolled up from PHA-2200 design-note §7.
   session/header-trust auth and legacy `scopes:'user'` PATs are
   unaffected.
 - **Popcorn Vote** is the first third-party app proven end-to-end
-  through the PHA-2201 contract: a deliberately small manifest
+  through the #2201 contract: a deliberately small manifest
   (`read:walls:media_club`, `write:walls:post`), posting link-kind
   announcements to `media-club` that ride the existing
   `wall_posts` → `notification_log` pipeline. `scripts/test-pa-2201-install.js`
@@ -1090,12 +1090,12 @@ acceptance criteria rolled up from PHA-2200 design-note §7.
   and the negative case (cannot read a wall the underlying human
   belongs to but the token was never granted) working as designed.
 
-### Wall feed component extraction (PHA-2206 / PHA-2200.5)
+### Wall feed component extraction (#2206 / #2200.5)
 
 The full wall feed surface (composer, post list, reactions,
 comments, "Older" pagination) was a single-page IIFE in
-`public/porch.js` shipped by PHA-2151. With the v0.3.0 dual-surface
-design (PHA-2200 §6 — Porch is a standalone page when the wall
+`public/porch.js` shipped by #2151. With the v0.3.0 dual-surface
+design (#2200 §6 — Porch is a standalone page when the wall
 module is the user's only enabled room, AND an in-place tab inside
 the meadow/feed-tabs SPA when other modules are also enabled) the
 same JS needs to render in two placements without a rewrite.
@@ -1126,10 +1126,10 @@ same JS needs to render in two placements without a rewrite.
   discriminator matches the wall entry, and mounts
   `HomesteadFeed.mount(page-porch)` in-place. Single-surface rule:
   if the feed module is the user's ONLY enabled module, the SPA
-  redirects to `/porch.html` instead of mounting (per PHA-2200 §6).
+  redirects to `/porch.html` instead of mounting (per #2200 §6).
   The literal 'wall' / 'porch' module key is NOT hardcoded — the
   mount discriminator is the registry's `room` field, keeping
-  PHA-2209's no-hardcoded-keys audit (Amendment 3) green.
+  #2209's no-hardcoded-keys audit (Amendment 3) green.
 - **`public/porch.js`** (removed) — logic moved into
   `public/components/feed.js`. The script tag in `porch.html` now
   points at the component.
@@ -1149,7 +1149,7 @@ same JS needs to render in two placements without a rewrite.
   component file, exercise the wall/comment/reaction API both
   placements consume). Inserted into `npm test` chain after the
   registry-no-hardcoded-keys audit and before the pre-v0.3.0
-  component tests (per PHA-2209 lesson #4).
+  component tests (per #2209 lesson #4).
 - **`scripts/smoke-porch-ui.js`** (updated) — replaces the
   `porch.js` references with `components/feed.js`; asserts both
   placements load the same component URL and reference the same
@@ -1157,7 +1157,7 @@ same JS needs to render in two placements without a rewrite.
   200 (shared static asset) and that the served `/index.html`
   carries the `#page-porch` mount target.
 
-## v0.2.0 (2026-08-19) — Porch Wall (PHA-2147)
+## v0.2.0 (2026-08-19) — Porch Wall (#2147)
 
 - **Media storage primitive.** Content-addressed uploads at `/data/media/...`,
   server-side sharp downscale + 320px thumbnail generation, configurable
@@ -1170,7 +1170,7 @@ same JS needs to render in two placements without a rewrite.
   Drag-drop / paste-from-clipboard composer, 5-emoji reaction row,
   paginated Older button (no infinite scroll), mobile-first.
 
-## v0.1.22 (2026-08-21) — PHA-2219
+## v0.1.22 (2026-08-21) — #2219
 
 - **PWA install coach (option A only).** First-login flow that
   closes the install-friction gap on the PWA path. Decided against
@@ -1218,12 +1218,12 @@ same JS needs to render in two placements without a rewrite.
   (`prompt_shown`, `instructions_opened`, `dismissed`,
   `install_chip_tapped`, `install_completed`, `permission_requested`,
   `permission_granted`, `permission_denied`, `first_push_delivered`)
-  and rejects unknown values with 400. PHA-2210 (analytics funnel
+  and rejects unknown values with 400. #2210 (analytics funnel
   umbrella) reads these rows to compute
   invite → accepted → installed → push-enabled (rule #6).
 - **No analytics pipeline yet.** This issue ships the funnel
   ingestion only; the dashboard / aggregation step belongs to
-  PHA-2210. Until PHA-2210 ships, the rows are still queryable
+  #2210. Until #2210 ships, the rows are still queryable
   directly via SQL for ad-hoc sanity checks.
 - **Tests:** `scripts/test-install-coach.js` (new, 40 assertions
   across 17 test groups) — extracts the inlined helpers from
@@ -1239,7 +1239,7 @@ same JS needs to render in two placements without a rewrite.
   anonymous for the new endpoint, plus a SQLite-level assertion
   that 9 funnel rows land and the JSON `meta` round-trips.
 
-## v0.1.21 (2026-08-19) — PHA-1899 (PHA-1617.6)
+## v0.1.21 (2026-08-19) — #1899 (#1617.6)
 
 - **Drawer backend — HMAC-signed outbound forwarder.** `POST /api/drawer`
   no longer returns a stub: it looks up the caller's enabled drawer
@@ -1277,24 +1277,24 @@ same JS needs to render in two placements without a rewrite.
   envelope. Replaces the old `test-drawer.js` (which targeted the
   stub and would hang against the real dispatcher).
 
-## v0.1.20 (2026-08-15) — PHA-2001
+## v0.1.20 (2026-08-15) — #2001
 
 - **CRASH-LOOP HOTFIX: include `lib/` in the runtime image.** The
   runtime stage of the Dockerfile was missing `COPY lib ./lib`, so
   the built container had an empty `/app/lib/` directory and Node
   crashed on boot with `Error: Cannot find module './lib/user-model'`
-  at `server.js:33`. PHA-1618 (v0.0.5) introduced the `lib/`
+  at `server.js:33`. #1618 (v0.0.5) introduced the `lib/`
   directory but the runtime-stage COPY list was never updated to
   pull it in. This release adds the missing `COPY lib ./lib` line;
   no other code or config changes are required. `life.phatt.vip`
   was offline until this landed; once Brandon's Docker pulls
-  `:latest` it will be back. (PHA-2001.)
+  `:latest` it will be back. (#2001.)
 
-## v0.1.19 (2026-08-12) — PHA-1896 (PHA-1617.3)
+## v0.1.19 (2026-08-12) — #1896 (#1617.3)
 
 - **Connected-agents sheet (token manager).** Avatar menu → **🔌
   Connected agents** opens the user-facing token manager for the
-  PAT (personal access token) backend shipped in PHA-1617.1. Lists
+  PAT (personal access token) backend shipped in #1617.1. Lists
   every active token for the signed-in user as a row: label,
   16-char non-secret prefix chip (`homestead_pat_Xxxxxxxx…`),
   scopes chip (active / admin / revoked / expired), created /
@@ -1316,10 +1316,10 @@ same JS needs to render in two placements without a rewrite.
   stored the bcrypt hash, per design doc §4.1 / §4.2).
 - **No new server-side endpoints.** Pure SPA work — consumes the
   three `/api/agent-tokens` routes (`GET` / `POST` /
-  `DELETE /:id`) shipped in PHA-1617.1. Admin-provisioned tokens
+  `DELETE /:id`) shipped in #1617.1. Admin-provisioned tokens
   via `POST /api/users/:username/agent-tokens` are out of scope
   for v0 of this UI; the admin cross-household view belongs to
-  PHA-1617.4 (agent_endpoints) which will land its own settings
+  #1617.4 (agent_endpoints) which will land its own settings
   surface.
 - **Tests:** `scripts/smoke-token-manager-ui.js` (new) — exercises
   the full SPA-facing lifecycle against a live `server.js`: list
@@ -1330,7 +1330,7 @@ same JS needs to render in two placements without a rewrite.
   Bearer auth attempt with the now-revoked plaintext returns
   401. Wired into `npm run test:smoke`.
 
-## v0.1.18 (2026-08-12) — PHA-1902 (PHA-1617.9)
+## v0.1.18 (2026-08-12) — #1902 (#1617.9)
 
 - **`homestead_get_user_context` snapshot endpoint** — single-call
   morning-brief context shape from the BYO-harness Meta-Agent Socket
@@ -1365,7 +1365,7 @@ same JS needs to render in two placements without a rewrite.
   `mergedEventsFor`, `recentActivity`. No LLM in the loop; server-side
   assembly only. No data truncation at the data layer; size caps are
   HTTP/transport concerns.
-- **Activity-recent v0 source = `notification_log`**. PHA-1622
+- **Activity-recent v0 source = `notification_log`**. #1622
   (activity feed) will replace it with a richer audit trail once that
   ships; the envelope shape is forward-compatible so the swap is a
   one-file change in `lib/snapshot.js`.
@@ -1385,7 +1385,7 @@ same JS needs to render in two placements without a rewrite.
   the unit test (response body scan) and the smoke (response body
   scan).
 
-## v0.1.17 (2026-08-12) — PHA-1898 (PHA-1617.5)
+## v0.1.17 (2026-08-12) — #1898 (#1617.5)
 
 - **Meta-agent chat drawer UI shell (design doc §6.3).**
   Slide-in drawer (right side on desktop, full-screen on mobile) with a
@@ -1411,7 +1411,7 @@ same JS needs to render in two placements without a rewrite.
   `last_status_code`, `last_error`), and returns either a synthetic
   `text/event-stream` reply (default) or an `application/json` reply
   (when `Accept: application/json` is set). The HMAC-signed outbound
-  forwarder to the user's harness URL arrives in PHA-1617.6; the wire
+  forwarder to the user's harness URL arrives in #1617.6; the wire
   shape is stable so the frontend won't change.
 - **Tests.** `scripts/test-drawer.js` (64 checks) wired into
   `npm test`: SSE reply shape + bookkeeping, JSON reply path, 401/400/404
@@ -1419,7 +1419,7 @@ same JS needs to render in two placements without a rewrite.
   HTML smoke (drawer markup + JS wiring present), and the SSE block-parser
   contract.
 
-## v0.1.16 (2026-08-12) — PHA-1897 (PHA-1617.4)
+## v0.1.16 (2026-08-12) — #1897 (#1617.4)
 
 - **`agent_endpoints` table + library (design doc §6.1).** New
   per-user, per-harness endpoint config schema with HMAC secret
@@ -1435,7 +1435,7 @@ same JS needs to render in two placements without a rewrite.
   Implements design doc §6.4: `sha256=<hex>` where `<hex> =
   HMAC_SHA256(secret, timestamp + "." + raw_body)`. The dispatch
   helpers (`listEnabledForDispatch` + `recordDispatch`) are the entry
-  points the PHA-1617.6 drawer POST and PHA-1617.7 events webhook
+  points the #1617.6 drawer POST and #1617.7 events webhook
   outbound dispatchers will share.
 - **CRUD API at `/api/agent-endpoints`** (plus
   `/api/users/:username/agent-endpoints` admin cross-household view):
@@ -1465,7 +1465,7 @@ same JS needs to render in two placements without a rewrite.
   enabled=false → PATCH rotate_secret → DELETE → 400 on bad inputs →
   401 on unauthenticated POST). Full suite: **666 / 666 pass, 0 fail.
 
-## v0.1.13 (2026-08-11) — PHA-1868 (PHA-1620e)
+## v0.1.13 (2026-08-11) — #1868 (#1620e)
 
 - **Per-user source config UI.** Adds the add/edit/delete/refresh
   sheet for `calendar_sources` rows so users (not just admins with
@@ -1480,7 +1480,7 @@ same JS needs to render in two placements without a rewrite.
     add/edit form: provider labels, credential field schemas with
     `secret` / `required` flags, placeholder text, and a `disabled`
     flag for providers reserved in the allow-list but not yet
-    shipped (google until PHA-1865 merges). The endpoint describes
+    shipped (google until #1865 merges). The endpoint describes
     field shapes only — no credential VALUES cross the wire.
   - `PATCH /api/calendar-sources/:id` — edit `display_name`,
     `color`, and `enabled` without forcing a credential re-prompt.
@@ -1495,8 +1495,8 @@ same JS needs to render in two placements without a rewrite.
     `refresh_token` / `expires_at` / `client_id` / `tenant_id` /
     `scope` (optional, mirrors the GraphSource contract).
   - **Google** — listed but disabled in the UI until the
-    `GoogleSource` adapter (PHA-1865) merges.
-- **Disabled-source gating in the merged feed** (cross-checks PHA-1867):
+    `GoogleSource` adapter (#1865) merges.
+- **Disabled-source gating in the merged feed** (cross-checks #1867):
   flipping `enabled=false` via PATCH causes the source's cached
   events to disappear from `/api/events/merged` immediately,
   giving the user a per-provider pause switch without deleting the
@@ -1510,11 +1510,11 @@ same JS needs to render in two placements without a rewrite.
     round-trip + bogus color normalised + 404 + no-op), refresh,
     merged-feed round-trip, disabled-source exclusion, DELETE,
     DELETE-404. Hooked into `npm run test:smoke`.
-- **No new runtime deps.** The PHA-1868 deliverable is the UI + the
+- **No new runtime deps.** The #1868 deliverable is the UI + the
   two new endpoints. The CalDAV + GraphSource adapters registered at
   server boot in v0.1.10 / v0.1.2 are the providers the UI surfaces.
 
-## v0.1.12 (2026-08-10) — PHA-1876 (PHA-1624 Phase C)
+## v0.1.12 (2026-08-10) — #1876 (#1624 Phase C)
 
 - **Entity dedup + review queue.** `lib/dedup/matcher.js` exposes
   `matchEntity(candidate)` implementing the 3-tier algorithm from
@@ -1561,18 +1561,18 @@ same JS needs to render in two placements without a rewrite.
   (FK resolution + slot stamping), and reject terminality. Wired
   into `npm test`.
 
-## v0.1.11 (2026-08-10) — PHA-1867
+## v0.1.11 (2026-08-10) — #1867
 
-- **Month-grid merge layer (PHA-1867d).** The home + calendar pages now consume
+- **Month-grid merge layer (#1867d).** The home + calendar pages now consume
   `GET /api/events/merged` and render cached provider events alongside native
-  Homestead events in the same grid. PHA-1867 closes parent work-order step 3
+  Homestead events in the same grid. #1867 closes parent work-order step 3
   ("Merge into month grid + day drill-in"). Per-provider pips carry a 1px
   surface-coloured ring so they don't blur into the per-user coloured native
   pips on the same cell; provider event rows in the day-drill show a coloured
   source chip + left-bar tint, hover-label on the grid pip gives the
   provider display name, and a `stale` warning surfaces when the
   provider cache is older than the 5-min freshness window. Phase 2
-  write-back (PHA-1866) adds edit/delete on top.
+  write-back (#1866) adds edit/delete on top.
 - **Overlap semantics.** `/api/events/merged` now uses
   `start_at <= to AND (end_at IS NULL OR end_at >= from)` so an event
   that starts before the requested window but ends inside it still
@@ -1593,7 +1593,7 @@ same JS needs to render in two placements without a rewrite.
   against a live server.js + fake CalDAV). Wired into `npm test` and
   `npm run test:smoke`.
 
-## v0.1.10 (2026-08-10) — PHA-1866
+## v0.1.10 (2026-08-10) — #1866
 
 - **Phase 2 calendar write-back (CalDAV).** Homestead now round-trips
   events through the configured CalDAV providers (Nextcloud, Apple
@@ -1605,7 +1605,7 @@ same JS needs to render in two placements without a rewrite.
   adapter implements them as RFC 4791 PUT/DELETE with the right
   conditional headers — `If-None-Match: *` on create to prevent
   overwrite, `If-Match: <etag>` on update/delete to guard against
-  lost-update. Microsoft 365 (PHA-1864) and Google (PHA-1865) will
+  lost-update. Microsoft 365 (#1864) and Google (#1865) will
   register the same interface methods when their adapters land.
 - **New HTTP surface.** `POST /api/calendar-sources/:id/events`,
   `PUT  /api/calendar-sources/:id/events/:externalId`, and
@@ -1622,7 +1622,7 @@ same JS needs to render in two placements without a rewrite.
   emits `VALUE=DATE` for `allDay` events. UID is auto-generated
   (RFC 4122 v4) when the caller doesn't provide one.
 - **Single-VEVENT scope.** Recurrence editing remains out of scope
-  (PHA-1620 step 4: "No recurrence editing in v1 — single VEVENT
+  (#1620 step 4: "No recurrence editing in v1 — single VEVENT
   only"). The serializer/DTOs are forward-compatible with a future
   RRULE expansion; today's body shape is the flat `vevent` per
   event.
@@ -1639,9 +1639,9 @@ same JS needs to render in two placements without a rewrite.
   43 pass / 0 fail, including the full create→update→delete round
   trip and the cross-the-flow `app_password` leak check.
 
-## v0.1.9 (2026-08-10) — PHA-1620 + PHA-1864
+## v0.1.9 (2026-08-10) — #1620 + #1864
 
-- **Universal calendar read-through (PHA-1620).** Homestead now reads
+- **Universal calendar read-through (#1620).** Homestead now reads
   events from configured external calendars instead of forcing
   double-entry. The provider-agnostic `CalendarSource` interface is
   shipped with its first concrete adapter (`CalDAVSource` — covers both
@@ -1681,13 +1681,13 @@ same JS needs to render in two placements without a rewrite.
   `lib/caldav-source.js`. The HTTP layer is injectable so tests stub
   the network. Single-VEVENT scope per the work order (recurrence
   editing deferred).
-- **Microsoft 365 (`GraphSource`) adapter (PHA-1864 / PHA-1620a).**
+- **Microsoft 365 (`GraphSource`) adapter (#1864 / #1620a).**
   The same `CalendarSource` interface that backed `CalDAVSource` now
   also backs `GraphSource` for Microsoft 365. No merge-layer,
   API-surface, or DTO changes — the second adapter registers behind
   `registerAdapter('graph', …)` and is reachable through the existing
   `POST /api/calendar-sources` endpoint with `provider: "ms365"`.
-  Google's `GoogleSource` (PHA-1865) remains the next child issue; the
+  Google's `GoogleSource` (#1865) remains the next child issue; the
   provider name is reserved in the API allow-list but POST returns 501
   today.
 - **OAuth2 credentials for MS365.** `cred_blob` for `ms365` sources
@@ -1714,9 +1714,9 @@ same JS needs to render in two placements without a rewrite.
   → `/api/events/merged` flow with the same credential-leak contract
   checks as the CalDAV smoke.
 - **Frontend merge layer** is out of scope for this slice — see
-  PHA-1867. The server-side merge endpoint is ready to consume.
+  #1867. The server-side merge endpoint is ready to consume.
 
-## v0.1.8 (2026-08-10) — PHA-1617.1/.2
+## v0.1.8 (2026-08-10) — #1617.1/.2
 
 - **Per-user agent PATs for the BYO-harness meta-agent socket.**
   `lib/agent-tokens.js` adds an `agent_tokens` table — one row per
@@ -1741,13 +1741,13 @@ same JS needs to render in two placements without a rewrite.
   35 = **245/245 green**.
 
 
-## v0.1.7 (2026-08-10) — PHA-1874 (PHA-1624 Phase B-2)
+## v0.1.7 (2026-08-10) — #1874 (#1624 Phase B-2)
 
 - **Kavita sync worker.** New `lib/sync/kavita.js`
   (`syncKavita({db, baseUrl, apiKey})`) walks a Kavita library
   (Manga + Books only; Image + Video are out of scope for v1) and
   reconciles series + authors + tags into Homestead's entity graph
-  (PHA-1624 design doc §5.1). Reuses the shared
+  (#1624 design doc §5.1). Reuses the shared
   `lib/sync/_schema.js` so it boots even before Phase A's standalone
   migration lands. Acceptance: **75 tests** in
   `scripts/test-sync-kavita.js` covering manga + book walks,
@@ -1782,9 +1782,9 @@ same JS needs to render in two placements without a rewrite.
   Kavita keep working.
 - **PR scope.** One branch (`pha-1624-entity-graph-phase-b2-kavita`)
   off `phattbeats/homestead@pha-1624-entity-graph-phase-b1-plex`,
-  one PR, title `PHA-1624 Phase B-2: Kavita sync worker`, body
-  references design doc §5.1. Merged on top of Phase A (PHA-1872) and
-  Phase B-1 (PHA-1873); on merge, dropped the worker's defensive
+  one PR, title `#1624 Phase B-2: Kavita sync worker`, body
+  references design doc §5.1. Merged on top of Phase A (#1872) and
+  Phase B-1 (#1873); on merge, dropped the worker's defensive
   `_schema.js` boot call in favor of Phase A's canonical
   `entityGraph.migrate(db)` (same underlying schema); combined
   `npm test` to run `test-entity-graph.js`, `test-sync-plex.js`, and
@@ -1792,7 +1792,7 @@ same JS needs to render in two placements without a rewrite.
 
 ## 0.1.6 — 2026-08-10
 
-- **PHA-1624 Phase B-1 (PHA-1873): Plex sync worker merged on top of
+- **#1624 Phase B-1 (#1873): Plex sync worker merged on top of
   Phase A.** See the v0.1.5 entry below for the full feature writeup.
   On merge: dropped the worker's defensive `plexSync.migrate(db)` boot
   call in favor of Phase A's canonical `entityGraph.migrate(db)` (same
@@ -1805,10 +1805,10 @@ same JS needs to render in two placements without a rewrite.
 
 ## 0.1.2 — 2026-08-10
 
-- **PHA-1624 Phase A (PHA-1872): entity graph — schema, read API, entity
+- **#1624 Phase A (#1872): entity graph — schema, read API, entity
   page, ⌘K search.**
   The first slice of the "everything app" entity graph (design doc
-  PHA-1624): one node per real-world thing, edges typed and
+  #1624): one node per real-world thing, edges typed and
   provenance-tagged, and a page every node can point to. This PR ships
   the read-only spine; sync workers (Plex/Kavita/seerr/…) land in
   Phase B.
@@ -1817,7 +1817,7 @@ same JS needs to render in two placements without a rewrite.
     `entity_edges`, `entity_review_queue`, plus an `entities_fts` FTS5
     virtual table with insert/update/delete triggers. Wired into the
     boot migration right after `userModel.migrate(db)`. Idempotent —
-    safe to call on every boot, same pattern as PHA-1618.
+    safe to call on every boot, same pattern as #1618.
   - **Read API:** `GET /api/entities`, `/api/entities/:id`,
     `/api/entities/:id/edges`, `/api/entities/:id/backlinks`,
     `/api/entities/search`, `/api/entities/:id/review-queue`, and
@@ -1844,7 +1844,7 @@ same JS needs to render in two placements without a rewrite.
 
 ## 0.1.1 — 2026-08-10
 
-- **PHA-1623: per-service health checks — the launcher knows when an
+- **#1623: per-service health checks — the launcher knows when an
   app is down.**
   The failure mode this prevents is real: Emily taps SillyTavern, gets
   a white iframe from the reverse proxy / crashed backend, and concludes
@@ -1898,8 +1898,8 @@ same JS needs to render in two placements without a rewrite.
 
   - **Optional DOWN-transition hook** (`onDownTransition`) is wired in
     `server.js` but the body is a log line until the push notifications
-    primitive (PHA-1619) lands. The shape is what the future hook will
-    expect — when PHA-1619 merges, only the body needs to change.
+    primitive (#1619) lands. The shape is what the future hook will
+    expect — when #1619 merges, only the body needs to change.
 
   - **Acceptance tests** (`scripts/test-health-checker.js`, run via
     `npm test`): 60 assertions covering the auth-wall classification,
@@ -1916,7 +1916,7 @@ same JS needs to render in two placements without a rewrite.
 
 - **Web push notifications.** Standard VAPID-based push (no Firebase),
   with a per-user subscription store and a server-side `notify(userId,
-  payload)` primitive that downstream features (PHA-1617 events
+  payload)` primitive that downstream features (#1617 events
   webhook, future agent handoffs) can build on. Surface area:
   - `GET /api/push/vapid-public-key` (public): returns the server's
     VAPID public key so the service worker can subscribe.
@@ -1934,7 +1934,7 @@ same JS needs to render in two placements without a rewrite.
     via a per-user/per-category `notification_log` dedupe.
 - **Schema additions.** New tables `push_subscriptions`,
   `notification_prefs`, `notification_log` — all keyed to
-  `users.id` (the stable PK), so the future PHA-1618 user-model
+  `users.id` (the stable PK), so the future #1618 user-model
   migration is a no-op for these tables.
 - **Frontend.** Avatar menu gains an "Enable push notifications"
   button + per-user prefs editor (quiet hours + category toggles).
@@ -1952,11 +1952,11 @@ same JS needs to render in two placements without a rewrite.
 - **README** updated with push-notification setup, iOS 16.4+ install
   requirements, and a curl-based smoke test against `/api/notify`.
 
-## v0.1.5 (2026-08-09) — PHA-1873 (PHA-1624 Phase B-1)
+## v0.1.5 (2026-08-09) — #1873 (#1624 Phase B-1)
 
 - **Plex sync worker.** New `lib/sync/plex.js` (`syncPlex({db, baseUrl, token})`)
   walks a Plex Media Server library and reconciles entities + edges in
-  Homestead's entity graph (PHA-1624 design doc §5.1). The worker
+  Homestead's entity graph (#1624 design doc §5.1). The worker
   installs the entity-graph schema on first call (`lib/sync/_schema.js`)
   so it's boot-ready even before Phase A's standalone migration lands.
   Acceptance: 65 tests in `scripts/test-sync-plex.js` covering movie +
@@ -1986,17 +1986,17 @@ same JS needs to render in two placements without a rewrite.
   the 6h has elapsed*. Skipped silently when `PLEX_TOKEN` is unset so
   installs without Plex keep working.
 - **PR scope.** One branch (`pha-1624-entity-graph-phase-b1-plex`)
-  off `phattbeats/homestead@main`, one PR, title `PHA-1624 Phase B-1:
+  off `phattbeats/homestead@main`, one PR, title `#1624 Phase B-1:
   Plex sync worker`, body references design doc §5.1. **Merge is
-  blocked on Phase A's schema PR (PHA-1872) landing first** — the
+  blocked on Phase A's schema PR (#1872) landing first** — the
   worker self-installs the schema as a defensive fallback, but the
   canonical migration should be Phase A's.
 
-## v0.1.0 (2026-08-09) — PHA-1619
+## v0.1.0 (2026-08-09) — #1619
 
 - **Web push notifications.** Standard VAPID-based push (no Firebase),
   with a per-user subscription store and a server-side `notify(userId,
-  payload)` primitive that downstream features (PHA-1617 events
+  payload)` primitive that downstream features (#1617 events
   webhook, future agent handoffs) can build on. Surface area:
   - `GET /api/push/vapid-public-key` (public): returns the server's
     VAPID public key so the service worker can subscribe.
@@ -2014,7 +2014,7 @@ same JS needs to render in two placements without a rewrite.
     via a per-user/per-category `notification_log` dedupe.
 - **Schema additions.** New tables `push_subscriptions`,
   `notification_prefs`, `notification_log` — all keyed to
-  `users.id` (the stable PK), so the future PHA-1618 user-model
+  `users.id` (the stable PK), so the future #1618 user-model
   migration is a no-op for these tables.
 - **Frontend.** Avatar menu gains an "Enable push notifications"
   button + per-user prefs editor (quiet hours + category toggles).
@@ -2034,7 +2034,7 @@ same JS needs to render in two placements without a rewrite.
 
 ## v0.0.5 (2026-08-09)
 
-- **PHA-1618: generalized user model — `users` is now a profile cache, not a directory of record.**
+- **#1618: generalized user model — `users` is now a profile cache, not a directory of record.**
   Authentik is the directory of record; Homestead never creates or
   deletes user rows on its own. Identity, groups, and membership live in
   authentik (or the next OIDC provider that fronts life.phatt.vip).
@@ -2048,11 +2048,11 @@ same JS needs to render in two placements without a rewrite.
     gymnastics in app code). New profile-cache columns: `avatar_url`,
     `preferences` (JSON), `auth_provider`, `provider_subject`,
     `claimed_at`, `last_seen_at`, `updated_at`. New tables: `groups`
-    (string cache of group names, mirrored from PHA-1577), `user_groups`
+    (string cache of group names, mirrored from #1577), `user_groups`
     (M2M), `tile_visibility_groups` + `tile_visibility_users` (per-tile
     access predicates, replaces the owner-dot model).
   - **JIT provisioning in the auth middleware.** When SWAG forwards
-    `X-authentik-username` (header-trust, PHA-1574), the request lands on
+    `X-authentik-username` (header-trust, #1574), the request lands on
     `provisionOrClaim(username, provider, subject, groups)` which either
     CLAIMs the existing seeded row (case-insensitive match) or CREATEs a
     new profile row keyed on the username. All chore / activity / list
@@ -2074,7 +2074,7 @@ same JS needs to render in two placements without a rewrite.
     user plus three CLAIM-ready profiles. LAN passwords default to
     `ADMIN_PASSWORD` / `BRANDON_PASSWORD` / `EMILY_PASSWORD` env vars
     (or `'changeme'`) so the built-in `/api/login` keeps working as the
-    PHA-1574 LAN fallback.
+    #1574 LAN fallback.
   - **No Homestead-side user CRUD beyond profile fields.** The
     v0.0.2 `POST /api/users` (admin-create) and `DELETE /api/users/:u`
     endpoints are gone — users come from authentik. `PUT /api/users/:u`
@@ -2127,7 +2127,7 @@ same JS needs to render in two placements without a rewrite.
 - **/api/users response shape.** Now includes the v0.0.5 profile-cache
   fields (`avatar_url`, `preferences`, `auth_provider`,
   `provider_subject`, `claimed_at`, `last_seen_at`, `created_at`) so
-  the v0.0.2 frontend (PHA-1682) can render the same assignment
+  the v0.0.2 frontend (#1682) can render the same assignment
   pickers without code changes.
 
 ## v0.0.4 (2026-08-06)
@@ -2144,7 +2144,7 @@ same JS needs to render in two placements without a rewrite.
 
 ## v0.0.3 (2026-08-04)
 
-- **`/api/health` JSON endpoint (PHA-1706):** returns
+- **`/api/health` JSON endpoint (#1706):** returns
   `200 OK` + `Content-Type: application/json` with body
   `{ ok, service, version, commit, uptime, db }`. Unauthenticated by
   design so SWAG, container orchestrators, and Uptime Kuma can probe
@@ -2153,7 +2153,7 @@ same JS needs to render in two placements without a rewrite.
   can tell a live Homestead from a half-broken one. Replaces the
   39 KB SPA HTML that the SPA fallback used to serve for unmatched
   `/api/*` paths.
-- **`/api/version` JSON endpoint (PHA-1706):** returns
+- **`/api/version` JSON endpoint (#1706):** returns
   `{ version, commit }` for cache-busting diagnostics. The `commit`
   field is injected at build time via `docker build
   --build-arg COMMIT_SHA=$(git rev-parse --short HEAD)`; falls back to
@@ -2161,25 +2161,25 @@ same JS needs to render in two placements without a rewrite.
 - Release workflow now bakes the short git SHA into the image as
   `COMMIT_SHA` so `/api/version` reports the real commit instead of
   `null`. See `.github/workflows/release.yml`.
-- **API 404 JSON (PHA-1704):** unknown `/api/*` paths now return
+- **API 404 JSON (#1704):** unknown `/api/*` paths now return
   `HTTP 404` + `{"error":"not_found"}` instead of the SPA HTML shell.
   Previously the Express catch-all wildcard served the 39KB `index.html`
   for every unmatched `/api/*` path, breaking health checks, masking
   "feature missing" from JS clients, and wasting bandwidth. The SPA
   fallback now excludes `/api/*` so even a regression in the 404 handler
   can't re-introduce the bug.
-- **`GET /api/logout` → 405 (PHA-1705):** logout now rejects GET with
+- **`GET /api/logout` → 405 (#1705):** logout now rejects GET with
   `405 Method Not Allowed` + `{"error":"method_not_allowed","allow":"POST"}`
   instead of falling through to the SPA fallback. Logout mutates server
   state (destroys the session), so per RFC 9110 §9.2.1 it must not be
   reachable via a safe method — otherwise `<img src="/api/logout">`
   becomes a CSRF logout vector the moment any future fallback handler
-  respects the verb. Defense in depth on top of the PHA-1704 catch-all:
-  PHA-1704 already prevents the SPA-HTML-200 behavior at the routing
+  respects the verb. Defense in depth on top of the #1704 catch-all:
+  #1704 already prevents the SPA-HTML-200 behavior at the routing
   layer; this handler makes the intent explicit at the route definition
   site and returns the semantically correct status code (the resource
   exists, just not via GET).
-- **`/favicon.ico` serves the SVG icon (PHA-1707):** browsers auto-request
+- **`/favicon.ico` serves the SVG icon (#1707):** browsers auto-request
   `/favicon.ico` for every tab; without an explicit handler the SPA
   catch-all served the 39 KB `index.html` as the favicon response, pure
   waste on every tab load. The handler serves the existing `public/icon.svg`
@@ -2188,7 +2188,7 @@ same JS needs to render in two placements without a rewrite.
   browsers accept SVG favicons. Legacy browsers fall through to the
   manifest. Same bytes, same ETag, no redirect overhead — 0.5% of the
   bandwidth.
-- **`/robots.txt` (PHA-1708):** added `public/robots.txt` with
+- **`/robots.txt` (#1708):** added `public/robots.txt` with
   `User-agent: *` / `Disallow: /`. Without this file, `express.static`
   had nothing to serve for `/robots.txt` and fell through to the SPA
   catch-all, which returned the 39 KB `index.html`. Cloudflare then
@@ -2220,9 +2220,9 @@ same JS needs to render in two placements without a rewrite.
   runs as root so bind-mounts of `/data` on Unraid do not need per-host
   UID alignment.
 
-## v0.4.3 (2026-08-24) — Porch default-visible + wall admin surface (PHA-2556)
+## v0.4.3 (2026-08-24) — Porch default-visible + wall admin surface (#2556)
 
-Closes the PHA-2493 / PHA-2556 reopen-class defect: the seeded wall was
+Closes the #2493 / #2556 reopen-class defect: the seeded wall was
 visibility=group, group_name=media-club, but the user-model seed put
 every user in `household` only, so a fresh install yielded
 `GET /api/walls → {"walls":[]}` and the Porch tab rendered the

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// PHA-2708 end-to-end smoke for owner recovery.
+// #2708 end-to-end smoke for owner recovery.
 //
 // Boots server.js on an ephemeral port against a fresh SQLite DB,
 // exercises the full owner-recovery surface end-to-end, and writes
-// verify-out artifacts that PHA-2501 expects from any done-state
+// verify-out artifacts that #2501 expects from any done-state
 // change. Captures:
 //
 //   smoke-2708-db-shape.json          — post-migration local_credentials

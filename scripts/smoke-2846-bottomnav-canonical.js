@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// PHA-2846 / v0.5.10 acceptance smoke — bottom-nav icon migration.
+// #2846 / v0.5.10 acceptance smoke — bottom-nav icon migration.
 //
-// Brandon reopened PHA-2846 at 00:48 EDT pointing out that the persistent
+// Brandon reopened #2846 at 00:48 EDT pointing out that the persistent
 // bottom-nav across `/` and `/porch.html` still rendered emoji literals
 // (`🏠 ✓ 📝 📅 🛰️ 📸`) instead of the canonical opening-door / module
-// SVGs. PHA-2846 v0.5.9 had shipped the canonical icon set + the Add
+// SVGs. #2846 v0.5.9 had shipped the canonical icon set + the Add
 // Rooms picker wires but did not touch the bottom-nav (the nav predated
-// PHA-2209's no-hardcoded-keys audit and was out of scope).
+// #2209's no-hardcoded-keys audit and was out of scope).
 //
 // This smoke covers 6 acceptance criteria for v0.5.10:
 //   1. `public/index.html` rewrites the six bottom-nav buttons from
@@ -31,7 +31,7 @@
 //      console logs an error during boot).
 //
 // Run:  node scripts/smoke-2846-bottomnav-canonical.js
-//       (also runs as part of scripts/verify.sh — see PHA-2501 standing policy)
+//       (also runs as part of scripts/verify.sh — see #2501 standing policy)
 //
 // Output: ./verify-out/bottomnav-canonical-390.png   (post-login screenshot of the migrated bottom nav)
 //         ./verify-out/bottomnav-canonical-table.txt (asset MD5 reference table)
@@ -61,7 +61,7 @@ const check = (name, ok, msg) => {
   else { console.log(`  ✗ ${name}  ${msg || ''}`); failures.push(name); }
 };
 
-console.log('PHA-2846 / v0.5.10 — bottom-nav canonical icons smoke\n');
+console.log('#2846 / v0.5.10 — bottom-nav canonical icons smoke\n');
 
 // 1–3. Static checks on the source tree (no server needed for these).
 const indexHtml = fs.readFileSync(path.join(REPO, 'public', 'index.html'), 'utf8');

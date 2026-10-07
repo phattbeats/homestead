@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PHA-1876 (PHA-1624 Phase C) acceptance tests for the entity-graph
+// #1876 (#1624 Phase C) acceptance tests for the entity-graph
 // dedup + review-queue matcher.
 //
 // Pure-DB tests: drive `lib/dedup/matcher.js` against a temp SQLite
@@ -8,7 +8,7 @@
 //
 // Run: `node scripts/test-dedup-matcher.js`
 //
-// Coverage (locked in PHA-1876 acceptance):
+// Coverage (locked in #1876 acceptance):
 //   * `matchEntity` returns the documented verdict shapes:
 //       action: 'link'   (Tier 1 or 2 emits adaptation_of edges)
 //       action: 'alias'  (Tier 3 ≥ 0.9 auto-aliases, no merge)

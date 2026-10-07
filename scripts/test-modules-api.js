@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// PHA-2204 acceptance tests for the v0.3.0 modules / layout API surface.
+// #2204 acceptance tests for the v0.3.0 modules / layout API surface.
 //
 // Boots server.js on an ephemeral port (3191) and exercises the full
 // endpoint matrix against a header-trust mock. No external test
 // runner, no supertest — `fetch` against the listening socket is
 // enough and matches the smoke scripts in this repo.
 //
-// Acceptance covered (per PHA-2204 issue body):
+// Acceptance covered (per #2204 issue body):
 //   * GET /api/me includes enabled_modules, default_route, first_run.
 //   * GET /api/me/layout returns feed-only / feed-tabs / meadow per
 //     enabled-set size; addRoomVisible + agentDrawer flags set correctly.
@@ -21,9 +21,9 @@
 //   * Unauthenticated requests are rejected.
 //
 // Out of scope (handled by sibling PHAs):
-//   * DB schema (PHA-2202 / PHA-2200.1)
-//   * Registry (PHA-2203 / PHA-2200.2)
-//   * SPA rendering (PHA-2200.4)
+//   * DB schema (#2202 / #2200.1)
+//   * Registry (#2203 / #2200.2)
+//   * SPA rendering (#2200.4)
 
 'use strict';
 
@@ -95,14 +95,14 @@ const NOAUTH = (urlPath) => fetch('http://127.0.0.1:3191' + urlPath);
     const layout = await (await GET('/api/me/layout')).json();
     assertEq(layout.layout, 'meadow', 'layout === "meadow" (6 enabled)');
     assertEq(layout.defaultRoute, '/porch.html', 'defaultRoute === "/porch.html"');
-    // PHA-2659: the grandfather backfill grants the six pre-modularity
+    // #2659: the grandfather backfill grants the six pre-modularity
     // modules, but Gazette registered after it — so there IS still a
     // room this user could add, and the pill must stay visible.
     assertEq(layout.addRoomVisible, true, 'addRoomVisible === true (gazette still addable)');
     assertEq(layout.agentDrawer, true, 'agentDrawer === true (agent is enabled)');
     assertEq(layout.tabs.length, 6, 'tabs.length === 6');
     assertEq(layout.tabs[0].key, 'wall', 'tabs[0].key === "wall"');
-    // PHA-2846: built-in module icons are SVG paths under /modules/ rather
+    // #2846: built-in module icons are SVG paths under /modules/ rather
     // than emoji literals. Third-party manifests still use emoji strings.
     // Dispatch in the SPA renderer: /modules/ → <img>, anything else →
     // escaped emoji glyph. See public/modules.html and openAppsSheetWith()
@@ -113,7 +113,7 @@ const NOAUTH = (urlPath) => fetch('http://127.0.0.1:3191' + urlPath);
     assertEq(layout.tabs[5].key, 'agent', 'tabs[5].key === "agent"');
     assertEq(layout.tabs[5].route, null, 'agent (drawer mode) has route null');
 
-    // PHA-2587: a route in the layout contract must be a real page.
+    // #2587: a route in the layout contract must be a real page.
     // SPA-only modules remain addressable through `room`, so they must
     // advertise null rather than their historical, nonexistent *.html URLs.
     const expectedRoutes = {
@@ -292,8 +292,8 @@ const NOAUTH = (urlPath) => fetch('http://127.0.0.1:3191' + urlPath);
   console.log('\nTest 11: first_run flips to false after completeFirstRun');
   {
     // Hit a custom endpoint via the API: we don't expose completeFirstRun
-    // over HTTP yet (out of scope per PHA-2200.3 — the SPA calls it directly
-    // via a dedicated endpoint in PHA-2200.4). Validate the underlying
+    // over HTTP yet (out of scope per #2200.3 — the SPA calls it directly
+    // via a dedicated endpoint in #2200.4). Validate the underlying
     // helper by poking the DB through the user-model module and confirming
     // /api/me reflects it.
     const Database = require('better-sqlite3');
@@ -316,7 +316,7 @@ const NOAUTH = (urlPath) => fetch('http://127.0.0.1:3191' + urlPath);
     liveDb.close();
   }
 
-  console.log(`\nPHA-2204 modules-api: ${pass} passed, ${fail} failed`);
+  console.log(`\n#2204 modules-api: ${pass} passed, ${fail} failed`);
   process.exit(fail === 0 ? 0 : 1);
 })().catch((e) => {
   console.error('FATAL:', e);
