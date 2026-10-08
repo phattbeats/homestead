@@ -57,6 +57,9 @@ const eventsDispatch = require('./lib/events-dispatch');
 const media = require('./lib/media');
 const walls = require('./lib/walls');
 const wallEvents = require('./lib/wall-events');
+const shoutbox = require('./lib/shoutbox');
+// Not a valid wall slug (slugs never contain ':'), so it can't collide with a board.
+const SHOUTBOX_CHANNEL = 'shoutbox:household';
 const lists = require('./lib/lists');
 const houseRooms = require('./lib/house-rooms');
 const notifications = require('./lib/notifications');
@@ -161,6 +164,8 @@ hearthCharacters.migrate(db);
 // something to back-fill, and self-heals walls created since the last
 // boot on every restart.
 hearthCharacters.ensureBuiltinAgentUser(db);
+// #4098: shouts table; live events ride wall-events under a reserved channel.
+shoutbox.migrate(db, { publish: (event, data) => wallEvents.publish(SHOUTBOX_CHANNEL, event, data) });
 // #2851: media_queue, the table behind Hearth's enqueue_media action.
 // FKs to users(id); its wall_post_id is a soft reference (see the module
 // header for why), so ordering against walls.migrate() is a courtesy
@@ -2802,6 +2807,60 @@ app.post('/api/walls/posts/:postId/comments', auth, (req, res) => {
   } catch (e) { wallsErr(res, e); }
 });
 
+// ---- #4098: The Shoutbox ----
+// Household-wide, so any signed-in member may read and shout. App-scoped
+// tokens are refused outright: there is no scope for it, and a shout is
+// spoken as the human.
+function shoutCaller(req, res) {
+  if (tokenScopes(req) !== null) { res.status(403).json({ error: 'insufficient_scope' }); return null; }
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) { res.status(401).json({ error: 'unknown_user' }); return null; }
+  return me;
+}
+app.get('/api/shoutbox', auth, (req, res) => {
+  if (!shoutCaller(req, res)) return;
+  res.json(shoutbox.list({ limit: req.query.limit, afterId: req.query.after }));
+});
+app.post('/api/shoutbox', auth, (req, res) => {
+  const me = shoutCaller(req, res); if (!me) return;
+  try { res.status(201).json(shoutbox.post(me.id, (req.body || {}).body)); } catch (e) { wallsErr(res, e); }
+});
+app.get('/api/shoutbox/events', auth, (req, res) => {
+  if (!shoutCaller(req, res)) return;
+  res.status(200);
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders && res.flushHeaders();
+  res.write('retry: 3000\n');
+  res.write(': connected\n\n');
+  const unsubscribe = wallEvents.subscribe(SHOUTBOX_CHANNEL, ({ event, data }) => {
+    if (res.writableEnded) return;
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  });
+  const heartbeat = setInterval(() => { if (!res.writableEnded) res.write(': ping\n\n'); }, 25000);
+  req.on('close', () => { clearInterval(heartbeat); unsubscribe(); });
+});
+
+// Hearth's occasional chime. The gate lives in lib/shoutbox.js; here we only
+// supply the words via the agent runtime (server-staged key) and tick.
+async function draftHearthShout(context) {
+  const system = 'You are Hearth, the house companion, dropping ONE short line (under 120 chars) into the household shoutbox. Warm, dry, specific to what people just said. No hashtags, no greetings like "Great post". Reply with ONLY the line.';
+  const user = 'Recent shouts:\n' + context.map((c) => `${c.who}${c.kind === 'me' ? ' *' : ':'} ${c.body}`).join('\n');
+  const r = await agentRuntime.composeGazette({ system, user, providerCfg: null });
+  return r && r.ok ? r.text : null;
+}
+let shoutboxHearthTimer = null;
+function startShoutboxHearth() {
+  if (shoutboxHearthTimer) return;
+  shoutboxHearthTimer = setInterval(() => {
+    shoutbox.hearthChime({ draft: draftHearthShout }).catch((e) => console.log('[shoutbox] hearth chime failed:', e.message));
+  }, 10 * 60 * 1000);
+  if (shoutboxHearthTimer.unref) shoutboxHearthTimer.unref();
+}
+
 // ---- agent-to-agent mailbox (#2426) ----
 // A "foreign harness" here is nothing more than an installed third-party
 // app (#2201) whose token carries read:mailbox/write:mailbox — there
@@ -4814,6 +4873,7 @@ if (require.main === module) {
   startScheduler();
   startHealthChecker();
   startPorchSweep();
+  startShoutboxHearth();
   app.listen(PORT, () => console.log(`Homestead on :${PORT}`));
 }
 // #3116: tests need direct db access for setup (e.g. seeding
