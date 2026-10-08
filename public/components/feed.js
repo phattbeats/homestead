@@ -1,6 +1,6 @@
 // Homestead — Wall feed/composer/reactions component.
 // Vanilla JS, no framework, no build step. Extracted from porch.js
-// (#2200.5/#2206/#2151). Mounted by both /porch.html and
+// (#2200.5/#2206/#2151). Mounted by both /forum and
 // /index.html's #page-wall; same component in both placements.
 //
 // API:
@@ -85,7 +85,7 @@
   }
 
   function voteOffHtml(username) {
-    return `<button type="button" class="vote-off" data-username="${esc(username)}">Vote off the porch</button>`;
+    return `<button type="button" class="vote-off" data-username="${esc(username)}">Vote off the Forum</button>`;
   }
 
   function postHtml(p, isAdmin, meUsername) {
@@ -213,7 +213,7 @@
       </div>
 
       <div class="cpane on" id="pane-text">
-        <textarea id="textBody" maxlength="2000" placeholder="What's happening on the porch?" rows="3"></textarea>
+        <textarea id="textBody" maxlength="2000" placeholder="What's happening on the Forum?" rows="3"></textarea>
         <div class="composer-row">
           <span class="charcount" id="textCount">0 / 2000</span>
           <button type="button" class="btn" id="postText">Post</button>

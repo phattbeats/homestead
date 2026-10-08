@@ -9,7 +9,7 @@
 //   { title, body, url, tag, icon, badge, category }
 
 // #2200.5 / #2206: minimal precache. The feed component file
-// is shared between /porch.html and the in-place #page-wall mount
+// is shared between /forum and the in-place #page-wall mount
 // inside /index.html — both placements need it to render the wall.
 // Without precaching, a returning PWA user with intermittent
 // connectivity would see an empty Porch. Cache-first for these URLs.

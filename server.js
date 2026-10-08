@@ -63,6 +63,7 @@ const notifications = require('./lib/notifications');
 const analytics = require('./lib/analytics');
 const invites = require('./lib/invites');
 const wallMembers = require('./lib/wall-members');
+const forum = require('./lib/forum');
 const porchSweep = require('./lib/porch/sweep');
 const porchContract = require('./lib/porch/participation-contract');
 const porchComprehension = require('./lib/porch/comprehension');
@@ -133,6 +134,9 @@ media.migrate(db);
 // media_uploads(id), so it runs after userModel.migrate and media.migrate.
 walls.migrate(db);
 walls.seed(db);
+// #4097: The Forum — additive columns + the few starter boards.
+forum.migrate(db);
+forum.seed(db);
 // #2646: Porch sweep scheduler ledger (sweep-state cadence gate +
 // agent-action budget/cooldown ledger). FKs to walls(id)/wall_posts(id)/
 // users(id), so it runs after walls.migrate().
@@ -682,7 +686,7 @@ app.get('/api/me', (req, res) => {
   //
   // #2204 (#2200.3) extension: when authenticated, also include
   //   enabled_modules: ['wall','apps',...]  (registry order)
-  //   default_route:    '/porch.html'       (first enabled module's room route)
+  //   default_route:    '/forum'       (always The Forum, #4097)
   //   first_run:        true | false        (first_run_completed_at IS NULL)
   // so the SPA bootstrap (#2200.4) can render without a second
   // /api/me/layout fetch.
@@ -714,16 +718,17 @@ app.get('/api/me', (req, res) => {
 // out so both the header-trust and session-cookie paths in the route
 // above use the same envelope construction. Kept module-local so it
 // doesn't leak into other routes.
+const FORUM_ROUTE = '/forum';
 function buildMeEnvelope(db, sessionUser) {
   const enabledRows = userModel.getEnabledModules(db,
     db.prepare('SELECT id FROM users WHERE username = ?').get(sessionUser.username).id);
   const enabledKeys = enabledRows.map(e => e.key);
-  const firstRoomRoute = modules.getRoomRoute(enabledKeys[0]);
   const userId = db.prepare('SELECT id FROM users WHERE username = ?').get(sessionUser.username).id;
+  forum.touchActivity(userId); // #4097: /api/me fires on every page load — the cheapest "is here" signal
   return {
     user: sessionUser,
     enabled_modules: enabledKeys, // registry order, deterministic
-    default_route: firstRoomRoute, // first enabled module's room route (or null)
+    default_route: FORUM_ROUTE, // #4097: every user lands on The Forum, regardless of enabled modules
     first_run: userModel.isFirstRun(db, userId),
   };
 }
@@ -2802,6 +2807,57 @@ app.post('/api/walls/posts/:postId/comments', auth, (req, res) => {
   } catch (e) { wallsErr(res, e); }
 });
 
+// ---- #4097: The Forum read API (Woodgrain UI) ----
+// Boards are walls, threads are wall posts, replies are post comments —
+// see lib/forum.js. Every handler resolves the caller then delegates; the
+// membership gate (404 for boards you can't see) lives in lib/walls.js.
+// App-scoped tokens need the blanket read:walls scope: forum views span
+// every board, so a single-wall scope can't authorise them.
+function requireForumReadScope(req, res, next) {
+  const scopes = tokenScopes(req);
+  if (scopes === null || scopes.includes('read:walls')) return next();
+  return res.status(403).json({ error: 'insufficient_scope', required: 'read:walls' });
+}
+function forumCaller(req, res) {
+  const me = userModel.getMe(db, req.session.user.username);
+  if (!me) { res.status(401).json({ error: 'unknown_user' }); return null; }
+  forum.touchActivity(me.id);
+  return me;
+}
+app.get('/api/forum/index', auth, requireForumReadScope, (req, res) => {
+  const me = forumCaller(req, res); if (!me) return;
+  try { res.json(forum.boardIndex(me.id)); } catch (e) { wallsErr(res, e); }
+});
+app.get('/api/forum/boards/:slug/threads', auth, requireForumReadScope, (req, res) => {
+  const me = forumCaller(req, res); if (!me) return;
+  try { res.json(forum.threadList(req.params.slug, me.id, { page: req.query.page, limit: req.query.limit })); }
+  catch (e) { wallsErr(res, e); }
+});
+app.get('/api/forum/threads/:postId', auth, requireForumReadScope, (req, res) => {
+  const me = forumCaller(req, res); if (!me) return;
+  try { res.json(forum.threadView(req.params.postId, me.id)); } catch (e) { wallsErr(res, e); }
+});
+app.patch('/api/forum/threads/:postId', auth, requireAdmin, (req, res) => {
+  const me = forumCaller(req, res); if (!me) return;
+  try {
+    if (typeof (req.body || {}).sticky !== 'boolean') return res.status(400).json({ error: 'sticky_boolean_required' });
+    res.json(forum.setSticky(req.params.postId, req.body.sticky));
+  } catch (e) { wallsErr(res, e); }
+});
+app.get('/api/forum/online', auth, requireForumReadScope, (req, res) => {
+  const me = forumCaller(req, res); if (!me) return;
+  res.json(forum.whosOnline());
+});
+app.get('/api/forum/stats', auth, requireForumReadScope, (req, res) => {
+  const me = forumCaller(req, res); if (!me) return;
+  res.json(forum.stats(me.id));
+});
+app.patch('/api/forum/me', auth, (req, res) => {
+  if (tokenScopes(req) !== null) return res.status(403).json({ error: 'insufficient_scope' });
+  const me = forumCaller(req, res); if (!me) return;
+  try { res.json(forum.updateProfile(me.id, req.body)); } catch (e) { wallsErr(res, e); }
+});
+
 // ---- agent-to-agent mailbox (#2426) ----
 // A "foreign harness" here is nothing more than an installed third-party
 // app (#2201) whose token carries read:mailbox/write:mailbox — there
@@ -4505,6 +4561,16 @@ app.get(/^\/invite\/([A-Fa-f0-9]{16,64})$/, (req, res) => {
   // foot-gun — see the explainer block above for the smoke that
   // exercises this path.
   res.sendFile(path.join(__dirname, 'public', 'invite.html'), { dotfiles: 'allow' });
+});
+// #4097: Porch → The Forum. The standalone page lives at /forum; the old
+// URL (bookmarks, push-notification deep links, welcome handoffs) redirects,
+// preserving the query string (?wall=…&post=…).
+app.get('/forum', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'forum.html'), { dotfiles: 'allow' });
+});
+app.get('/porch.html', (req, res) => {
+  const qi = req.originalUrl.indexOf('?');
+  res.redirect(301, '/forum' + (qi === -1 ? '' : req.originalUrl.slice(qi)));
 });
 app.get('/favicon.ico', (req, res) => {
   res.set('Content-Type', 'image/svg+xml');

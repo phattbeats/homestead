@@ -24,7 +24,7 @@
 
   var LINKS = [
     { key: 'wall', href: '/', icon: '🏠', label: 'Wall' },
-    { key: 'porch', href: '/porch.html', icon: '📸', label: 'Porch' },
+    { key: 'forum', href: '/forum', icon: '📸', label: 'The Forum' },
     { key: 'modules', href: '/modules.html', icon: '🧩', label: 'Rooms' },
     { key: 'invites', href: '/invites.html', icon: '✉️', label: 'Invites' },
     { key: 'connectors', href: '/connectors.html', icon: '🔌', label: 'Connect' }

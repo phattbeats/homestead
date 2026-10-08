@@ -12,13 +12,13 @@
 //
 //   2. Live end-to-end smoke against a real server.js — the same
 //      /api/walls /posts /reactions /comments flow the browser would
-//      exercise, plus a check that BOTH /porch.html and the
+//      exercise, plus a check that BOTH /forum and the
 //      /index.html page-wall mount point load the same component
 //      file and reference the same endpoints (no duplicate API calls).
 //
 // Run after the v0.3.0 acceptance suite (test-modules.js,
 // test-invite-to-wall.js, test-modular-layout.js). Asserts both the
-// extraction shape (component file + thin porch.html shell + index.html
+// extraction shape (component file + thin forum.html shell + index.html
 // page-wall mount) and the runtime behavior (boot, fetch, render,
 // dispose).
 
@@ -41,7 +41,7 @@ function assertEq(actual, expected, label) {
 
 const ROOT = path.join(__dirname, '..');
 const COMPONENT_PATH = path.join(ROOT, 'public', 'components', 'feed.js');
-const PORCH_HTML_PATH = path.join(ROOT, 'public', 'porch.html');
+const PORCH_HTML_PATH = path.join(ROOT, 'public', 'forum.html');
 const INDEX_HTML_PATH = path.join(ROOT, 'public', 'index.html');
 const SW_PATH = path.join(ROOT, 'public', 'sw.js');
 const PORCH_CSS_PATH = path.join(ROOT, 'public', 'porch.css');
@@ -53,7 +53,7 @@ const PORCH_CSS_PATH = path.join(ROOT, 'public', 'porch.css');
 console.log('\nTest 1: static asset shape (component extraction)');
 
 assert(fs.existsSync(COMPONENT_PATH), 'public/components/feed.js exists');
-assert(fs.existsSync(PORCH_HTML_PATH), 'public/porch.html still exists (now a thin shell)');
+assert(fs.existsSync(PORCH_HTML_PATH), 'public/forum still exists (now a thin shell)');
 assert(fs.existsSync(INDEX_HTML_PATH), 'public/index.html exists');
 assert(fs.existsSync(SW_PATH), 'public/sw.js exists');
 assert(fs.existsSync(PORCH_CSS_PATH), 'public/porch.css still exists (shared styles)');
@@ -86,18 +86,18 @@ assert(/removeEventListener/.test(componentSrc), 'dispose() removes every regist
 // Test-only export — must be present for the vm sandbox tests.
 assert(/module\.exports/.test(componentSrc), 'feed.js exports helpers under module.exports (test-only)');
 
-// Thin-shell porch.html — must load the component, not the inlined porch.js.
-assert(!porchHtml.includes('/porch.js'), 'porch.html no longer loads /porch.js (replaced by component)');
-assert(porchHtml.includes('/components/feed.js'), 'porch.html loads /components/feed.js');
-assert(porchHtml.includes('HomesteadFeed.mount'), 'porch.html calls HomesteadFeed.mount()');
-assert(porchHtml.includes('porch.css'), 'porch.html still links porch.css (shared styles)');
+// Thin-shell forum.html — must load the component, not the inlined porch.js.
+assert(!porchHtml.includes('/porch.js'), 'forum.html no longer loads /porch.js (replaced by component)');
+assert(porchHtml.includes('/components/feed.js'), 'forum.html loads /components/feed.js');
+assert(porchHtml.includes('HomesteadFeed.mount'), 'forum.html calls HomesteadFeed.mount()');
+assert(porchHtml.includes('porch.css'), 'forum.html still links porch.css (shared styles)');
 
 // The old standalone chrome (header.back, wallName id) is now in the
-// component, not the shell — porch.html is a THIN shell by the spec.
+// component, not the shell — forum.html is a THIN shell by the spec.
 // We assert the shell only contains a mount target + the script tag.
-assert(porchHtml.includes('id="porch-mount"'), 'porch.html has a #porch-mount target for the component');
-assert(!porchHtml.includes('class="back"'), 'porch.html shell does NOT inline the back link (component owns chrome)');
-assert(!porchHtml.includes('id="wallName"'), 'porch.html shell does NOT inline wallName (component renders it)');
+assert(porchHtml.includes('id="porch-mount"'), 'forum.html has a #porch-mount target for the component');
+assert(!porchHtml.includes('class="back"'), 'forum.html shell does NOT inline the back link (component owns chrome)');
+assert(!porchHtml.includes('id="wallName"'), 'forum.html shell does NOT inline wallName (component renders it)');
 
 // index.html — must mount the same component inside a page-wall div.
 assert(/id=["']page-porch["']/.test(indexHtml), 'index.html has a page-porch page container');
@@ -252,13 +252,13 @@ process.env.NODE_ENV = 'production';
 
   try {
     // Both placements load the same component file.
-    const r1 = await fetch('http://127.0.0.1:3193/porch.html');
-    assertEq(r1.status, 200, 'GET /porch.html returns 200');
+    const r1 = await fetch('http://127.0.0.1:3193/forum');
+    assertEq(r1.status, 200, 'GET /forum returns 200');
     const porchServed = await r1.text();
     assert(porchServed.includes('/components/feed.js'),
-      'served /porch.html loads /components/feed.js');
+      'served /forum loads /components/feed.js');
     assert(porchServed.includes('HomesteadFeed.mount'),
-      'served /porch.html calls HomesteadFeed.mount()');
+      'served /forum calls HomesteadFeed.mount()');
 
     const r2 = await fetch('http://127.0.0.1:3193/components/feed.js');
     assertEq(r2.status, 200, 'GET /components/feed.js returns 200');

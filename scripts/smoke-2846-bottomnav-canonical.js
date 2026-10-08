@@ -2,7 +2,7 @@
 // #2846 / v0.5.10 acceptance smoke — bottom-nav icon migration.
 //
 // Brandon reopened #2846 at 00:48 EDT pointing out that the persistent
-// bottom-nav across `/` and `/porch.html` still rendered emoji literals
+// bottom-nav across `/` and `/forum` still rendered emoji literals
 // (`🏠 ✓ 📝 📅 🛰️ 📸`) instead of the canonical opening-door / module
 // SVGs. #2846 v0.5.9 had shipped the canonical icon set + the Add
 // Rooms picker wires but did not touch the bottom-nav (the nav predated

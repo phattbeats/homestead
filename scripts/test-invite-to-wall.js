@@ -115,7 +115,7 @@ const GET = (urlPath, headers = HEAD_ADMIN) => fetch('http://127.0.0.1:3192' + u
     const body = await r.json();
     assert(body.id && /^[a-f0-9]{32}$/.test(body.id), 'id is a 32-char hex code');
     assertEq(body.wall_slug, 'household', 'wall_slug echoed back');
-    assertEq(body.wall_name, 'Household Porch', 'wall_name looked up');
+    assertEq(body.wall_name, 'General Chit-Chat', 'wall_name looked up');
     assert(body.url && body.url.includes(body.id), 'URL contains the code');
     assert(body.expires_at && body.created_at, 'created_at + expires_at set');
   }
@@ -146,7 +146,7 @@ const GET = (urlPath, headers = HEAD_ADMIN) => fetch('http://127.0.0.1:3192' + u
     const rbody = await redeem.json();
     assertEq(rbody.ok, true, 'ok: true');
     assertEq(rbody.wall_slug, 'household', 'wall_slug returned');
-    assertEq(rbody.wall_name, 'Household Porch', 'wall_name returned');
+    assertEq(rbody.wall_name, 'General Chit-Chat', 'wall_name returned');
     assertEq(rbody.first_run, true, 'first_run: true (new user)');
     assert(rbody.redirect && rbody.redirect.includes('welcome.html'), 'redirect points to welcome.html');
     assert(Array.isArray(rbody.members), 'members array returned');

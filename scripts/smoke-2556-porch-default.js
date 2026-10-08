@@ -141,15 +141,15 @@ function assertEq(actual, expected, label) {
     // After the fresh-install boot, the wall module is on (lib/modules.js
     // sets default_enabled=true for `wall`). The in-place #navWall
     // button (#page-porch mount) is shown, OR the SPA redirects to
-    // /porch.html if wall is the user's only enabled module. Try the
-    // in-place nav first; fall back to /porch.html.
+    // /forum if wall is the user's only enabled module. Try the
+    // in-place nav first; fall back to /forum.
     let navMode = 'unknown';
     try {
       await page.waitForSelector('#navWall', { state: 'visible', timeout: 5000 });
       await page.click('#navWall');
       navMode = 'in-place';
     } catch (_) {
-      await page.goto(`http://127.0.0.1:${port}/porch.html`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`http://127.0.0.1:${port}/forum`, { waitUntil: 'domcontentloaded' });
       navMode = 'standalone';
     }
     console.log(`  nav mode: ${navMode}`);

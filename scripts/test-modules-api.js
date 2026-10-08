@@ -85,7 +85,7 @@ const NOAUTH = (urlPath) => fetch('http://127.0.0.1:3191' + urlPath);
     assert(me.user && me.user.username === 'brandon', '/api/me.user.username === "brandon"');
     assert(Array.isArray(me.enabled_modules), '/api/me.enabled_modules is an array');
     assertEq(me.enabled_modules, ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent'], '/api/me.enabled_modules === [wall, lists, calendar, chores, apps, agent]');
-    assertEq(me.default_route, '/porch.html', '/api/me.default_route === "/porch.html"');
+    assertEq(me.default_route, '/forum', '/api/me.default_route === "/forum"');
     assert(me.first_run === true, '/api/me.first_run === true (fresh user)');
     assert(!('password' in (me.user || {})), '/api/me.user does NOT include pass_hash');
   }
@@ -94,7 +94,7 @@ const NOAUTH = (urlPath) => fetch('http://127.0.0.1:3191' + urlPath);
   {
     const layout = await (await GET('/api/me/layout')).json();
     assertEq(layout.layout, 'meadow', 'layout === "meadow" (6 enabled)');
-    assertEq(layout.defaultRoute, '/porch.html', 'defaultRoute === "/porch.html"');
+    assertEq(layout.defaultRoute, '/forum', 'defaultRoute === "/forum"');
     // #2659: the grandfather backfill grants the six pre-modularity
     // modules, but Gazette registered after it — so there IS still a
     // room this user could add, and the pill must stay visible.
@@ -108,8 +108,8 @@ const NOAUTH = (urlPath) => fetch('http://127.0.0.1:3191' + urlPath);
     // escaped emoji glyph. See public/modules.html and openAppsSheetWith()
     // in public/index.html.
     assertEq(layout.tabs[0].icon, '/modules/porch.svg', 'tabs[0].icon === "/modules/porch.svg"');
-    assertEq(layout.tabs[0].label, 'Porch', 'tabs[0].label === "Porch"');
-    assertEq(layout.tabs[0].route, '/porch.html', 'tabs[0].route === "/porch.html"');
+    assertEq(layout.tabs[0].label, 'The Forum', 'tabs[0].label === "The Forum"');
+    assertEq(layout.tabs[0].route, '/forum', 'tabs[0].route === "/forum"');
     assertEq(layout.tabs[5].key, 'agent', 'tabs[5].key === "agent"');
     assertEq(layout.tabs[5].route, null, 'agent (drawer mode) has route null');
 
@@ -117,7 +117,7 @@ const NOAUTH = (urlPath) => fetch('http://127.0.0.1:3191' + urlPath);
     // SPA-only modules remain addressable through `room`, so they must
     // advertise null rather than their historical, nonexistent *.html URLs.
     const expectedRoutes = {
-      wall: '/porch.html',
+      wall: '/forum',
       lists: null,
       calendar: null,
       chores: null,
@@ -131,7 +131,7 @@ const NOAUTH = (urlPath) => fetch('http://127.0.0.1:3191' + urlPath);
         assertEq(page.status, 200, `${tab.key} advertised route ${tab.route} → 200`);
       }
     }
-    assertEq(layout.defaultRoute, '/porch.html', 'defaultRoute is reachable in all-module layout');
+    assertEq(layout.defaultRoute, '/forum', 'defaultRoute is reachable in all-module layout');
   }
 
   console.log('\nTest 3: GET /api/me/layout switches shape by enabled count');
