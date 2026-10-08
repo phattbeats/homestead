@@ -1,3 +1,9 @@
+## Unreleased — The Shoutbox (#4098)
+
+**#4098 (build 2/3 of #4076):** the Woodgrain board's household chat strip. `shouts` table (pruned to the newest 200 rows / 7 days on every post), `GET /api/shoutbox[?after=<id>]`, `POST /api/shoutbox`, and a live `GET /api/shoutbox/events` SSE stream riding the wall-events bus on a reserved channel (clients can fall back to polling with `?after=`). Posts are trimmed, capped at 280 chars, run through the `lib/porch/banned.json` lexicon (422 `banned_phrase`) and rate-limited to 5 per 30s per user (429). `/me waves` is stored as an action; the smilie map ships with each list response. No `house_id`: one household per install. App-scoped tokens are refused.
+
+**Hearth** chimes in at most 4×/day, ≥2h apart, only when a human spoke in the last 30 min and Hearth isn't already the last voice, then a 35% roll. Words come from the agent runtime (server-staged key); no key or a rejected draft falls back to a small canned in-voice pool. Ticks every 10 min.
+
 ## v0.5.24 (2026-09-07) — fix missing routes/ in runtime image (#3327)
 
 **#3327:** same failure class as v0.5.20's `jobs/` miss. Router extraction (#3214's `routes/health.js`, then `routes/agent-connections.js`) moved `server.js` dependencies into `routes/`, but the Dockerfile's runtime stage never `COPY`'d that directory, so the container crash-looped on boot (`Cannot find module './routes/agent-connections'`) — this is what took prod down this morning. Fix is `COPY routes ./routes` alongside the existing `lib`/`jobs`/`public` copies, plus `scripts/test-dockerfile-runtime-routes.js` to catch the next router extraction before it ships the same way. Version jumps from v0.5.20 to v0.5.24: tags v0.5.21–v0.5.23 exist on GitHub pointing at earlier untagged-in-`package.json` commits (never bumped here), so this release claims the next free number rather than reusing one.
