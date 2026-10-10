@@ -305,7 +305,7 @@ async function main() {
       const res = await httpRequest(port, { path: '/api/public/invites/' + inv.id });
       assertEq(res.status, 200, 'returns 200');
       assertEq(res.body.wall_slug, 'household', 'returns wall_slug');
-      assertEq(res.body.wall_name, 'Household Porch', 'returns wall_name (seeded)');
+      assertEq(res.body.wall_name, 'General Chit-Chat', 'returns wall_name (seeded)');
       assertEq(res.body.note, 'Closed beta', 'returns admin note');
       assertEq(res.body.remaining, 1, 'returns remaining');
     }

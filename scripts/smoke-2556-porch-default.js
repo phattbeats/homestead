@@ -101,8 +101,10 @@ function assertEq(actual, expected, label) {
     await page.click('#loginBtn');
     await loginResp;
 
-    await page.waitForSelector('#app', { state: 'visible', timeout: 10000 });
-    ok('login as brandon → #app visible');
+    // The Forum is the post-login landing for every user (first run
+    // included): boot() replaces '/' with '/forum' once per session.
+    await page.waitForURL(/\/forum(\?|$)/, { timeout: 10000 });
+    ok('login as brandon → lands on /forum');
 
     // Dismiss the first-run welcome sheet if it appears (the API
     // call to GET /api/walls still works behind the overlay; the sheet
@@ -135,23 +137,20 @@ function assertEq(actual, expected, label) {
     assertEq(wallsRes.status, 200, 'GET /api/walls returns 200');
     assert(wallsRes.body.walls.some((w) => w.slug === 'household'),
       'fresh-install GET /api/walls lists household (no DB writes)');
-    assertEq(wallsRes.body.walls.length, 1, 'no extra walls leak through on a fresh install');
+    // Fresh install = the household wall plus the two starter boards the
+    // Forum seeds (announcements, introductions) — nothing else.
+    assertEq(wallsRes.body.walls.map((w) => w.slug).sort().join(','),
+      'announcements,household,introductions',
+      'fresh install lists exactly household + the two seeded starter boards');
 
-    // Open the Porch tab.
-    // After the fresh-install boot, the wall module is on (lib/modules.js
-    // sets default_enabled=true for `wall`). The in-place #navWall
-    // button (#page-porch mount) is shown, OR the SPA redirects to
-    // /porch.html if wall is the user's only enabled module. Try the
-    // in-place nav first; fall back to /porch.html.
-    let navMode = 'unknown';
-    try {
-      await page.waitForSelector('#navWall', { state: 'visible', timeout: 5000 });
-      await page.click('#navWall');
-      navMode = 'in-place';
-    } catch (_) {
-      await page.goto(`http://127.0.0.1:${port}/porch.html`, { waitUntil: 'domcontentloaded' });
-      navMode = 'standalone';
-    }
+    // Open The Forum (the standalone feed page).
+    // Already on /forum (the landing); the standalone page mounts the
+    // feed directly. Reload so the feed reflects first-run completion.
+    await page.goto(`http://127.0.0.1:${port}/forum`, { waitUntil: 'domcontentloaded' });
+    const navMode = 'forum-landing';
+    // The standalone page keeps the composer behind the "+" button.
+    await page.waitForSelector('#composeFab', { state: 'visible', timeout: 10000 });
+    await page.click('#composeFab');
     console.log(`  nav mode: ${navMode}`);
 
     // Wait for the feed component to render the composer.
@@ -170,7 +169,7 @@ function assertEq(actual, expected, label) {
         mountHtml: (document.getElementById('page-porch') || {}).innerHTML ? document.getElementById('page-porch').innerHTML.slice(0, 300) : '',
       }));
       console.log('  post-click debug:', JSON.stringify(post));
-      throw new Error('Porch composer did not appear after clicking #navWall');
+      throw new Error('Forum composer did not appear on /forum');
     }
 
     // Screenshot #1: Porch open, empty composer.

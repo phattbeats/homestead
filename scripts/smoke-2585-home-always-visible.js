@@ -18,7 +18,7 @@
 //      INCLUDES the Home tab, captured by Playwright Chromium. We
 //      capture the screenshot on a fresh-install (all modules) state
 //      because once feed becomes the user's only enabled module, the
-//      SPA redirects to /porch.html (boot() line ~950) — that's
+//      SPA redirects to /forum (boot() line ~950) — that's
 //      correct existing behavior, but it means a reload-after-disable
 //      screenshot would not capture the SPA nav.
 //   7. No JS errors anywhere.
@@ -102,7 +102,7 @@ const consoleErrorSink = [];
       if (msg.type() === 'error') consoleErrorSink.push(msg.text());
     });
 
-    const root = await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'domcontentloaded' });
+    const root = await page.goto(`http://127.0.0.1:${port}/?home=1`, { waitUntil: 'domcontentloaded' });
     if (!root || !root.ok()) {
       throw new Error(`SPA root returned ${root ? root.status() : 'no response'}`);
     }
@@ -291,7 +291,7 @@ const consoleErrorSink = [];
     //    layout stays in `feed-tabs` mode and the bottom nav
     //    remains visible. If we disabled everything but feed, the
     //    SPA would enter `feed-only` mode (CSS hides #appNav) and
-    //    on next reload would redirect to /porch.html — that's
+    //    on next reload would redirect to /forum — that's
     //    correct existing behavior, but it would not exercise the
     //    "Home tab visible alongside module tabs" acceptance case.
     //
@@ -343,7 +343,7 @@ const consoleErrorSink = [];
       }
       // DO NOT reload. A reload would trigger the SPA's
       // single-surface redirect (boot() line ~950: if feed is the
-      // user's only enabled module, navigate to /porch.html),
+      // user's only enabled module, navigate to /forum),
       // which is correct existing behavior but it means the SPA
       // nav would never appear. Instead, re-fetch /api/me/layout
       // and call applyLayout() in-place so we can verify Home is
@@ -392,13 +392,13 @@ const consoleErrorSink = [];
       ok(`screenshot saved: ${disabledShot}`);
 
       // Confirm the screenshot is capturing the SPA nav (not a
-      // post-redirect /porch.html surface).
+      // post-redirect /forum surface).
       const onPageAtDisabledShot = await page.evaluate(() => {
         const on = document.querySelector('.page.on');
         return on ? on.id : 'none';
       });
       assertEq(onPageAtDisabledShot, 'page-home',
-        'disabled-state screenshot captured with #page-home active (no /porch.html redirect)');
+        'disabled-state screenshot captured with #page-home active (no /forum redirect)');
     } else {
       ok('seed did not include extra modules to disable — skipping disable-most regression');
     }

@@ -63,6 +63,7 @@ const notifications = require('./lib/notifications');
 const analytics = require('./lib/analytics');
 const invites = require('./lib/invites');
 const wallMembers = require('./lib/wall-members');
+const forum = require('./lib/forum');
 const porchSweep = require('./lib/porch/sweep');
 const porchContract = require('./lib/porch/participation-contract');
 const porchComprehension = require('./lib/porch/comprehension');
@@ -71,6 +72,7 @@ const mailbox = require('./lib/porch/mailbox');
 const agentConnectionsRouter = require('./routes/agent-connections');
 // #3214 (#1647): second domain extracted from server.js.
 const healthRouter = require('./routes/health');
+const forumRouter = require('./routes/forum');
 
 const hearthCharacters = require('./lib/hearth-characters');
 // #2851: Hearth's inbound action surface — the house-actions the
@@ -133,6 +135,9 @@ media.migrate(db);
 // media_uploads(id), so it runs after userModel.migrate and media.migrate.
 walls.migrate(db);
 walls.seed(db);
+// #4097: The Forum — additive columns + the few starter boards.
+forum.migrate(db);
+forum.seed(db);
 // #2646: Porch sweep scheduler ledger (sweep-state cadence gate +
 // agent-action budget/cooldown ledger). FKs to walls(id)/wall_posts(id)/
 // users(id), so it runs after walls.migrate().
@@ -682,7 +687,7 @@ app.get('/api/me', (req, res) => {
   //
   // #2204 (#2200.3) extension: when authenticated, also include
   //   enabled_modules: ['wall','apps',...]  (registry order)
-  //   default_route:    '/porch.html'       (first enabled module's room route)
+  //   default_route:    '/forum'       (always The Forum, #4097)
   //   first_run:        true | false        (first_run_completed_at IS NULL)
   // so the SPA bootstrap (#2200.4) can render without a second
   // /api/me/layout fetch.
@@ -714,16 +719,17 @@ app.get('/api/me', (req, res) => {
 // out so both the header-trust and session-cookie paths in the route
 // above use the same envelope construction. Kept module-local so it
 // doesn't leak into other routes.
+const FORUM_ROUTE = '/forum';
 function buildMeEnvelope(db, sessionUser) {
   const enabledRows = userModel.getEnabledModules(db,
     db.prepare('SELECT id FROM users WHERE username = ?').get(sessionUser.username).id);
   const enabledKeys = enabledRows.map(e => e.key);
-  const firstRoomRoute = modules.getRoomRoute(enabledKeys[0]);
   const userId = db.prepare('SELECT id FROM users WHERE username = ?').get(sessionUser.username).id;
+  forum.touchActivity(userId); // #4097: /api/me fires on every page load — the cheapest "is here" signal
   return {
     user: sessionUser,
     enabled_modules: enabledKeys, // registry order, deterministic
-    default_route: firstRoomRoute, // first enabled module's room route (or null)
+    default_route: FORUM_ROUTE, // #4097: every user lands on The Forum, regardless of enabled modules
     first_run: userModel.isFirstRun(db, userId),
   };
 }
@@ -2801,6 +2807,12 @@ app.post('/api/walls/posts/:postId/comments', auth, (req, res) => {
     res.json(comment);
   } catch (e) { wallsErr(res, e); }
 });
+
+// ---- #4097: The Forum read API + /forum page (routes/forum.js) ----
+app.use(forumRouter({
+  db, auth, requireAdmin, tokenScopes, userModel, forum, wallsErr,
+  publicDir: path.join(__dirname, 'public'),
+}));
 
 // ---- agent-to-agent mailbox (#2426) ----
 // A "foreign harness" here is nothing more than an installed third-party

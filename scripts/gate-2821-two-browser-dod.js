@@ -96,8 +96,8 @@ function localRoutableIp() {
     // Not 'networkidle': the SSE EventSource this fix adds is a
     // deliberately long-lived open connection, so the network never
     // goes idle while it's connected.
-    await adminPage.goto(`${base}/porch.html`, { waitUntil: 'domcontentloaded' });
-    await brandonPage.goto(`${base}/porch.html`, { waitUntil: 'domcontentloaded' });
+    await adminPage.goto(`${base}/forum`, { waitUntil: 'domcontentloaded' });
+    await brandonPage.goto(`${base}/forum`, { waitUntil: 'domcontentloaded' });
     // The composer starts collapsed behind a "+" FAB on the primary-FAB
     // layout — open it before the textarea is interactable.
     async function openComposer(page) {

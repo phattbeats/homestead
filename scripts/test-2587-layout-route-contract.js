@@ -10,7 +10,7 @@
 // GETs /api/me/layout, then probes every advertised route.
 //
 // Contract on main @ 23a777e (PR #75):
-//   * Only /porch.html is ever advertised as a non-null route.
+//   * Only /forum is ever advertised as a non-null route.
 //   * The other frame-mode built-ins (lists/calendar/chores/apps) and
 //     drawer-mode (agent) emit route:null because they're SPA-only.
 //   * Empty layout (0 modules enabled) emits defaultRoute:null
@@ -168,9 +168,9 @@ async function main() {
 
   // Contract assertions.
   assert(typeof layout.defaultRoute === 'string', 'layout.defaultRoute is a string when modules are enabled');
-  assert(layout.defaultRoute === '/porch.html', `layout.defaultRoute === "/porch.html" (got ${layout.defaultRoute})`);
+  assert(layout.defaultRoute === '/forum', `layout.defaultRoute === "/forum" (got ${layout.defaultRoute})`);
   const wallTile = tabs.find(t => t.key === 'wall');
-  assert(wallTile && wallTile.route === '/porch.html', 'wall tab route === "/porch.html" (the only real HTML route)');
+  assert(wallTile && wallTile.route === '/forum', 'wall tab route === "/forum" (the only real HTML route)');
   for (const k of ['lists', 'calendar', 'chores', 'apps']) {
     const t = tabs.find(x => x.key === k);
     assert(t && t.route === null, `${k} (frame-mode SPA-only) emits route:null`);
@@ -214,7 +214,7 @@ async function main() {
   // === Informational only: the legacy 404 paths still 404 but are no
   // longer advertised. ===
   console.log('\n--- legacy 404 PROBES (originally advertised, now unadvertised) ---');
-  // Re-enable wall so /porch.html probe at the end still works.
+  // Re-enable wall so /forum probe at the end still works.
   await enable(cookie, 'wall');
   for (const url of ['/lists.html', '/calendar.html', '/chores.html', '/apps.html', '/onboarding.html']) {
     try {
@@ -224,8 +224,8 @@ async function main() {
       console.log(`    GET ${url.padEnd(20)} → ERROR`);
     }
   }
-  const porchProbe = await getAs(cookie, '/porch.html');
-  assert(porchProbe.status === 200, `GET /porch.html → ${porchProbe.status} (only legitimate advertised HTML route)`);
+  const porchProbe = await getAs(cookie, '/forum');
+  assert(porchProbe.status === 200, `GET /forum → ${porchProbe.status} (only legitimate advertised HTML route)`);
 
   console.log('\n=== Summary ===');
   console.log(`${passed} passed, ${failed} failed`);
