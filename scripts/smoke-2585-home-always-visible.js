@@ -102,7 +102,7 @@ const consoleErrorSink = [];
       if (msg.type() === 'error') consoleErrorSink.push(msg.text());
     });
 
-    const root = await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'domcontentloaded' });
+    const root = await page.goto(`http://127.0.0.1:${port}/?home=1`, { waitUntil: 'domcontentloaded' });
     if (!root || !root.ok()) {
       throw new Error(`SPA root returned ${root ? root.status() : 'no response'}`);
     }

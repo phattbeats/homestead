@@ -67,7 +67,7 @@ async function main() {
       if (response.url().includes('/api/')) apiResponses.push(`${response.status()} ${new URL(response.url()).pathname}`);
     });
 
-    const root = await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'domcontentloaded' });
+    const root = await page.goto(`http://127.0.0.1:${port}/?home=1`, { waitUntil: 'domcontentloaded' });
     if (!root || !root.ok()) throw new Error(`SPA root returned ${root ? root.status() : 'no response'}`);
     await page.fill('#username', 'brandon');
     await page.fill('#pw', brandonPassword);

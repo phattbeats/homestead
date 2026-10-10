@@ -188,7 +188,7 @@ async function liveBoot() {
   // a username (#username) and password (#pw). The form validates both
   // fields are non-empty before the server-side pass_hash check fires.
   // Same flow as smoke-2585-home-always-visible.js — verified selector.
-  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://127.0.0.1:${port}/?home=1`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#username', { timeout: 10000 });
   await page.fill('#username', process.env.ADMIN_USERNAME || 'admin');
   await page.fill('#pw', process.env.ADMIN_PASSWORD || 'smoke-2846bn-admin-pw');

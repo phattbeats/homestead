@@ -84,7 +84,7 @@ const consoleErrorSink = [];
       if (msg.type() === 'error') consoleErrorSink.push(msg.text());
     });
 
-    const root = await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'domcontentloaded' });
+    const root = await page.goto(`http://127.0.0.1:${port}/?home=1`, { waitUntil: 'domcontentloaded' });
     if (!root || !root.ok()) {
       throw new Error(`SPA root returned ${root ? root.status() : 'no response'}`);
     }
@@ -162,7 +162,7 @@ const consoleErrorSink = [];
     if (resp) assertEq(resp.status(), 200, 'Escape → POST /api/me/first-run-complete → 200');
     else ng('POST /api/me/first-run-complete fired on Escape', 'no response observed');
 
-    await page.waitForURL(/\/porch\.html\?wall=household/, { timeout: 5000 });
+    await page.waitForURL(/\/forum\?wall=household/, { timeout: 5000 });
     ok('Escape redirects to the Porch');
 
     const shot2 = path.join(verifyOut, 'welcome-2707-after-dismiss-390.png');
@@ -172,7 +172,7 @@ const consoleErrorSink = [];
     // 3. Returning user: re-visiting /welcome.html without ?revisit
     // skips straight to the Porch.
     await page.goto(`http://127.0.0.1:${port}/welcome.html?wall=household`, { waitUntil: 'domcontentloaded' });
-    await page.waitForURL(/\/porch\.html\?wall=household/, { timeout: 5000 });
+    await page.waitForURL(/\/forum\?wall=household/, { timeout: 5000 });
     ok('returning user (first_run:false) is skipped straight to the Porch');
 
     // 4. ...unless they explicitly reopen it with ?revisit=1.

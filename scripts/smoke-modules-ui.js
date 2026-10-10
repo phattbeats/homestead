@@ -152,7 +152,7 @@ async function disableAll() {
     await POST('/api/me/modules/lists/enable', { withRequirements: true });
     let layout = await (await GET('/api/me/layout')).json();
     assertEq(layout.layout, 'feed-tabs', 'feed-tabs: layout === "feed-tabs" with wall + lists');
-    await page.goto('http://127.0.0.1:3194/', { waitUntil: 'load' });
+    await page.goto('http://127.0.0.1:3194/?home=1', { waitUntil: 'load' });
     await page.waitForFunction(() => document.body.dataset.layout === 'feed-tabs', { timeout: 5000 });
     ok('feed-tabs: body[data-layout] set after SPA boot');
     const tabsNavDisplay = await page.evaluate(() => getComputedStyle(document.getElementById('appNav')).display);
@@ -180,7 +180,7 @@ async function disableAll() {
     // ---- 2. meadow: enable everything -----------------------------
     layout = await enableAll();
     assertEq(layout.layout, 'meadow', 'meadow: layout === "meadow" with all enabled');
-    await page.goto('http://127.0.0.1:3194/', { waitUntil: 'load' });
+    await page.goto('http://127.0.0.1:3194/?home=1', { waitUntil: 'load' });
     await page.waitForFunction(() => document.body.dataset.layout === 'meadow', { timeout: 5000 });
     const meadowNavDisplay = await page.evaluate(() => getComputedStyle(document.getElementById('appNav')).display);
     assert(meadowNavDisplay !== 'none', `meadow: #appNav is visible (display=${meadowNavDisplay})`);
@@ -250,7 +250,7 @@ async function disableAll() {
     await disableAll();
     layout = await (await GET('/api/me/layout')).json();
     assertEq(layout.layout, 'empty', 'empty: layout === "empty" with 0 enabled');
-    await page.goto('http://127.0.0.1:3194/', { waitUntil: 'load' });
+    await page.goto('http://127.0.0.1:3194/?home=1', { waitUntil: 'load' });
     await page.waitForFunction(() => document.body.dataset.layout === 'empty', { timeout: 5000 });
     const emptyPillDisplay = await page.evaluate(() => document.getElementById('addRoomPill').style.display);
     assert(emptyPillDisplay !== 'none',
@@ -263,14 +263,14 @@ async function disableAll() {
     // (We re-enabled everything to land a clean meadow shape for the
     // final assertion.)
     layout = await enableAll();
-    await page.goto('http://127.0.0.1:3194/', { waitUntil: 'load' });
+    await page.goto('http://127.0.0.1:3194/?home=1', { waitUntil: 'load' });
     await page.waitForFunction(() => document.body.dataset.layout === 'meadow', { timeout: 5000 });
     const drawerClassWithAgent = await page.evaluate(() => document.getElementById('drawerFab').className);
     assert(!/\boff\b/.test(drawerClassWithAgent),
       `meadow + agent-on: drawerFab not gated off (class="${drawerClassWithAgent}")`);
     // Disable agent only
     await POST('/api/me/modules/agent/disable', { withDependents: true });
-    await page.goto('http://127.0.0.1:3194/', { waitUntil: 'load' });
+    await page.goto('http://127.0.0.1:3194/?home=1', { waitUntil: 'load' });
     await page.waitForFunction(() => document.body.dataset.layout === 'meadow', { timeout: 5000 });
     const drawerClassNoAgent = await page.evaluate(() => document.getElementById('drawerFab').className);
     assert(/\boff\b/.test(drawerClassNoAgent),

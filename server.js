@@ -72,6 +72,7 @@ const mailbox = require('./lib/porch/mailbox');
 const agentConnectionsRouter = require('./routes/agent-connections');
 // #3214 (#1647): second domain extracted from server.js.
 const healthRouter = require('./routes/health');
+const forumRouter = require('./routes/forum');
 
 const hearthCharacters = require('./lib/hearth-characters');
 // #2851: Hearth's inbound action surface — the house-actions the
@@ -2807,56 +2808,11 @@ app.post('/api/walls/posts/:postId/comments', auth, (req, res) => {
   } catch (e) { wallsErr(res, e); }
 });
 
-// ---- #4097: The Forum read API (Woodgrain UI) ----
-// Boards are walls, threads are wall posts, replies are post comments —
-// see lib/forum.js. Every handler resolves the caller then delegates; the
-// membership gate (404 for boards you can't see) lives in lib/walls.js.
-// App-scoped tokens need the blanket read:walls scope: forum views span
-// every board, so a single-wall scope can't authorise them.
-function requireForumReadScope(req, res, next) {
-  const scopes = tokenScopes(req);
-  if (scopes === null || scopes.includes('read:walls')) return next();
-  return res.status(403).json({ error: 'insufficient_scope', required: 'read:walls' });
-}
-function forumCaller(req, res) {
-  const me = userModel.getMe(db, req.session.user.username);
-  if (!me) { res.status(401).json({ error: 'unknown_user' }); return null; }
-  forum.touchActivity(me.id);
-  return me;
-}
-app.get('/api/forum/index', auth, requireForumReadScope, (req, res) => {
-  const me = forumCaller(req, res); if (!me) return;
-  try { res.json(forum.boardIndex(me.id)); } catch (e) { wallsErr(res, e); }
-});
-app.get('/api/forum/boards/:slug/threads', auth, requireForumReadScope, (req, res) => {
-  const me = forumCaller(req, res); if (!me) return;
-  try { res.json(forum.threadList(req.params.slug, me.id, { page: req.query.page, limit: req.query.limit })); }
-  catch (e) { wallsErr(res, e); }
-});
-app.get('/api/forum/threads/:postId', auth, requireForumReadScope, (req, res) => {
-  const me = forumCaller(req, res); if (!me) return;
-  try { res.json(forum.threadView(req.params.postId, me.id)); } catch (e) { wallsErr(res, e); }
-});
-app.patch('/api/forum/threads/:postId', auth, requireAdmin, (req, res) => {
-  const me = forumCaller(req, res); if (!me) return;
-  try {
-    if (typeof (req.body || {}).sticky !== 'boolean') return res.status(400).json({ error: 'sticky_boolean_required' });
-    res.json(forum.setSticky(req.params.postId, req.body.sticky));
-  } catch (e) { wallsErr(res, e); }
-});
-app.get('/api/forum/online', auth, requireForumReadScope, (req, res) => {
-  const me = forumCaller(req, res); if (!me) return;
-  res.json(forum.whosOnline());
-});
-app.get('/api/forum/stats', auth, requireForumReadScope, (req, res) => {
-  const me = forumCaller(req, res); if (!me) return;
-  res.json(forum.stats(me.id));
-});
-app.patch('/api/forum/me', auth, (req, res) => {
-  if (tokenScopes(req) !== null) return res.status(403).json({ error: 'insufficient_scope' });
-  const me = forumCaller(req, res); if (!me) return;
-  try { res.json(forum.updateProfile(me.id, req.body)); } catch (e) { wallsErr(res, e); }
-});
+// ---- #4097: The Forum read API + /forum page (routes/forum.js) ----
+app.use(forumRouter({
+  db, auth, requireAdmin, tokenScopes, userModel, forum, wallsErr,
+  publicDir: path.join(__dirname, 'public'),
+}));
 
 // ---- agent-to-agent mailbox (#2426) ----
 // A "foreign harness" here is nothing more than an installed third-party
@@ -4561,16 +4517,6 @@ app.get(/^\/invite\/([A-Fa-f0-9]{16,64})$/, (req, res) => {
   // foot-gun — see the explainer block above for the smoke that
   // exercises this path.
   res.sendFile(path.join(__dirname, 'public', 'invite.html'), { dotfiles: 'allow' });
-});
-// #4097: Porch → The Forum. The standalone page lives at /forum; the old
-// URL (bookmarks, push-notification deep links, welcome handoffs) redirects,
-// preserving the query string (?wall=…&post=…).
-app.get('/forum', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'forum.html'), { dotfiles: 'allow' });
-});
-app.get('/porch.html', (req, res) => {
-  const qi = req.originalUrl.indexOf('?');
-  res.redirect(301, '/forum' + (qi === -1 ? '' : req.originalUrl.slice(qi)));
 });
 app.get('/favicon.ico', (req, res) => {
   res.set('Content-Type', 'image/svg+xml');
