@@ -264,7 +264,7 @@ const ALLOWED_LEGITIMATE = [
   // lib/app-install.js's allow-listed setUserModule('apps', ...) calls.
   { file: 'public/index.html', literal: "'chores'" },
   // #2853: public/gazette.html's app-nav script tag carries
-  // `data-active="gazette"` — same pattern as porch.html's
+  // `data-active="gazette"` — same pattern as forum.html's
   // `data-active="porch"` (a page-identity attribute the shared nav
   // component reads to highlight the current page), not a registry
   // module-key branch.

@@ -103,7 +103,7 @@ async function main() {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
 
-    const root = await page.goto(`http://127.0.0.1:${port}/`, {
+    const root = await page.goto(`http://127.0.0.1:${port}/?home=1`, {
       waitUntil: 'domcontentloaded',
     });
     if (!root || !root.ok()) {

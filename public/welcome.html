@@ -14,7 +14,7 @@
    Porch as home/feed, the wall they joined + who's there, what the
    invite granted, one contextual first action, and (local-account
    only) a note that Authentik can be linked later. Tokens mirror
-   public/porch.css so the handoff to /porch.html feels like the same
+   public/porch.css so the handoff to /forum feels like the same
    app, not a different site.
 
    Dismiss/skip: the corner × and the Escape key both stamp
@@ -112,7 +112,7 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-off
 //      Porch, wall + members, what the invite granted, a contextual
 //      first action, and (local-account only) an Authentik-later note.
 //   4. CTA / skip / Escape all call POST /api/me/first-run-complete
-//      then navigate to /porch.html?wall=<slug>.
+//      then navigate to /forum?wall=<slug>.
 
 const content = document.getElementById('content');
 const ctaBtn = document.getElementById('continueBtn');
@@ -228,7 +228,7 @@ async function bootstrap() {
   // Existing user (first_run_completed_at IS NOT NULL) — skip the
   // screen UNLESS they explicitly asked to see it again.
   if (me.first_run === false && !revisit) {
-    location.replace('/porch.html?wall=' + encodeURIComponent(wallSlug));
+    location.replace('/forum?wall=' + encodeURIComponent(wallSlug));
     return;
   }
 
@@ -297,7 +297,7 @@ async function bootstrap() {
         body: '{}',
       });
     } catch (_) { /* idempotent — if it fails we'll still try the feed */ }
-    location.href = '/porch.html?wall=' + encodeURIComponent(wallSlug);
+    location.href = '/forum?wall=' + encodeURIComponent(wallSlug);
   }
 
   ctaBtn.addEventListener('click', () => {

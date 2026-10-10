@@ -111,7 +111,7 @@ glossary in the same PR.
   the 16-char non-secret prefix, revoke. The PAT layer is the
   contract for the upcoming chat drawer (#1617.5/.6) and the
   MCP server (#1617.8). See [Personal access tokens](#personal-access-tokens-pha-16173) below.
-- **The Porch Wall (#2151 + #2206)** — `/porch.html` is the
+- **The Porch Wall (#2151 + #2206)** — `/forum` is the
   standalone thin shell when the wall module is the user's only
   enabled room; when other modules are also enabled, the SAME feed
   surface mounts in-place inside `#page-porch` of the SPA via

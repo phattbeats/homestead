@@ -45,7 +45,7 @@ each one is either a tile in the home grid or a tab in the top strip.
   shares, and plain text. Idempotent emoji reactions and inline
   comments. The Porch is the only module enabled for new users
   (per #2200 Amendment 2) — every fresh install lands here. The
-  module key is `wall`; the deep link is `/porch.html`; the in-SPA
+  module key is `wall`; the deep link is `/forum`; the in-SPA
   page div is `#page-porch`. The decision to call the surface
   "Porch" instead of "Feed" or "Wall" was editorial — the wall is
   the data model; the Porch is where you sit with it.

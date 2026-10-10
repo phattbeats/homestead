@@ -118,7 +118,7 @@ const GET = (urlPath) => fetch('http://127.0.0.1:3192' + urlPath, { headers: HEA
   // below covers the genuinely-everything-on case.
   assertEq(layout.addRoomVisible, true, 'six enabled → addRoomVisible (gazette still addable)');
   assertEq(layout.agentDrawer, true, 'agent enabled → agentDrawer');
-  assertEq(layout.defaultRoute, '/porch.html', 'defaultRoute is porch');
+  assertEq(layout.defaultRoute, '/forum', 'defaultRoute is porch');
   assertEq(layout.tabs.length, 6, '6 tabs');
   assertEq(layout.pages.length, 6, '6 pages (same as tabs)');
 
@@ -152,8 +152,8 @@ const GET = (urlPath) => fetch('http://127.0.0.1:3192' + urlPath, { headers: HEA
   assertEq(layout.layout, 'feed-only', '1 enabled (wall) → feed-only');
   assertEq(layout.tabs.length, 1, '1 tab');
   assertEq(layout.tabs[0].key, 'wall', 'tab key is wall');
-  assertEq(layout.tabs[0].route, '/porch.html', 'wall tab route');
-  assertEq(layout.defaultRoute, '/porch.html', 'defaultRoute is porch');
+  assertEq(layout.tabs[0].route, '/forum', 'wall tab route');
+  assertEq(layout.defaultRoute, '/forum', 'defaultRoute is porch');
 
   // Disable wall → 0 enabled.
   await disable('wall');
@@ -270,7 +270,7 @@ const GET = (urlPath) => fetch('http://127.0.0.1:3192' + urlPath, { headers: HEA
   // Test 5 left every module enabled, gazette included.
   assertEq(me.enabled_modules, ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent', 'gazette'],
     '/api/me.enabled_modules === all 7 (registry order)');
-  assertEq(me.default_route, '/porch.html', '/api/me.default_route === "/porch.html"');
+  assertEq(me.default_route, '/forum', '/api/me.default_route === "/forum"');
   assert(!me.user || !('password' in me.user), '/api/me.user does NOT include pass_hash');
   assert(!('pass_hash' in me), '/api/me does NOT include top-level pass_hash');
 

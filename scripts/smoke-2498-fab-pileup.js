@@ -69,7 +69,7 @@ async function main() {
       if (m.type() === 'error') consoleErrors.push(m.text());
     });
 
-    await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`http://127.0.0.1:${port}/?home=1`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#username', { state: 'visible', timeout: 5000 });
     await page.fill('#username', 'admin');
     await page.fill('#pw', ADMIN_PASSWORD);

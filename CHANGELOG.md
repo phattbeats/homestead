@@ -1,3 +1,11 @@
+## Unreleased — The Forum: Porch rename, /forum, board/thread data model (#4097)
+
+**#4097 (build 1/3 of #4076, Design B "Woodgrain Board"):** Porch becomes **The Forum**. Nav label, page title, registry `name` and the "Vote off the Forum" copy are renamed; the page lives at `/forum` and `/porch.html` 301-redirects there (query string preserved, so old `?wall=&post=` deep links still work). `/api/me.default_route` is now always `/forum`, and the SPA sends every user there once per browser session after login (`/?home=1` skips it).
+
+**Data model (all additive, idempotent):** `wall_posts.title/sticky/views`, `walls.category/sort`, `users.signature/birthday/last_active_at/last_visit_at`. A board is a wall, a thread a wall post, a reply a post comment — no second content store. Post counts and ranks are derived, never stored; Hearth shows as *Moderator · House Agent*. Three starter boards are seeded once (Announcements, General Chit-Chat = the existing Porch wall, Introduce Yourself); the old `Household Porch` name is rewritten, custom names are left alone.
+
+**API:** `GET /api/forum/index`, `/boards/:slug/threads`, `/threads/:postId`, `/online` (15-min window), `/stats` (incl. birthdays); `PATCH /api/forum/threads/:postId` (admin sticky); `PATCH /api/forum/me` (signature, birthday). `POST /api/walls/:slug/posts` accepts an optional `title`.
+
 ## v0.5.24 (2026-09-07) — fix missing routes/ in runtime image (#3327)
 
 **#3327:** same failure class as v0.5.20's `jobs/` miss. Router extraction (#3214's `routes/health.js`, then `routes/agent-connections.js`) moved `server.js` dependencies into `routes/`, but the Dockerfile's runtime stage never `COPY`'d that directory, so the container crash-looped on boot (`Cannot find module './routes/agent-connections'`) — this is what took prod down this morning. Fix is `COPY routes ./routes` alongside the existing `lib`/`jobs`/`public` copies, plus `scripts/test-dockerfile-runtime-routes.js` to catch the next router extraction before it ships the same way. Version jumps from v0.5.20 to v0.5.24: tags v0.5.21–v0.5.23 exist on GitHub pointing at earlier untagged-in-`package.json` commits (never bumped here), so this release claims the next free number rather than reusing one.

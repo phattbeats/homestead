@@ -4,7 +4,7 @@
 // Drives Playwright Chromium through every layout shape the SPA renders:
 //   * feed-only   — 1 enabled module (wall) → bottom nav hidden, + Add rooms pill
 //                   [NOTE: when wall is the only enabled module, boot() redirects
-//                    to /porch.html per the single-surface rule. To keep applyLayout()
+//                    to /forum per the single-surface rule. To keep applyLayout()
 //                    in scope on /, we test feed-only via a synthetic shape that has
 //                    a non-wall "keep" module instead.]
 //   * feed-tabs   — 2 enabled modules → bottom nav with enabled tabs only
@@ -142,7 +142,7 @@ async function disableAll() {
 
     // ---- 1. feed-tabs: 2 enabled modules (wall, lists) — index.html stays
     // We use feed-tabs (2 modules) instead of pure feed-only (1 module) for
-    // the layout test, because the SPA redirects to /porch.html when wall is
+    // the layout test, because the SPA redirects to /forum when wall is
     // the sole enabled module (single-surface rule). Two modules = no redirect.
     await POST('/api/me/modules/lists/disable', { withDependents: true });
     await POST('/api/me/modules/calendar/disable', { withDependents: true });
@@ -152,7 +152,7 @@ async function disableAll() {
     await POST('/api/me/modules/lists/enable', { withRequirements: true });
     let layout = await (await GET('/api/me/layout')).json();
     assertEq(layout.layout, 'feed-tabs', 'feed-tabs: layout === "feed-tabs" with wall + lists');
-    await page.goto('http://127.0.0.1:3194/', { waitUntil: 'load' });
+    await page.goto('http://127.0.0.1:3194/?home=1', { waitUntil: 'load' });
     await page.waitForFunction(() => document.body.dataset.layout === 'feed-tabs', { timeout: 5000 });
     ok('feed-tabs: body[data-layout] set after SPA boot');
     const tabsNavDisplay = await page.evaluate(() => getComputedStyle(document.getElementById('appNav')).display);
@@ -180,7 +180,7 @@ async function disableAll() {
     // ---- 2. meadow: enable everything -----------------------------
     layout = await enableAll();
     assertEq(layout.layout, 'meadow', 'meadow: layout === "meadow" with all enabled');
-    await page.goto('http://127.0.0.1:3194/', { waitUntil: 'load' });
+    await page.goto('http://127.0.0.1:3194/?home=1', { waitUntil: 'load' });
     await page.waitForFunction(() => document.body.dataset.layout === 'meadow', { timeout: 5000 });
     const meadowNavDisplay = await page.evaluate(() => getComputedStyle(document.getElementById('appNav')).display);
     assert(meadowNavDisplay !== 'none', `meadow: #appNav is visible (display=${meadowNavDisplay})`);
@@ -250,7 +250,7 @@ async function disableAll() {
     await disableAll();
     layout = await (await GET('/api/me/layout')).json();
     assertEq(layout.layout, 'empty', 'empty: layout === "empty" with 0 enabled');
-    await page.goto('http://127.0.0.1:3194/', { waitUntil: 'load' });
+    await page.goto('http://127.0.0.1:3194/?home=1', { waitUntil: 'load' });
     await page.waitForFunction(() => document.body.dataset.layout === 'empty', { timeout: 5000 });
     const emptyPillDisplay = await page.evaluate(() => document.getElementById('addRoomPill').style.display);
     assert(emptyPillDisplay !== 'none',
@@ -263,14 +263,14 @@ async function disableAll() {
     // (We re-enabled everything to land a clean meadow shape for the
     // final assertion.)
     layout = await enableAll();
-    await page.goto('http://127.0.0.1:3194/', { waitUntil: 'load' });
+    await page.goto('http://127.0.0.1:3194/?home=1', { waitUntil: 'load' });
     await page.waitForFunction(() => document.body.dataset.layout === 'meadow', { timeout: 5000 });
     const drawerClassWithAgent = await page.evaluate(() => document.getElementById('drawerFab').className);
     assert(!/\boff\b/.test(drawerClassWithAgent),
       `meadow + agent-on: drawerFab not gated off (class="${drawerClassWithAgent}")`);
     // Disable agent only
     await POST('/api/me/modules/agent/disable', { withDependents: true });
-    await page.goto('http://127.0.0.1:3194/', { waitUntil: 'load' });
+    await page.goto('http://127.0.0.1:3194/?home=1', { waitUntil: 'load' });
     await page.waitForFunction(() => document.body.dataset.layout === 'meadow', { timeout: 5000 });
     const drawerClassNoAgent = await page.evaluate(() => document.getElementById('drawerFab').className);
     assert(/\boff\b/.test(drawerClassNoAgent),
@@ -280,9 +280,9 @@ async function disableAll() {
 
     // ---- 6. wall-only screenshot (#2557 acceptance) -----------
     // Disable every non-wall module. The SPA single-surface rule
-    // redirects `/` to /porch.html when wall is the sole enabled
+    // redirects `/` to /forum when wall is the sole enabled
     // module (so we can't take the screenshot on `/` itself) — we
-    // navigate directly to /porch.html and verify the redirect
+    // navigate directly to /forum and verify the redirect
     // path + the layout parity.
     await POST('/api/me/modules/lists/disable', { withDependents: true });
     await POST('/api/me/modules/calendar/disable', { withDependents: true });
@@ -293,10 +293,10 @@ async function disableAll() {
     assertEq(layout.layout, 'feed-only', 'wall-only: layout === "feed-only"');
     assertEq(layout.tabs.length, 1, 'wall-only: layout.tabs.length === 1');
     assertEq(layout.tabs[0].key, 'wall', 'wall-only: only wall tab');
-    // The single-surface rule redirects / to /porch.html — verify that
+    // The single-surface rule redirects / to /forum — verify that
     // path is reachable and the layout API's defaultRoute is honored.
-    await page.goto('http://127.0.0.1:3194/porch.html', { waitUntil: 'load' });
-    // The /porch.html shell mounts the HomesteadFeed component into
+    await page.goto('http://127.0.0.1:3194/forum', { waitUntil: 'load' });
+    // The /forum shell mounts the HomesteadFeed component into
     // #porch-mount. The component creates a `.feed-root` child even
     // when the user has no wall memberships (#2206 component
     // contract). We assert the mount happened — inner feed content
@@ -311,7 +311,7 @@ async function disableAll() {
       };
     });
     assert(porchMountState.mountExists,
-      'wall-only: /porch.html has #porch-mount');
+      'wall-only: /forum has #porch-mount');
     assert(porchMountState.feedRootExists,
       'wall-only: HomesteadFeed mounted a .feed-root child (component contract)');
     await page.screenshot({ path: path.join(OUT_DIR, 'modui-wall-only.png'), fullPage: false });
@@ -335,10 +335,10 @@ async function disableAll() {
     // missing *.html returns 404 from the static handler before the SPA
     // catch-all swallows the request. We exercise /lists.html (which
     // exists as a registry route but no file) and assert it's 404.
-    // /porch.html is the one frame route that DOES exist as a file
+    // /forum is the one frame route that DOES exist as a file
     // and must remain 200.
-    const porchRes = await fetch('http://127.0.0.1:3194/porch.html');
-    assertEq(porchRes.status, 200, '/porch.html (existing file) → 200');
+    const porchRes = await fetch('http://127.0.0.1:3194/forum');
+    assertEq(porchRes.status, 200, '/forum (existing file) → 200');
     const listsRes = await fetch('http://127.0.0.1:3194/lists.html');
     assertEq(listsRes.status, 404, '/lists.html (no file) → 404 (was 200 with SPA shell pre-fix)');
     const calendarRes = await fetch('http://127.0.0.1:3194/calendar.html');

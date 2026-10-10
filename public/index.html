@@ -13,8 +13,8 @@
 <link rel="alternate icon" href="/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="stylesheet" href="/brand.css">
 <!-- #2200.5 / #2206: shared wall feed styles. Same file the
-     standalone /porch.html loads, so the in-place mount inside
-     #page-wall renders identically to /porch.html. -->
+     standalone /forum loads, so the in-place mount inside
+     #page-wall renders identically to /forum. -->
 <link rel="stylesheet" href="/porch.css">
 <style>
 :root{
@@ -208,7 +208,7 @@ body[data-layout="meadow"] #addRoomPill:active{transform:scale(.96)}
 /* Hide pages whose module is not in the user's enabled set.
    When EVERY page is hidden (feed-only → all chrome collapsed),
    the layout-aware logic in applyLayout() instead redirects to
-   defaultRoute (e.g. /porch.html for a wall-only user). */
+   defaultRoute (e.g. /forum for a wall-only user). */
 .page[data-disabled="1"]{display:none}
 
 /* ---- #1898 + #2498 (UX batch #2): meta-agent chat drawer FAB. ----
@@ -594,10 +594,10 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
       <div class="svc-grid" id="svcGrid"></div>
     </div>
     <!-- #2200.5 / #2206: in-place wall mount. The same
-         HomesteadFeed component that backs /porch.html is mounted into
+         HomesteadFeed component that backs /forum is mounted into
          this div when the feed module is enabled for the current user
          (see boot() below). When the feed module is the user's SOLE
-         enabled module, the SPA redirects to /porch.html instead of
+         enabled module, the SPA redirects to /forum instead of
          mounting here (per #2200 §6 dual-surface design). The
          page id matches the nav button's data-p attribute so the
          existing tab-switching handler (curPage = b.dataset.p; show
@@ -643,14 +643,14 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
     <button data-p="r-calendar" aria-label="Calendar"><span class="ico"><img src="/modules/calendar.svg" alt="" width="22" height="22"></span>Calendar</button>
     <button data-p="svc" aria-label="Apps"><span class="ico"><img src="/modules/apps.svg" alt="" width="22" height="22"></span>Apps</button>
     <!-- #2200.5 / #2206: in-place Porch tab. Replaces the old
-         `navPorch` <a> that linked to /porch.html as a separate page;
+         `navPorch` <a> that linked to /forum as a separate page;
          now it's a real tab button that switches to #page-wall. Hidden
          until boot() detects the feed module is enabled for the
          current user. The data-p attribute is a tab-discriminator
          string (matches the page div id, not the module key) so we
          use the room name 'porch' to avoid colliding with the
          #2209 no-hardcoded-keys audit. -->
-    <button data-p="porch" id="navWall" style="display:none" aria-label="Porch"><span class="ico"><img src="/modules/porch.svg" alt="" width="22" height="22"></span>Porch</button>
+    <button data-p="porch" id="navWall" style="display:none" aria-label="The Forum"><span class="ico"><img src="/modules/porch.svg" alt="" width="22" height="22"></span>Forum</button>
   </nav>
 
   <!-- #1898 + #2498: meta-agent chat drawer.
@@ -961,7 +961,7 @@ function applyLayout(layout) {
   // disabled, switch to defaultRoute (which falls back to the first
   // enabled tab's page). We only adjust the in-page active tab — we
   // do NOT redirect to a new URL here; defaultRoute might be a
-  // different page (e.g. /porch.html for feed-only wall users), and
+  // different page (e.g. /forum for feed-only wall users), and
   // that path is handled by boot()'s single-surface rule above.
   try {
     const cur = document.querySelector('#appNav button.on');
@@ -1018,6 +1018,16 @@ function showWelcomeSheet() {
 }
 
 async function boot(user){
+  // #4097: every user lands on The Forum after login (first run included).
+  // Once per browser session so Home stays reachable at '/' afterwards;
+  // '/?home=1' always skips it.
+  try{
+    if(location.pathname==='/'&&!new URLSearchParams(location.search).has('home')&&!sessionStorage.getItem('hs_forum_landed')){
+      sessionStorage.setItem('hs_forum_landed','1');
+      location.replace('/forum');
+      return;
+    }
+  }catch(_){}
   ME=user;$('#login').style.display='none';$('#app').style.display='block';
   ME=user;$('#login').style.display='none';$('#app').style.display='block';
   const h=new Date().getHours();
@@ -1048,7 +1058,7 @@ async function boot(user){
   }
   // #2200.5 / #2206: wall module is mounted in-place when the
   // user's enabled-modules set includes the feed module. The mount lives
-  // in #page-wall and shares the HomesteadFeed component with /porch.html.
+  // in #page-wall and shares the HomesteadFeed component with /forum.
   // We identify the feed module by its `room === 'porch'` discriminator
   // in the /api/modules registry — NOT by hardcoding the literal key —
   // so #2209's "no hardcoded module-key literals in render code"
@@ -1063,7 +1073,7 @@ async function boot(user){
   //      instance (the user just disabled it in the avatar menu) so
   //      the page-wall div doesn't render a stale feed.
   //   3. If the feed module is the user's ONLY enabled module, redirect
-  //      to /porch.html — that placement is the full standalone page,
+  //      to /forum — that placement is the full standalone page,
   //      not an SPA tab. This is the dual-surface rule from
   //      #2200 §6.
   try{
@@ -1100,13 +1110,13 @@ async function boot(user){
       }
     }
     // Single-surface rule: if the feed module is the user's only
-    // enabled module, redirect to the standalone /porch.html. The
+    // enabled module, redirect to the standalone /forum. The
     // SPA's `defaultRoute` from /api/me/layout already encodes this
     // for the layout bootstrap, but we double-check here so a user
     // landing on / while feed-only is redirected even if the
     // bootstrap didn't fire.
     if(feedOn&&enabledKeys.length===1){
-      window.location.href='/porch.html';
+      window.location.href='/forum';
     }
   }catch(_){}
   // #2205: welcome sheet for first-run users. After dismissal,
@@ -4166,7 +4176,7 @@ $('#drawerInput').addEventListener('input', autosizeDrawerInput);
 // only uses window.HomesteadFeed.mount(target, opts).
 //
 // Loaded as an external <script src> rather than inlined because the
-// component is shared with /porch.html — one canonical file, two
+// component is shared with /forum — one canonical file, two
 // placements. service worker (sw.js) precaches this URL.
 (function () {
   const s = document.createElement('script');

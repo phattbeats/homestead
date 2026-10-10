@@ -118,7 +118,7 @@ console.log('#2203 module-registry tests\n');
   assertEq(modules.getModule(null), null, 'getModule(null) === null');
 
   // getRoomRoute only returns standalone documents; SPA modules use room.
-  assertEq(modules.getRoomRoute('wall'), '/porch.html', 'getRoomRoute("wall") === "/porch.html"');
+  assertEq(modules.getRoomRoute('wall'), '/forum', 'getRoomRoute("wall") === "/forum"');
   assertEq(modules.getRoomRoute('lists'), null, 'getRoomRoute("lists") === null (in-SPA)');
   assertEq(modules.getRoomRoute('calendar'), null, 'getRoomRoute("calendar") === null (in-SPA)');
   assertEq(modules.getRoomRoute('chores'), null, 'getRoomRoute("chores") === null (in-SPA)');
@@ -289,7 +289,7 @@ console.log('#2203 module-registry tests\n');
   // the dispatch rule in public/modules.html + public/index.html). The
   // 16-field contract (#2201) is preserved: `icon` is still a non-empty
   // string. The registry's wall entry is the source of truth.
-  assert(wall && wall.key === 'wall' && wall.name === 'Porch' && wall.icon === '/modules/porch.svg', 'default entry is the full wall registry entry (wall icon is /modules/porch.svg per #2846)');
+  assert(wall && wall.key === 'wall' && wall.name === 'The Forum' && wall.icon === '/modules/porch.svg', 'default entry is the full wall registry entry (wall icon is /modules/porch.svg per #2846)');
 }
 
 // -----------------------------------------------------------------------------

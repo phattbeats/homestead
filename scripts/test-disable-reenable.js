@@ -194,7 +194,7 @@ function provision(db, username) {
   layout = modules.computeLayout(keys);
   assertEq(layout.layout, 'meadow', '6 enabled → meadow');
   assert(layout.agentDrawer, 'agent enabled → agentDrawer === true');
-  assertEq(layout.defaultRoute, '/porch.html', 'wall-first default route');
+  assertEq(layout.defaultRoute, '/forum', 'wall-first default route');
 }
 
 // -----------------------------------------------------------------------------
@@ -243,7 +243,7 @@ function provision(db, username) {
   assertEq(layout.layout, 'feed-only', 'default-enabled set → feed-only');
   assertEq(layout.tabs.length, 1, '1 tab');
   assertEq(layout.tabs[0].key, 'wall', 'tab is wall');
-  assertEq(layout.defaultRoute, '/porch.html', 'default route is porch');
+  assertEq(layout.defaultRoute, '/forum', 'default route is porch');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

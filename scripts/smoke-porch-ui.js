@@ -3,7 +3,7 @@
 // Copyright (C) 2026 PHATT Tech LLC
 
 // #2200.5 / #2206 smoke test (extends #2151's smoke-porch-ui):
-// verify BOTH placements of the wall feed component — /porch.html (the
+// verify BOTH placements of the wall feed component — /forum (the
 // standalone thin shell) and /index.html (the in-place #page-wall
 // mount) — load the SAME /components/feed.js and reference the SAME
 // backend endpoints. The component extraction moved all the
@@ -11,7 +11,7 @@
 // porch.js no longer exists. This smoke covers:
 //
 //   1. Static asset shape (extraction is real — no inlined porch.js
-//      logic in porch.html).
+//      logic in forum.html).
 //   2. The shared component file is reachable as /components/feed.js
 //      and exposes window.HomesteadFeed.
 //   3. The /api/link-preview backend route (added in #2151) still
@@ -96,10 +96,10 @@ function startFixtureServer() {
 
   try {
     // ---- 1. Static assets exist and reference the right endpoints. ----
-    const htmlPath = path.join(__dirname, '..', 'public', 'porch.html');
+    const htmlPath = path.join(__dirname, '..', 'public', 'forum.html');
     const componentPath = path.join(__dirname, '..', 'public', 'components', 'feed.js');
     const cssPath = path.join(__dirname, '..', 'public', 'porch.css');
-    assert(fs.existsSync(htmlPath), 'public/porch.html exists');
+    assert(fs.existsSync(htmlPath), 'public/forum exists');
     assert(fs.existsSync(componentPath), 'public/components/feed.js exists (extraction)');
     assert(!fs.existsSync(path.join(__dirname, '..', 'public', 'porch.js')),
       'public/porch.js removed (logic moved into components/feed.js)');
@@ -107,9 +107,9 @@ function startFixtureServer() {
     const html = fs.readFileSync(htmlPath, 'utf8');
     const componentJs = fs.readFileSync(componentPath, 'utf8');
 
-    assert(html.includes('porch.css'), 'porch.html links porch.css');
-    assert(html.includes('/components/feed.js'), 'porch.html loads /components/feed.js (shared component)');
-    assert(html.includes('HomesteadFeed.mount'), 'porch.html calls HomesteadFeed.mount()');
+    assert(html.includes('porch.css'), 'forum.html links porch.css');
+    assert(html.includes('/components/feed.js'), 'forum.html loads /components/feed.js (shared component)');
+    assert(html.includes('HomesteadFeed.mount'), 'forum.html calls HomesteadFeed.mount()');
 
     // Component file shape — must be the canonical extraction.
     assert(componentJs.includes('window.HomesteadFeed'), 'feed.js exposes window.HomesteadFeed');
@@ -144,12 +144,12 @@ function startFixtureServer() {
     assert(indexHtml.includes('HomesteadFeed.mount'),
       'index.html calls HomesteadFeed.mount() for the in-place mount');
 
-    // ---- 2. GET /porch.html is actually served. ----
-    let r = await fetch('http://127.0.0.1:3096/porch.html');
-    assertEq(r.status, 200, 'GET /porch.html returns 200');
+    // ---- 2. GET /forum is actually served. ----
+    let r = await fetch('http://127.0.0.1:3096/forum');
+    assertEq(r.status, 200, 'GET /forum returns 200');
     const served = await r.text();
     assert(served.includes('/components/feed.js'),
-      'served porch.html references /components/feed.js (shared component)');
+      'served forum.html references /components/feed.js (shared component)');
 
     // ---- 2b. GET /components/feed.js is reachable as a static asset. ----
     r = await fetch('http://127.0.0.1:3096/components/feed.js');
