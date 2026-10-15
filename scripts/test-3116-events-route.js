@@ -188,6 +188,13 @@ async function main() {
     });
     // Sign the ORIGINAL eventBody, send the TAMPERED eventBody.
     const tamperedHeaders = signedHeaders(secret, eventBody);
+    // `signedHeaders` sets Content-Length from the body it signed, so
+    // sending a different-length payload produced a malformed request:
+    // node rejected it at the transport layer (400, empty body,
+    // `connection: close`) and the signature check never ran at all.
+    // Length describes what we actually write; the signature deliberately
+    // does not match it.
+    tamperedHeaders['Content-Length'] = Buffer.byteLength(tamperedBody).toString();
     const tampered = await httpRequest(base, {
       path: `/api/agent-connections/${connectionId}/events`, method: 'POST',
       headers: tamperedHeaders,
