@@ -38,6 +38,7 @@ const Database = require('better-sqlite3');
 
 const userModel = require('../lib/user-model');
 const agentEndpoints = require('../lib/agent-endpoints');
+const secretBox = require('../lib/secret-box');
 const drawerDispatch = require('../lib/drawer-dispatch');
 const snapshot = require('../lib/snapshot');
 
@@ -317,10 +318,11 @@ async function main() {
       assertEq(typeof seen.headers['x-homestead-timestamp'], 'string', 'X-Homestead-Timestamp present');
       assertEq(seen.headers['x-homestead-conversation-id'], 'c-sse-1', 'X-Homestead-Conversation-Id = c-sse-1');
       assertEq(seen.headers['content-type'], 'application/json', 'Content-Type = application/json');
-      // Verify HMAC against the stored secret.
+      // Verify HMAC against the stored secret (#3205: at rest it's an
+      // envelope, so decrypt before handing it to the HMAC check).
       const epRow = db.prepare('SELECT secret FROM agent_endpoints WHERE id = ?').get(ep.id);
       const ok = verifySignature(seen.headers['x-homestead-signature'],
-        epRow.secret,
+        secretBox.openSecret(epRow.secret),
         seen.headers['x-homestead-timestamp'],
         seen.body);
       assert(ok, 'X-Homestead-Signature validates against stored secret');

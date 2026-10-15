@@ -552,10 +552,26 @@ tile and switch "Open mode" to **New tab**.
 | `ADMIN_PASSWORD`   | first run only | Seed password for the `admin` user on first DB creation.    |
 | `DATA_DIR`         | no           | Where the SQLite file lives. Defaults to `/data`.            |
 | `PORT`             | no           | In-container listen port. Defaults to `3080`.                 |
+| `CALENDAR_CRED_KEY` | no          | 32-byte hex key (AES-256-GCM) for calendar provider credentials. |
+| `HMAC_CRED_KEY`    | no           | 32-byte hex key for the agent HMAC secrets (`agent_endpoints.secret`, `agent_connections.secret`). Falls back to `CALENDAR_CRED_KEY`. |
 
 The seed password is read **only** when the database is first created. Use
 the in-app password change (admin: Settings → Users) to rotate a user's
 password for real.
+
+### Agent secrets at rest
+
+`agent_endpoints.secret` (drawer + events-webhook HMAC) and
+`agent_connections.secret` (companion signing key) are AES-256-GCM
+envelopes at rest, same construction as the calendar credentials. Set
+`HMAC_CRED_KEY` (it falls back to `CALENDAR_CRED_KEY`); with neither set,
+pairing and endpoint creation **fail closed** rather than writing a
+plaintext key, and `/api/health` reports `hmacSecretsEncrypted: false`.
+Existing plaintext rows are migrated in place on the next boot, and this
+release dual-reads legacy plaintext rows so a container rollback still
+verifies signatures. Because verification is symmetric HMAC, the server
+still holds the key in memory to sign outbound POSTs — the win is that a
+copied `life.db` is no longer the keyring.
 
 ## Data
 

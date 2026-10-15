@@ -80,6 +80,13 @@ module.exports = function healthRouter({
     // install. Keep the readiness signal separately for calendar operators.
     const credKeyReady = secretBox.keyReady();
     const sessionReady = secretBox.sessionSecretReady();
+    // #3205: agent HMAC secrets (`agent_endpoints.secret`,
+    // `agent_connections.secret`) are envelope-encrypted at rest. This
+    // reports whether the key that does it is actually configured. False
+    // means either "no key" (new writes are refused) or "rows on disk
+    // predate the migration" — in both cases the operator has something
+    // to do, which is exactly what a Watchtower probe should surface.
+    const hmacReady = secretBox.hmacKeyReady();
     res.json({
       ok: dbStatus === 'ok',
       service: 'homestead',
@@ -93,6 +100,10 @@ module.exports = function healthRouter({
       // logged `false` here — operators can spot it from a Watchtower
       // health probe without dumping the secret.
       sessionSecretReady: sessionReady,
+      // #3205: separate readiness signal for the agent-HMAC secret
+      // envelope. Same posture as the two fields above — visible without
+      // ever putting a secret on the wire.
+      hmacSecretsEncrypted: hmacReady,
     });
   });
 

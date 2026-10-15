@@ -15,6 +15,7 @@ const Database = require('better-sqlite3');
 
 const userModel = require('../lib/user-model');
 const agentConnections = require('../lib/agent-connections');
+const secretBox = require('../lib/secret-box');
 
 let pass = 0;
 let fail = 0;
@@ -76,7 +77,8 @@ console.log('#2880 agent-connections tests\n');
   assert(redeemed.secret_plaintext.startsWith('homestead_conn_'), 'secret carries homestead_conn_ prefix');
 
   const row = db.prepare('SELECT * FROM agent_connections WHERE id = ?').get(minted.id);
-  assertEq(row.secret, redeemed.secret_plaintext, 'DB persisted the secret plaintext');
+  assert(secretBox.isEnvelope(row.secret), 'DB persisted an encrypted envelope');
+  assertEq(secretBox.openSecret(row.secret), redeemed.secret_plaintext, 'envelope decrypts back to the revealed plaintext');
   assertEq(row.pairing_code, null, 'pairing_code cleared after redemption');
 
   // Re-redeeming the same (now-cleared) code fails.

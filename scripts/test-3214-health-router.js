@@ -14,8 +14,8 @@
 //   4. factory returns a function (router) when deps are complete.
 //   5. GET /api/health returns 200 with the full health JSON shape
 //      (ok, service, version, commit, uptime, db, calendarCredKeyReady,
-//      sessionSecretReady) — byte-level regression guard against
-//      accidental field removal during the relocation.
+//      sessionSecretReady, hmacSecretsEncrypted) — byte-level regression
+//      guard against accidental field removal during the relocation.
 //   6. health.service === 'homestead'.
 //   7. health.version === package.json version.
 //   8. /api/version returns 200 with {version, commit}.
@@ -65,7 +65,7 @@ const healthRouter = require('../routes/health');
   // 4: factory returns a function (Express Router) with valid deps.
   const fakeRouter = healthRouter({
     db: { prepare: () => ({ get: () => ({ one: 1 }) }) },
-    secretBox: { keyReady: () => true, sessionSecretReady: () => true },
+    secretBox: { keyReady: () => true, sessionSecretReady: () => true, hmacKeyReady: () => true },
     version: '0.0.0-test',
     commit: 'fake-sha',
   });
@@ -85,8 +85,8 @@ const healthRouter = require('../routes/health');
     assert.equal(healthResponse.status, 200, 'health endpoint returns 200');
     assert.deepEqual(
       Object.keys(health).sort(),
-      ['calendarCredKeyReady', 'commit', 'db', 'ok', 'service', 'sessionSecretReady', 'uptime', 'version'],
-      'health JSON shape preserved (no fields lost during relocation)'
+      ['calendarCredKeyReady', 'commit', 'db', 'hmacSecretsEncrypted', 'ok', 'service', 'sessionSecretReady', 'uptime', 'version'],
+      'health JSON shape preserved (calendarCredKeyReady/sessionSecretReady from #3200, hmacSecretsEncrypted from #3205)'
     );
 
     // 6: service identity.

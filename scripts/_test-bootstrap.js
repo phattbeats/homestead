@@ -15,6 +15,17 @@
 //     overwrite process.env.SESSION_SECRET themselves after this shim
 //     runs.
 //
+//   - HMAC_CRED_KEY: a 64-char random hex string. #3205 envelope-
+//     encrypts the agent HMAC secrets (`agent_endpoints.secret`,
+//     `agent_connections.secret`) with AES-256-GCM. Without a key the
+//     create / redeem / rotate paths throw, so any test that pairs a
+//     harness or signs a dispatch needs one. secret-box falls back to
+//     CALENDAR_CRED_KEY; we set the HMAC-specific var explicitly so the
+//     name the operator is told about is the one under test. Tests that
+//     want the fail-closed path delete it themselves after this shim
+//     runs, exactly as test-3200-session-secret.js does for
+//     SESSION_SECRET.
+//
 //   - HOMESTEAD_INSECURE_TEST_COOKIES=1: flips the production
 //     `secure: true` cookie flag off so tests can complete the
 //     round-trip `POST /api/login` → `GET /api/...` over plain
@@ -37,6 +48,10 @@ if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
   // require. The 64-char hex format matches the operator-facing
   // `openssl rand -hex 32` so the production code path is exercised.
   process.env.SESSION_SECRET = require('crypto').randomBytes(32).toString('hex');
+}
+
+if (!process.env.HMAC_CRED_KEY && !process.env.CALENDAR_CRED_KEY) {
+  process.env.HMAC_CRED_KEY = require('crypto').randomBytes(32).toString('hex');
 }
 
 if (!process.env.HOMESTEAD_INSECURE_TEST_COOKIES) {
