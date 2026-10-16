@@ -1,0 +1,67 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tag + sha)
+        id: meta
+        run: |
+          echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          # Bake the short SHA into the image as COMMIT_SHA so the
+          # /api/version endpoint reports the real commit
+          # instead of `null`. The server reads process.env.COMMIT_SHA
+          # at boot. The release action below also stamps this into the
+          # GitHub release body for human cross-checking.
+          build-args: |
+            COMMIT_SHA=${{ steps.meta.outputs.short_sha }}
+          tags: |
+            ghcr.io/phattbeats/homestead:${{ steps.meta.outputs.tag }}
+            ghcr.io/phattbeats/homestead:latest
+          labels: |
+            org.opencontainers.image.title=homestead
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+  release:
+    needs: docker
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true

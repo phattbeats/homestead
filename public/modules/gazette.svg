@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Gazette</title>
+  <path d="M8 16h38v34a4 4 0 0 1-4 4H12a4 4 0 0 1-4-4z" fill="#f6e4c3" stroke="#4b4624" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M46 24h8a2 2 0 0 1 2 2v24a4 4 0 0 1-4 4h-6z" fill="#e2cda6" stroke="#4b4624" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M14 23h26" stroke="#ad5c05" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M14 31h11M14 37h11M14 43h11" stroke="#6d7b59" stroke-width="2.5" stroke-linecap="round"/>
+  <rect x="30" y="30" width="11" height="14" rx="1.5" fill="#d49a40" stroke="#4b4624" stroke-width="2.5"/>
+</svg>

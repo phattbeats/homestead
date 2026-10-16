@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Welcome — Homestead</title>
+<meta name="theme-color" content="#FFFBF5">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/brand.css">
+<style>
+/* The welcome screen shown after a new
+   user redeems an invite. Covers, in order: what Homestead is, the
+   Porch as home/feed, the wall they joined + who's there, what the
+   invite granted, one contextual first action, and (local-account
+   only) a note that Authentik can be linked later. Tokens mirror
+   public/porch.css so the handoff to /forum feels like the same
+   app, not a different site.
+
+   Dismiss/skip: the corner × and the Escape key both stamp
+   first-run-complete and land on the Porch — same destination as the
+   primary CTA, just without reading the rest of the page.
+
+   Reopen: returning users (first_run:false) are redirected straight
+   to the Porch UNLESS the URL carries ?revisit=1 — that's the
+   explicit-reopen escape hatch for a future "show me that again"
+   link (e.g. the Linked Accounts settings surface). */
+:root{
+  --bg:#FFFBF5; --surface:#FFFFFF; --ink:#2B2622; --muted:#8A8177;
+  --line:rgba(43,38,34,.07);
+  --accent:#C4703C; --accent-soft:#F8E9DE;
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100dvh}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+#app{max-width:520px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 20px) 22px 30px;min-height:100dvh;display:flex;flex-direction:column}
+
+.topbar{display:flex;justify-content:flex-end;margin-bottom:6px}
+.close-btn{width:34px;height:34px;border-radius:50%;font-size:20px;line-height:1;color:var(--muted);display:flex;align-items:center;justify-content:center}
+.close-btn:hover{background:var(--line)}
+
+.heading{font-size:30px;font-weight:800;letter-spacing:-.025em;line-height:1.15;margin-bottom:6px}
+.heading:focus{outline:none}
+.subheading{color:var(--muted);font-size:15px;line-height:1.45;margin-bottom:22px}
+
+.section{margin-bottom:18px}
+.section-label{color:var(--muted);font-size:12px;letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;font-weight:600}
+.section-body{font-size:14px;line-height:1.5}
+
+.wall-card{background:var(--surface);border-radius:22px;padding:18px;margin-bottom:18px;box-shadow:0 6px 30px rgba(0,0,0,.035)}
+.wall-name{font-size:18px;font-weight:800;margin-bottom:4px}
+.wall-meta{color:var(--muted);font-size:12px;letter-spacing:.05em;text-transform:uppercase;margin-bottom:14px}
+
+.avatars{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:6px}
+.avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;border:2px solid var(--bg);box-shadow:0 1px 3px rgba(0,0,0,.08);text-transform:uppercase}
+.avatar-stack{display:flex;margin-right:-12px}
+.avatar-stack .avatar{margin-left:-10px}
+.avatar.you{outline:2px solid var(--accent);outline-offset:1px}
+.member-list{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+.member-row{display:flex;align-items:center;gap:10px;font-size:14px}
+.member-row .avatar{width:30px;height:30px;font-size:12px}
+.member-row .meta{color:var(--muted);font-size:12px}
+
+.access-card{background:var(--accent-soft);border-radius:18px;padding:14px 16px;margin-bottom:18px;font-size:14px;line-height:1.5}
+
+.sso-note{border-top:1px solid var(--line);padding-top:14px;margin-top:4px;color:var(--muted);font-size:13px;line-height:1.5}
+
+.cta{margin-top:auto;padding-top:20px}
+.btn{display:block;width:100%;padding:14px 18px;border-radius:16px;background:var(--accent);color:#fff;font-weight:700;font-size:15px;text-align:center;transition:transform .2s var(--ease),opacity .2s}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.5;cursor:default}
+
+.error{background:var(--surface);border-radius:18px;padding:18px;border:1px solid var(--line);color:var(--ink)}
+.error h2{font-size:18px;margin-bottom:6px}
+.error p{color:var(--muted);font-size:14px}
+
+.empty-state{color:var(--muted);text-align:center;padding:18px 0;font-size:14px}
+
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="topbar">
+    <button id="skipBtn" class="close-btn hidden" type="button" aria-label="Skip welcome, go to the Porch">&times;</button>
+  </div>
+  <div id="content" aria-live="polite">
+    <!-- populated by JS -->
+  </div>
+  <div class="cta">
+    <button id="continueBtn" class="btn hidden">Open the feed →</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// Welcome screen bootstrap.
+//   1. GET /api/me — confirm the user is authenticated (header-trust
+//      or session). If not, the SPA is in the wrong place; bounce
+//      them to GET /api/login (server-side 302 to /?next=, see
+//      the login route) and let SWAG/authentik re-route from there.
+//   2. Parse ?wall=<slug> from the URL — set by /api/invites/:code/redeem
+//      when the user came in via the redemption page. Parse ?revisit=1
+//      — the explicit-reopen override for returning users.
+//   3. If first_run: false and no revisit, skip straight to the feed.
+//      Otherwise render the welcome screen: what Homestead is, the
+//      Porch, wall + members, what the invite granted, a contextual
+//      first action, and (local-account only) an Authentik-later note.
+//   4. CTA / skip / Escape all call POST /api/me/first-run-complete
+//      then navigate to /forum?wall=<slug>.
+
+const content = document.getElementById('content');
+const ctaBtn = document.getElementById('continueBtn');
+const skipBtn = document.getElementById('skipBtn');
+
+function el(tag, props = {}, children = []) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'text') e.textContent = v;
+    else if (k === 'style') Object.assign(e.style, v);
+    else e.setAttribute(k, v);
+  }
+  for (const c of children) e.appendChild(c);
+  return e;
+}
+
+function avatarColor(seed) {
+  // Stable color from username hash. Mirrors the palette in
+  // lib/user-model.js so the avatar colors match the rest of the app.
+  const palette = ['#9eb48a','#C4703C','#7a8da8','#b48a9e','#8a9eb4','#b4b48a','#b47a8a','#7ab4a8'];
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  return palette[Math.abs(h) % palette.length];
+}
+function avatarInitial(user) {
+  const name = (user.display || user.username || '?').trim();
+  return (name[0] || '?').toUpperCase();
+}
+
+function renderMembers(members, currentUsername) {
+  if (!members || members.length === 0) {
+    return el('div', { class: 'empty-state', text: 'You\'re the first person here — say hi.' });
+  }
+  const wrap = el('div', { class: 'member-list' });
+  // Stack of avatars (first 5). Decorative — the accessible member
+  // names live in the rows below, so screen readers can skip this.
+  const stack = el('div', { class: 'avatar-stack', style: { marginBottom: '12px' }, 'aria-hidden': 'true' });
+  const shown = members.slice(0, 5);
+  for (const m of shown) {
+    const a = el('div', {
+      class: 'avatar' + (m.username === currentUsername ? ' you' : ''),
+      style: { background: m.color || avatarColor(m.username || '') },
+      text: avatarInitial(m),
+    });
+    stack.appendChild(a);
+  }
+  if (members.length > shown.length) {
+    const more = el('div', {
+      class: 'avatar',
+      style: { background: 'var(--line)', color: 'var(--muted)' },
+      text: '+' + (members.length - shown.length),
+    });
+    stack.appendChild(more);
+  }
+  wrap.appendChild(stack);
+  const list = el('div', { role: 'list' });
+  for (const m of members) {
+    const row = el('div', { class: 'member-row', role: 'listitem' });
+    row.appendChild(el('div', {
+      class: 'avatar',
+      style: { background: m.color || avatarColor(m.username || '') },
+      text: avatarInitial(m),
+      'aria-hidden': 'true',
+    }));
+    const name = el('div', { class: 'name', text: m.display || m.username });
+    if (m.username === currentUsername) name.appendChild(el('span', { class: 'meta', text: ' (you)' }));
+    row.appendChild(name);
+    list.appendChild(row);
+  }
+  wrap.appendChild(list);
+  return wrap;
+}
+
+function renderError(title, body) {
+  return el('div', { class: 'error', role: 'alert' }, [
+    el('h2', { text: title }),
+    el('p', { text: body }),
+  ]);
+}
+
+function accessCopy(wall, isFirst) {
+  const kind = wall.visibility === 'group' ? 'a group wall' : 'a private wall';
+  const base = 'Your invite made you a member of ' + wall.name + ' — ' + kind + '. ';
+  return base + (isFirst
+    ? 'You can see everything posted here (once there is something) and post your own.'
+    : 'You can see everything posted here, react, comment, and post your own — nothing outside this wall is shared with you.');
+}
+
+async function bootstrap() {
+  const params = new URLSearchParams(location.search);
+  const wallSlug = params.get('wall');
+  const revisit = params.get('revisit') === '1';
+  if (!wallSlug) {
+    content.appendChild(renderError('No wall selected', 'This page expects a ?wall=<slug> query string. Try opening the invite link again.'));
+    return;
+  }
+
+  let me;
+  try {
+    const r = await fetch('/api/me', { credentials: 'same-origin' });
+    me = await r.json();
+  } catch (err) {
+    content.appendChild(renderError('Network error', 'Couldn\'t reach the server. Check your connection and try again.'));
+    return;
+  }
+  if (!me || !me.user) {
+    // Not signed in — bounce to login, then back here.
+    location.href = '/api/login?next=' + encodeURIComponent(location.pathname + location.search);
+    return;
+  }
+
+  // Existing user (first_run_completed_at IS NOT NULL) — skip the
+  // screen UNLESS they explicitly asked to see it again.
+  if (me.first_run === false && !revisit) {
+    location.replace('/forum?wall=' + encodeURIComponent(wallSlug));
+    return;
+  }
+
+  // Fetch wall + members for the screen.
+  let wallData;
+  try {
+    const r = await fetch('/api/walls/' + encodeURIComponent(wallSlug) + '/members', { credentials: 'same-origin' });
+    if (!r.ok) throw new Error('wall not found');
+    wallData = await r.json();
+  } catch (err) {
+    content.appendChild(renderError('Wall not found', 'The wall "' + wallSlug + '" doesn\'t exist or you don\'t have access. Check the invite link.'));
+    return;
+  }
+
+  const wall = wallData.wall || { name: wallSlug, slug: wallSlug };
+  const members = wallData.members || [];
+  const otherMembers = members.filter((m) => m.username !== me.user.username);
+  const isFirst = otherMembers.length === 0;
+
+  const heading = el('h1', { class: 'heading', text: 'Welcome to Homestead', tabindex: '-1' });
+  content.appendChild(heading);
+  content.appendChild(el('p', {
+    class: 'subheading',
+    text: 'Homestead is the shared app for your household — a feed for the people you share a wall with, plus tasks, lists, and a calendar you can turn on when you want them.',
+  }));
+
+  const porchSection = el('div', { class: 'section' });
+  porchSection.appendChild(el('div', { class: 'section-label', text: 'The Porch is home' }));
+  porchSection.appendChild(el('div', {
+    class: 'section-body',
+    text: 'The Porch is your feed — it opens by default and shows every post from the wall below, newest first.',
+  }));
+  content.appendChild(porchSection);
+
+  const card = el('div', { class: 'wall-card' });
+  card.appendChild(el('div', { class: 'wall-name', text: wall.name }));
+  card.appendChild(el('div', { class: 'wall-meta', text: wall.visibility === 'group' ? 'group wall' : 'private wall' }));
+  card.appendChild(renderMembers(members, me.user.username));
+  content.appendChild(card);
+
+  content.appendChild(el('div', { class: 'access-card' }, [
+    el('div', { class: 'section-label', text: 'What this invite got you' }),
+    el('div', { class: 'section-body', text: accessCopy(wall, isFirst) }),
+  ]));
+
+  if (me.user.authProvider === 'password') {
+    content.appendChild(el('div', {
+      class: 'sso-note',
+      text: 'You signed up with a username and password. If this Homestead adds Authentik sign-in later, you\'ll be able to link it from Linked Accounts without losing this account.',
+    }));
+  }
+
+  // Wire the CTA — copy states the one useful first action.
+  ctaBtn.classList.remove('hidden');
+  ctaBtn.textContent = isFirst ? 'Post the first thing on the Porch →' : 'Say hi on the Porch →';
+  skipBtn.classList.remove('hidden');
+
+  async function goToFeed() {
+    ctaBtn.disabled = true;
+    skipBtn.disabled = true;
+    try {
+      await fetch('/api/me/first-run-complete', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      });
+    } catch (_) { /* idempotent — if it fails we'll still try the feed */ }
+    location.href = '/forum?wall=' + encodeURIComponent(wallSlug);
+  }
+
+  ctaBtn.addEventListener('click', () => {
+    ctaBtn.textContent = 'Opening the feed…';
+    goToFeed();
+  });
+  skipBtn.addEventListener('click', goToFeed);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') goToFeed();
+  });
+
+  // Move focus to the heading, same as a route change would for a
+  // screen reader — the page swapped in new primary content.
+  heading.focus();
+}
+
+bootstrap();
+</script>
+</body>
+</html>

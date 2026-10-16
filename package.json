@@ -1,0 +1,37 @@
+{
+    "name": "homestead",
+    "version": "0.6.0",
+    "description": "Shared life app: tasks with take-turns rotation, calendar, and a full-screen iframe app shell for self-hosted services.",
+    "main": "server.js",
+    "scripts": {
+        "prepare": "npm run hooks:install",
+        "hooks:install": "if [ -d .git ]; then git config core.hooksPath .githooks; else echo 'hooks:install skipped (no .git directory \u2014 production container)'; fi",
+        "start": "node server.js",
+        "test": "node scripts/run-tests.js",
+        "test:smoke": "node scripts/smoke-calendar-sources.js && node scripts/smoke-graph-source.js && node scripts/smoke-calendar-sources-ui.js && node scripts/smoke-push.js && node scripts/smoke-sync-plex.js && node scripts/smoke-sync-kavita.js && node scripts/smoke-merge-layer.js && node scripts/smoke-snapshot.js && node scripts/smoke-token-manager-ui.js && node scripts/smoke-media.js && node scripts/smoke-media-context.js && node scripts/smoke-walls.js && node scripts/smoke-porch-ui.js && node scripts/smoke-porch-default.js && node scripts/smoke-consent-ui.js && node scripts/smoke-apps-settings-ui.js && node scripts/smoke-notifications.js && node scripts/smoke-spa-pageerrors.js && node scripts/smoke-modules-ui.js && node scripts/smoke-identity-foundation.js && node scripts/smoke-invite-signup.js && node scripts/smoke-owner-recovery.js && node scripts/smoke-oidc-link.js"
+    },
+    "engines": {
+        "node": ">=22"
+    },
+    "keywords": [
+        "pwa",
+        "self-hosted",
+        "tasks",
+        "calendar",
+        "sqlite"
+    ],
+    "license": "PolyForm-Noncommercial-1.0.0",
+    "private": true,
+    "dependencies": {
+        "bcryptjs": "^3.0.3",
+        "better-sqlite3": "^13.0.1",
+        "express": "^5.2.1",
+        "express-session": "^1.19.0",
+        "multer": "^2.0.1",
+        "sharp": "^0.33.5",
+        "web-push": "^3.6.7"
+    },
+    "devDependencies": {
+        "playwright": "1.56.1"
+    }
+}

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Chores</title>
+  <path d="m35 12 7 7-19 19-7-7z" fill="#d49a40" stroke="#4b4624" stroke-width="3" stroke-linejoin="round"/>
+  <path d="m18 34 12 12-9 9c-3 3-9 0-12-3s-6-9-3-12z" fill="#6d7b59" stroke="#4b4624" stroke-width="3" stroke-linejoin="round"/>
+  <path d="m10 49 13-13M16 55l13-13" stroke="#f6e4c3" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="45" cy="42" r="11" fill="#f6e4c3" stroke="#4b4624" stroke-width="3"/>
+  <path d="m39 42 4 4 8-9" fill="none" stroke="#ad5c05" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Porch</title>
+  <path d="M13 51V29c0-11 8-19 19-19s19 8 19 19v22" fill="#6d7b59" stroke="#4b4624" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M20 51V30c0-7 5-12 12-12s12 5 12 12v21" fill="#f6e4c3" stroke="#4b4624" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M26 51V35c0-4 3-7 6-7s6 3 6 7v16" fill="#ad5c05"/>
+  <path d="M26 51V35c0-4 3-7 6-7s6 3 6 7v16" fill="none" stroke="#4b4624" stroke-width="2.5" stroke-linejoin="round"/>
+  <circle cx="35" cy="40" r="1.8" fill="#d49a40"/>
+  <path d="M8 53h48" stroke="#4b4624" stroke-width="4" stroke-linecap="round"/>
+  <path d="M12 57h40" stroke="#d49a40" stroke-width="3" stroke-linecap="round"/>
+</svg>

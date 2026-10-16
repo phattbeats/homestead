@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Lists</title>
+  <path d="M16 10h25l9 9v35H16z" fill="#f6e4c3" stroke="#4b4624" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M41 10v10h9" fill="#d49a40" stroke="#4b4624" stroke-width="3" stroke-linejoin="round"/>
+  <path d="m23 28 3 3 5-6M23 39l3 3 5-6M35 28h8M35 39h8" fill="none" stroke="#6d7b59" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m37 50 12-12 5 5-12 12-7 1z" fill="#ad5c05" stroke="#4b4624" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="m49 38 2-2 5 5-2 2" fill="#d49a40" stroke="#4b4624" stroke-width="2.5" stroke-linejoin="round"/>
+</svg>

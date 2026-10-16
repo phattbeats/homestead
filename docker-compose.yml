@@ -1,0 +1,34 @@
+services:
+  homestead:
+    image: ghcr.io/phattbeats/homestead:latest
+    container_name: homestead
+    restart: unless-stopped
+    # Adjust the network name to match your environment. On Unraid the
+    # `phattvip` network is whatever you've named the bridge your other
+    # self-hosted services share.
+    networks:
+      - phattvip
+    ports:
+      - "3081:3080"   # host:container — change the host side as you like
+    volumes:
+      # SQLite lives here. Mount a host path so the DB survives image upgrades.
+      - /mnt/user/appdata/homestead:/data
+    environment:
+      # REQUIRED. Long random string used to sign session cookies. The
+      # server refuses to boot if this is missing, a known
+      # placeholder, or shorter than 32 chars. Generate one with:
+      #   openssl rand -hex 32
+      # and paste the result here (no quotes). The Unraid template
+      # below also has SESSION_SECRET as Required + Masked — set it once
+      # in the container's environment and never commit the value.
+      - SESSION_SECRET=
+      # Seed password used ONLY on the very first run (when /data/life.db
+      # does not exist yet). It bootstraps the `admin` user; log in as admin
+      # and create real household users via Settings → Users. Later env
+      # changes have no effect — use the in-app password change to rotate
+      # for real.
+      - ADMIN_PASSWORD=changeme
+
+networks:
+  phattvip:
+    external: true
