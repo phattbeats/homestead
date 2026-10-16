@@ -201,7 +201,7 @@ each one is either a tile in the home grid or a tab in the top strip.
 
 ## Agent and connector surfaces
 
-- **Bring It Home** *(#2819)* — the canonical name for the
+- **Bring It Home** ** — the canonical name for the
   three-tier pipeline by which a self-hosted service already
   running in the household (Plex, Kavita, Sonarr, a Popcorn-Vote-
   style side app, anything) gets adopted into Homestead instead of
@@ -218,7 +218,7 @@ each one is either a tile in the home grid or a tab in the top strip.
      services in."
   2. **Direct API connection** — Homestead talks to the service's
      API on the user's behalf instead of just framing its UI.
-     Shipped: **Connector Forge** (#2444 / #2446, below) — a
+     Shipped: **Connector Forge** (below) — a
      connector spec declares GET-only probes and field mappings,
      runs as a per-user `ConnectorInstallation`, and surfaces as a
      first-class `connector:<spec_id>` room in the Meadow grid.
@@ -244,8 +244,8 @@ each one is either a tile in the home grid or a tab in the top strip.
   the Agent module, with a personality persisted in the repo at
   `agents/hearth/SOUL.md` and `agents/hearth/IDENTITY.md`, and
   mirrored to a per-user row at first-enable. Hearth is a
-  drawer-mode agent (#1617.6) and a registered porch
-  character (#2645 / #2646). The avatar is the
+  drawer-mode agent and a registered porch
+  character. The avatar is the
   forest-green enamel oil lantern in
   `brand/hearth-agent-homestead-icon.png`. Spec:
   #2827 / #2828. *(Renamed from "Hearth (planned) — the
@@ -260,7 +260,7 @@ each one is either a tile in the home grid or a tab in the top strip.
   planned "Hearth" surface name by #2828 — Brandon's call
   was that "Hearth" stays the name of the agent.)*
 
-- **The socket** — the meta-agent socket (#1617). The
+- **The socket** — the meta-agent socket. The
   authenticated API surface that connected agents and CLIs use
   to drive Homestead. Three concrete layers:
 
@@ -273,7 +273,7 @@ each one is either a tile in the home grid or a tab in the top strip.
 
   - **Agent endpoints** — the routes that read or mutate on the
     user's behalf behind a PAT. The first slice is
-    `GET /api/me/snapshot` (#1617.3) — single-call morning
+    `GET /api/me/snapshot` — single-call morning
     context: profile + groups, today's tasks and events,
     upcoming week, recent activity. The same builder will back
     the future MCP tool (`homestead_get_user_context`).
@@ -286,7 +286,7 @@ each one is either a tile in the home grid or a tab in the top strip.
     will expose tools.
 
 - **Connector Forge** — the user-facing name for the third-party
-  app install path (#2444 / #2446). A "connector" is a
+  app install path. A "connector" is a
   data-only spec that declares probes (GET-only, allow-listed
   headers, DNS-rebinding-pinned) and field mappings (restricted
   JSONPath), gets validated by `lib/connector-spec.js`, then

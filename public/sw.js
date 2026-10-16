@@ -8,7 +8,7 @@
 // Push payload shape (sent by server.js notify()):
 //   { title, body, url, tag, icon, badge, category }
 
-// #2200.5 / #2206: minimal precache. The feed component file
+// minimal precache. The feed component file
 // is shared between /forum and the in-place #page-wall mount
 // inside /index.html — both placements need it to render the wall.
 // Without precaching, a returning PWA user with intermittent
@@ -30,7 +30,7 @@ const PRECACHE_URLS = [
   '/brand.css',
   '/fonts/fraunces-italic-400-latin.woff2',
   '/fonts/plus-jakarta-sans-latin.woff2',
-  // Canonical opening-door mark (#2846)
+  // Canonical opening-door mark
   '/icon.svg',
   '/favicon.svg',
   '/favicon-32.png',
@@ -38,7 +38,7 @@ const PRECACHE_URLS = [
   '/icon-512.png',
   '/icon-maskable.svg',
   '/icon-maskable-512.png',
-  // Six built-in module SVG marks (#2846)
+  // Six built-in module SVG marks
   '/modules/porch.svg',
   '/modules/lists.svg',
   '/modules/calendar.svg',
@@ -139,7 +139,7 @@ self.addEventListener('notificationclick', e => {
     }
     await clients.openWindow(url);
   })());
-  // #2218: a push-tap should clear its own badge — mark this notification's
+  // a push-tap should clear its own badge — mark this notification's
   // tag seen server-side. Additive to the focus/open-tab flow above; best-effort
   // (a failure here shouldn't block or affect navigation, which already ran via
   // the waitUntil() above).

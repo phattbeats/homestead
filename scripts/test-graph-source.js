@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #1864 acceptance tests for the Graph (MS365) source adapter.
+// acceptance tests for the Graph (MS365) source adapter.
 //
 // Covers:
 //   * makeGraphSource factory shape + validation
@@ -50,7 +50,7 @@ function assertThrows(fn, pattern, label) {
   }
 }
 
-console.log('#1864 graph-source tests\n');
+console.log('graph-source tests\n');
 
 // ---- Test 1: factory validation ---------------------------------------
 console.log('Test 1: factory validation');

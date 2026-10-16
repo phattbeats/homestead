@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #1868 smoke test: per-user source config UI surface area.
+// smoke test: per-user source config UI surface area.
 //
 // Exercises the new endpoints the SPA uses:
 //   * GET    /api/calendar-sources/kinds — provider metadata for the

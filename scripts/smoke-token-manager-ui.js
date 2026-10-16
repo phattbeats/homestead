@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// #1896 (#1617.3) smoke test: end-to-end against a live server.js.
+// smoke test: end-to-end against a live server.js.
 //
 // The token manager is a pure SPA consumer of /api/agent-tokens
-// (#1617.1). This smoke doesn't drive a browser — it exercises the
+//. This smoke doesn't drive a browser — it exercises the
 // three endpoints the SPA calls and asserts the contract the UI
 // depends on:
 //

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #2658 — entity deep links are an explicit SPA route.
+// entity deep links are an explicit SPA route.
 //
 // Proves the complete refresh/cold-start path: Express serves index.html for
 // /entity/:id, the authenticated SPA restores that location on boot, and an

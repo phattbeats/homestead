@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #2446 acceptance tests for lib/connector-install.js — the
+// acceptance tests for lib/connector-install.js — the
 // ConnectorInstallation model + per-user encrypted secret store.
 //
 // Acceptance criteria (from #2446 issue body):
@@ -189,7 +189,7 @@ function specPersistenceTests() {
     );
 
     // Specs NEVER carry credentials or user URLs — the validator
-    // (#2444) already enforces a strict top-level field list.
+    // already enforces a strict top-level field list.
     // We assert here that a foreign field on `identity` is rejected
     // up-front.
     const withExtra = validKomgaSpec();

@@ -1,4 +1,4 @@
-// The Forum (#4097): read API for the Woodgrain board UI, plus the
+// The Forum: read API for the Woodgrain board UI, plus the
 // standalone /forum page and the legacy /porch.html redirect.
 //
 // Extracted from server.js following the routes/health.js pattern, so the

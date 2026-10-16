@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #1876 (#1624 Phase C) acceptance tests for the entity-graph
+// (#1624 Phase C) acceptance tests for the entity-graph
 // dedup + review-queue matcher.
 //
 // Pure-DB tests: drive `lib/dedup/matcher.js` against a temp SQLite

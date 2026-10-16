@@ -11,7 +11,7 @@
 // recovery token directly into the SQLite DB that the server reads.
 //
 // NOTE: this is deliberately a DIFFERENT script from
-// `scripts/reset-owner-password.js` (#2711), which is a
+// `scripts/reset-owner-password.js`, which is a
 // general-purpose "reset any user's password via --username/--user-id"
 // CLI consumed through POST /api/public/invites/reset. This script is
 // OWNER-ONLY, hardened break-glass, and stores its token in the

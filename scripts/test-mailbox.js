@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #2426 acceptance tests for lib/porch/mailbox.js: the message
+// acceptance tests for lib/porch/mailbox.js: the message
 // table's core write path, chatter-budget + per-thread turn-limit
 // enforcement, and the structural "every message has a Porch post"
 // invariant (rule 3 — no hidden DM layer). Same boot pattern as
@@ -38,7 +38,7 @@ function assertThrowsCode(fn, expectedCode, label) {
   }
 }
 
-console.log('#2426 mailbox tests\n');
+console.log('mailbox tests\n');
 
 const tmpDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-mailbox-test-'));
 process.env.DATA_DIR = tmpDataDir;

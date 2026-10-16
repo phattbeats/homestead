@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #2209 / #2200.8 — Amendment 2 acceptance test:
+// Amendment 2 acceptance test:
 // "Adding a new module to the registry does NOT backfill user_modules
 // rows for existing users; new users see {wall} only."
 //
@@ -57,7 +57,7 @@ function assertEq(actual, expected, label) {
   if (a === e) ok(label); else ng(label, `expected ${e}, got ${a}`);
 }
 
-console.log('#2209 Amendment 2 — default-OFF for future first-party modules\n');
+console.log('Amendment 2 — default-OFF for future first-party modules\n');
 
 function freshDb() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-default-off-'));
@@ -203,7 +203,7 @@ const SYNTHETIC_ORDER = [...modules.REGISTRY_ORDER, 'recipes'];
 {
   console.log('\nTest 4: migration discipline');
   // Inspect lib/user-model.js for the canonical migration text.
-  // The v3 (#2202) migration backfills ALL existing users
+  // The v3 migration backfills ALL existing users
   // against ALL current module keys — that's a one-time cross-join
   // for the initial rollout. It MUST NOT be repeated per-module.
   //

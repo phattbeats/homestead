@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Homestead local companion — reference CLI (#2881, #2855 phase 2).
+// Homestead local companion — reference CLI (#2855 phase 2).
 //
 // This is the OTHER end of lib/agent-connections.js's pairing flow
-// (#2880, phase 1). It runs on the USER's own machine — laptop,
+// (phase 1). It runs on the USER's own machine — laptop,
 // phone, wherever OpenClaw / Claude Code / Codex actually lives — and
 // is the only thing that ever holds:
 //   * the user's Homestead session cookie (used once, to redeem a
@@ -13,7 +13,7 @@
 //
 // Protocol (mirrors lib/agent-connections.js's header contract exactly):
 //   1. User opens the "Connect an agent" wizard in the Homestead web UI
-//      (#2882), picks a provider tile, and gets a 6-character
+//     , picks a provider tile, and gets a 6-character
 //      pairing code (10-minute TTL, single-use).
 //   2. Companion logs in as that same user (`login`) and redeems the
 //      code (`pair`) — POST /api/agent-connections/redeem-pairing-code

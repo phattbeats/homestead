@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PHATT Tech LLC
 
-// #2219 acceptance tests for the install-coach pure helpers.
+// acceptance tests for the install-coach pure helpers.
 //
 // The helpers under test (isInstalled, installPlatform,
 // installCoachShouldPrompt, renderInstallChip) are inlined in
@@ -111,7 +111,7 @@ function evalCoach(opts) {
   return sandbox;
 }
 
-console.log('#2219 install-coach tests\n');
+console.log('install-coach tests\n');
 
 // ---- Test 1: isInstalled() recognizes iOS standalone ----
 {
@@ -222,7 +222,7 @@ console.log('#2219 install-coach tests\n');
 }
 
 // ---- Test 11: installCoachShouldPrompt() respects the legacy first-prompted flag ----
-// #2498 (UX batch #1): the eligibility gate honours the legacy
+// (UX batch #1): the eligibility gate honours the legacy
 // `firstPrompted` localStorage key for users who already saw the coach
 // under the old one-shot schedule — we don't want to re-fire the auto-
 // prompt at them now that the schedule is "situated" instead of "first
@@ -264,7 +264,7 @@ console.log('#2219 install-coach tests\n');
 }
 
 // ---- Test 11b/11c: maybeShowInstallCoach arms but does NOT fire on first boot ----
-// #2498 (UX batch #1) closed the immediate-coach-on-first-login bug.
+// (UX batch #1) closed the immediate-coach-on-first-login bug.
 // `maybeShowInstallCoach()` schedules three arms (2nd-session,
 // first-action, 75s-dwell). The tests assert:
 //   (a) on the first boot, arms are persisted to localStorage but no

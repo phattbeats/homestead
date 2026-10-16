@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #2880 (#2855 phase 1) acceptance tests for lib/agent-connections.js.
+// (#2855 phase 1) acceptance tests for lib/agent-connections.js.
 //
 // Drives `lib/agent-connections.js` directly against a temp SQLite file
 // (plus an HTTP integration test of the /api/agent-connections routes
@@ -37,7 +37,7 @@ function freshDb() {
   return { db, tmpDir };
 }
 
-console.log('#2880 agent-connections tests\n');
+console.log('agent-connections tests\n');
 
 // ---- Test 1: mintPairingCode() creates a pending row + code ----
 {

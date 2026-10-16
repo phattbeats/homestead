@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #2218.4 acceptance tests for per-thread mute (lib/notifications.js
+// acceptance tests for per-thread mute (lib/notifications.js
 // muteThread/unmuteThread + the resolver composition already covered in
 // test-notifications-resolver.js): DB-backed persistence, CASCADE on
 // post delete, and that a mute never suppresses the author's own
@@ -25,7 +25,7 @@ function assertEq(actual, expected, label) {
   if (a === e) ok(label); else ng(label, `expected ${e}, got ${a}`);
 }
 
-console.log('#2218.4 thread-mute tests\n');
+console.log('thread-mute tests\n');
 
 const tmpDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-thread-mutes-test-'));
 process.env.DATA_DIR = tmpDataDir;

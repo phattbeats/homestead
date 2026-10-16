@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #2201.4 (#2232) smoke test: Settings → Apps UI — apps list
+// smoke test: Settings → Apps UI — apps list
 // (built-in + third-party), per-app detail (scopes + activity),
 // revoke, and the paste-a-manifest-URL install flow.
 //

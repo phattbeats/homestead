@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #3200: test-process environment shim.
+// test-process environment shim.
 //
 // Loaded via `node --require ./scripts/_test-bootstrap.js` from every
 // `node scripts/test-*.js` invocation in `npm test`. Centralizes the
@@ -11,7 +11,7 @@
 //     (`process.env.SESSION_SECRET || 'life-app-secret-change-me'`)
 //     and never set it; this shim keeps those tests running without
 //     touching every file. Tests that explicitly want to exercise the
-//     fail-closed path (e.g. scripts/test-3200-session-secret.js)
+//     fail-closed path (e.g. scripts/test-session-secret-boot.js)
 //     overwrite process.env.SESSION_SECRET themselves after this shim
 //     runs.
 //

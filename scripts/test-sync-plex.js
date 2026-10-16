@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #1873 (#1624 Phase B-1) acceptance tests for the Plex sync worker.
+// (#1624 Phase B-1) acceptance tests for the Plex sync worker.
 //
 // Pure-DB tests: drive `lib/sync/plex.js` against a temp SQLite file
 // with the entity-graph schema migrated from `lib/sync/_schema.js`. The

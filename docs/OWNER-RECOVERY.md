@@ -7,7 +7,7 @@ owner. Read it before you need it. It does **not** contain any
 hashes, tokens, or passwords — operational state only.
 
 Note: this is a *different* mechanism from `scripts/reset-owner-password.js`
-(#2711), which is a general-purpose "reset any user's password"
+, which is a general-purpose "reset any user's password"
 CLI consumed through `POST /api/public/invites/reset`. This runbook
 covers the OWNER-only, hardened break-glass flow, which stores its
 token in the dedicated `owner_recovery_token_hash` /
@@ -208,7 +208,7 @@ Every step writes one row to `analytics_events` with
 `meta` for these rows contains `route`, `source`, `ttl_min`,
 `actor`, etc. **It never contains plaintext tokens, password
 hashes, or new passwords.** The lib-level contract that asserts
-this lives in `scripts/test-2708-owner-recovery.js`.
+this lives in `scripts/test-owner-recovery.js`.
 
 ### Filtering the feed
 
@@ -267,13 +267,13 @@ exists.
 
 - `lib/identity.js` — the canonical primitives. The comment block
   at the top of the #2708 section explains the threat model.
-- `scripts/test-2708-owner-recovery.js` — the contract. If the
+- `scripts/test-owner-recovery.js` — the contract. If the
   runbook and the test disagree, the test wins.
-- `scripts/smoke-2708-owner-recovery.js` — the end-to-end
+- `scripts/smoke-owner-recovery.js` — the end-to-end
   evidence generator. Run it on any Homestead install to capture
   verify-out/ artifacts for a deploy review.
-- #2708 (this issue) — original requirements.
-- #2704 — the identity foundation this PHA builds on. Read
+- (this issue) — original requirements.
+- the identity foundation this PHA builds on. Read
   that first if you need to understand the schema.
 - `docs/DEFINITION-OF-DONE.md` — evidence requirements for a
   closed issue.

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #2201.2 (#2230) acceptance tests for lib/scope-display.js.
+// acceptance tests for lib/scope-display.js.
 //
 // Pure logic, no DB, no server — drives the module directly. Covers
 // the acceptance checklist from the issue:
@@ -26,7 +26,7 @@ function assertThrows(fn, label) {
   }
 }
 
-console.log('#2201.2 scope-display tests\n');
+console.log('scope-display tests\n');
 
 // ---- Test 1: every fixed §3 scope has a phrase, none render raw ----
 {

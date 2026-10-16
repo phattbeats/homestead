@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Homestead — tests for lib/connector-surfaces.js (#2447).
+// Homestead — tests for lib/connector-surfaces.js.
 //
 // Coverage (mapped to the #2447 acceptance bullets):
 //
@@ -100,11 +100,11 @@ function freshDb() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-connector-surfaces-test-'));
   const db = new Database(path.join(tmpDir, 'surfaces.db'));
   userModel.migrate(db);
-  // #2149: media_uploads table. walls.wall_posts has a FK to
+  // media_uploads table. walls.wall_posts has a FK to
   // media_uploads(id); better-sqlite3 validates that FK at
   // db.prepare() time, so we must install media before walls.
   require('../lib/media').migrate(db);
-  // #1872: entity-graph schema is a sibling of the connector
+  // entity-graph schema is a sibling of the connector
   // tables. The runner and the entities adapter both depend on it.
   require('../lib/sync/_schema').migrate(db);
   walls.migrate(db);

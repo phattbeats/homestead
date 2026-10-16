@@ -9,7 +9,7 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/brand.css">
 <style>
-/* #2711: same-day closed-beta invite handshake.
+/* same-day closed-beta invite handshake.
    Public, no-auth page. Two clear choices — create a standalone
    Homestead account, or sign in with an existing local account — to
    claim the invite. The whole path completes without ever touching
@@ -85,7 +85,7 @@ input{font:inherit}
 <script>
 'use strict';
 
-// #2711: same-day closed-beta invite handshake.
+// same-day closed-beta invite handshake.
 //   1. Extract the code from the URL: /invite/{code}
 //   2. GET /api/public/invites/:code — public peek (no auth).
 //      - Renders Homestead intro + inviter + wall card.
@@ -97,7 +97,7 @@ input{font:inherit}
 //   4. On success, the API also sets the session cookie. The SPA
 //      redirects to result.redirect (/welcome.html?wall=<slug>).
 //   5. Sign-out/sign-in persistence is tested in
-//      scripts/test-2711-invite-signup.js — the cookie is the durable
+//      scripts/test-invite-signup.js — the cookie is the durable
 //      artifact, the JS just bounces.
 
 const content = document.getElementById('content');

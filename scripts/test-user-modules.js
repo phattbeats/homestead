@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #2202 acceptance tests for the v0.3.0 user_modules table.
+// acceptance tests for the v0.3.0 user_modules table.
 //
 // Drives `lib/user-model.js` directly against a temp SQLite file. No
 // HTTP server, no subprocess. Each test runs migrate() on a fresh DB
@@ -46,7 +46,7 @@ function freshDb() {
 
 const MODULES = ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent'];
 
-console.log('#2202 user-modules tests\n');
+console.log('user-modules tests\n');
 
 // ---- Test 1: migration creates user_modules + backfills canonical users ----
 {

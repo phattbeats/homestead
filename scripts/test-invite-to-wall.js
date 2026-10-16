@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #2207 (#2200.6) acceptance tests for the invite-to-wall flow.
+// acceptance tests for the invite-to-wall flow.
 //
 // Boots server.js on an ephemeral port (3192) and exercises the full
 // endpoint matrix against a header-trust mock. Mirrors the pattern of
@@ -22,7 +22,7 @@
 //
 // Out of scope (handled by sibling PHAs):
 //   * The Wizarr UI for invite creation (#1575 still owns that).
-//   * SPA rendering of the welcome sheet (#2200.4).
+//   * SPA rendering of the welcome sheet.
 //   * The /invite/:code HTML page itself (this test covers the API;
 //     the HTML is exercised by smoke-* scripts if added later).
 

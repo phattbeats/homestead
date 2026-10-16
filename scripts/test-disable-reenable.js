@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// #2209 / #2200.8 — Empty-state acceptance test (AC8 from
-// #2200 §7): "Brand-new user enables Calendar, sees the tab,
+// Empty-state acceptance test (AC8 from
+/): "Brand-new user enables Calendar, sees the tab,
 // disables, tab disappears with data intact, re-enables, tab
 // returns with data."
 //
@@ -36,7 +36,7 @@ function assertEq(actual, expected, label) {
   if (a === e) ok(label); else ng(label, `expected ${e}, got ${a}`);
 }
 
-console.log('#2209 AC8 — empty-state disable/re-enable\n');
+console.log('AC8 — empty-state disable/re-enable\n');
 
 function freshDb() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-empty-'));

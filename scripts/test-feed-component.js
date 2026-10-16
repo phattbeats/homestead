@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// #2200.5 / #2206 — Feed component acceptance test.
+// Feed component acceptance test.
 //
 // Exercises the placement-agnostic feed component extracted from
-// porch.js (#2151). Two layers:
+// porch.js. Two layers:
 //
 //   1. Pure-helper unit tests via vm.runInContext — runs the inlined
 //      helpers from public/components/feed.js in a Node sandbox with
@@ -267,7 +267,7 @@ process.env.NODE_ENV = 'production';
       'served /components/feed.js exposes window.HomesteadFeed');
 
     // Login + ensure brandon is in household (the seeded wall).
-    // #2556: brandon is already in household via lib/user-model.js's
+    // brandon is already in household via lib/user-model.js's
     // seed — no DB write needed.
     const brandonCookie = await login('brandon', 'feed-test-brandon-pw');
 
@@ -302,7 +302,7 @@ process.env.NODE_ENV = 'production';
     });
     assertEq(r6.status, 200, 'POST comment returns 200');
 
-    // #2656: notifyLevel <select> save/load round trip. feed.js's
+    // notifyLevel <select> save/load round trip. feed.js's
     // #notifyLevel dropdown was rendered but never wired to a save handler
     // (decorative-only). It now GETs on boot/wall-switch and PUTs on
     // change — exercise the exact request pair it issues, and confirm the

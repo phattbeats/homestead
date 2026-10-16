@@ -7,7 +7,7 @@ endpoints returning 404, a repo head that bricks the SPA login, and a flagship
 feature unreachable by any user. Reports about work are not work. Every green
 check now has to come with artifact-grade evidence.
 
-## Definition of Done — the standing policy (#2501)
+## Definition of Done — the standing policy
 
 **An issue moves to `done` only when its closing comment contains
 artifact-grade evidence:**
@@ -96,7 +96,7 @@ is not mergeable. The release workflow (`.github/workflows/release.yml`)
 fires on `v*` tags — the upstream Docker image publish depends on a clean
 test workflow.
 
-## Author identity (#2352)
+## Author identity
 
 Every Homestead commit must have author/committer
 `phattbeats <21150921+phattbeats.noreply.github.com>` and contain no `Co-authored-by`
@@ -130,7 +130,7 @@ full policy and pre-push audit command.
    comment in the WHAT / SHA / EVIDENCE shape, and the SHA actually in
    `main`.
 
-## Continuous deployment (#2971)
+## Continuous deployment
 
 Brandon's directive (2026-09-02): every merge to `main` should reach prod as
 a new `x.x.x` version, tested live. There is currently no staging
@@ -194,8 +194,8 @@ curl -s http://10.0.0.100:3081/api/version   # confirm COMMIT_SHA matches origin
 
 ## Related
 
-- `docs/GLOSSARY.md` — canonical names for every Homestead surface (#2635)
-- `docs/AUTHORSHIP.md` — author identity policy (#2352)
+- `docs/GLOSSARY.md` — canonical names for every Homestead surface
+- `docs/AUTHORSHIP.md` — author identity policy
 - `docs/DEFINITION-OF-DONE.md` — extended rationale and policy history
 - `.github/workflows/test.yml` — CI smoke gate
 - `.github/workflows/authorship-check.yml` — author-identity gate

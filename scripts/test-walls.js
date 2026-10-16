@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// #2150 acceptance tests for lib/walls.js: schema migrate, the
+// acceptance tests for lib/walls.js: schema migrate, the
 // group/direct membership gate, post create/list/delete, reaction
 // toggle idempotence, comment create/list/1k cap, the new
-// admin wall-CRUD + member-management routes (#2556), and an
+// admin wall-CRUD + member-management routes, and an
 // activity-feed wiring check. Also a defensive grep guard: no ORDER BY
 // in lib/walls.js may sort by anything but created_at, so a future
 // "sort by reactions" PR fails CI outright.
@@ -32,7 +32,7 @@ function assertThrowsStatus(fn, status, label) {
   }
 }
 
-console.log('#2150 walls tests\n');
+console.log('walls tests\n');
 
 // ---- Guard: every ORDER BY in lib/walls.js must sort by created_at ----
 console.log('Guard: ORDER BY defensive grep');
@@ -46,7 +46,7 @@ while ((m = orderByRe.exec(wallsSrc))) {
 }
 assert(!badOrderBy, 'no ORDER BY sorts by anything other than created_at', badOrderBy);
 
-// ---- Guard (#2153): the activity-feed query (recentActivity, backing
+// ---- Guard: the activity-feed query (recentActivity, backing
 // activity_recent in lib/snapshot.js) is held to the same chronological-
 // only contract as the wall itself. Scoped to that one function — the rest
 // of snapshot.js legitimately sorts tasks/events by due_date/date.
@@ -79,7 +79,7 @@ assert(!badSnapshotOrderBy, 'recentActivity() ORDER BY sorts by created_at only'
   media.migrate(db);
   walls.migrate(db);
   walls.seed(db);
-  // #2210: dual-write helpers in lib/walls.js (wall_post_created,
+  // dual-write helpers in lib/walls.js (wall_post_created,
   // wall_reaction_added, wall_comment_added) hit both notification_log
   // and analytics_events. Mirror the inline CREATE TABLE in server.js so
   // the test DB has both — the analytics layer is best-effort so a missing
@@ -110,7 +110,7 @@ assert(!badSnapshotOrderBy, 'recentActivity() ORDER BY sorts by created_at only'
 
   // ---- Test 1: seed + group membership gate ----
   console.log('\nTest 1: seed + group membership gate');
-  // #2556: the seeded wall is now 'household' (visibility=group,
+  // the seeded wall is now 'household' (visibility=group,
   // group_name=household). brandon + emily + admin are all in
   // 'household' from lib/user-model.js's seed, so assertMember passes
   // immediately — that's the user-visible acceptance criterion.
@@ -128,7 +128,7 @@ assert(!badSnapshotOrderBy, 'recentActivity() ORDER BY sorts by created_at only'
 
   // ---- Test 2: admin createWall + adminAddMember machinery ----
   console.log('\nTest 2: admin createWall + member management');
-  // #2556: validateWallInput rejects bad input, createWall inserts
+  // validateWallInput rejects bad input, createWall inserts
   // the row, adminAddMember is idempotent and group-aware.
   assertThrowsStatus(() => walls.createWall(db, admin.id, { slug: 'Bad Slug!', name: 'X', visibility: 'group', group_name: 'household' }), 400, 'createWall rejects bad slug');
   assertThrowsStatus(() => walls.createWall(db, admin.id, { slug: 'ok', name: '', visibility: 'group', group_name: 'household' }), 400, 'createWall rejects empty name');
@@ -263,7 +263,7 @@ assert(!badSnapshotOrderBy, 'recentActivity() ORDER BY sorts by created_at only'
 
   assertThrowsStatus(() => walls.createComment(p2.id, stranger.id, 'nope'), 404, 'non-member cannot comment');
 
-  // ---- Test 8: activity-feed wiring (#2153) ----
+  // ---- Test 8: activity-feed wiring ----
   console.log('\nTest 8: activity-feed wiring');
   const snapshot = require('../lib/snapshot');
   const notifications = require('../lib/notifications');

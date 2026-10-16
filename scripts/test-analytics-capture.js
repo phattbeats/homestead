@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PHATT Tech LLC
 
-// #2210 acceptance tests for the analytics capture layer.
+// acceptance tests for the analytics capture layer.
 //
-// Scope (this PR — `pha-2210-analytics-capture`):
+// Scope (this PR):
 //   1. `analytics_events` table schema exists with the documented columns
 //      and the 4 indexes (3 standard + 1 partial on bytes).
 //   2. `KINDS` is a frozen Set with exactly the 25 documented kinds.
@@ -63,7 +63,7 @@ const expectedKinds = [
   'tile_opened',
   'tile_health_transition', 'push_delivered', 'push_failed',
   'drawer_call_started', 'drawer_call_completed', 'drawer_call_failed',
-  // #2851: Hearth's house-actions.
+  // Hearth's house-actions.
   'hearth_action_invoked', 'hearth_action_failed',
 ];
 for (const k of expectedKinds) {

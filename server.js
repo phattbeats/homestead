@@ -1,6 +1,6 @@
 // Homestead — shared life app (tasks, calendar, services, full-screen app shell).
 //
-// Identity model (#1618, v0.0.5):
+// Identity model (v0.0.5):
 //   * `users` is a PROFILE CACHE, not a directory of record.
 //   * Authentik is the directory of record (see #1574 for header-trust
 //     wiring + #1577 for the household/family/media-club/admins groups).
@@ -18,7 +18,7 @@
 //     media-club, admins). Authentik is authoritative; Homestead
 //     reconciles `user_groups` membership on every authenticated request
 //     from the `X-authentik-groups` header. No group CRUD endpoints.
-//   * Built-in `/api/login` (LAN fallback, #1574) remains; it just
+//   * Built-in `/api/login` (LAN fallback) remains; it just
 //     consults `users.pass_hash` instead of the v0.0.1 "brandon/emily"
 //     hardcoded pair.
 
@@ -70,12 +70,12 @@ const porchComprehension = require('./lib/porch/comprehension');
 const oidcLink = require('./lib/oidc-link');
 const mailbox = require('./lib/porch/mailbox');
 const agentConnectionsRouter = require('./routes/agent-connections');
-// #3214 (#1647): second domain extracted from server.js.
+// second domain extracted from server.js.
 const healthRouter = require('./routes/health');
 const forumRouter = require('./routes/forum');
 
 const hearthCharacters = require('./lib/hearth-characters');
-// #2851: Hearth's inbound action surface — the house-actions the
+// Hearth's inbound action surface — the house-actions the
 // drawer demo promised ("queue Part Two", "tell him the meme was mid").
 // Exposed twice on purpose: as provider tools inside lib/agent-runtime.js,
 // and as the plain REST routes below, both landing on the same
@@ -91,24 +91,24 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const db = new Database(path.join(DATA_DIR, 'life.db'));
 userModel.migrate(db);
-// #1872 (design doc #1624 §3): entity graph schema, wired right
+// (design doc #1624 §3): entity graph schema, wired right
 // after userModel.migrate() to match the existing boot-migration pattern.
 // Phase A's canonical migrate() call — Phase B-1's and Phase B-2's
 // defensive self-installs (same underlying schema) are dropped now that
 // Phase A owns this.
 entityGraph.migrate(db);
-// #1617.1: PAT tokens table. Migrated after userModel so the FK
+// PAT tokens table. Migrated after userModel so the FK
 // to users(id) resolves. Same boot-migration pattern as the others.
 agentTokens.migrate(db);
-// #2201.3 (#2231): third-party app accountability trail. FKs to
+// third-party app accountability trail. FKs to
 // users(id) and installed_apps(key), so it runs right after
 // agentTokens.migrate (which creates installed_apps).
 appApiLog.migrate(db);
-// #2201.1 (#2229): install flow's consent-token table. FK to
+// install flow's consent-token table. FK to
 // users(id), so it runs after userModel.migrate; no dependency on
 // installed_apps (consent tokens exist before an app is installed).
 appInstall.migrate(db);
-// #2706: self-service OIDC identity-linking state table. FK to
+// self-service OIDC identity-linking state table. FK to
 // users(id), so it runs after userModel.migrate (same boot-migration
 // pattern as the tables above).
 oidcLink.migrate(db);
@@ -116,48 +116,48 @@ oidcLink.migrate(db);
 // and surface-cache tables. This must boot before the wizard routes below.
 connectorInstall.migrate(db);
 connectorWizard.migrate(db);
-// #1617.4: per-user, per-harness endpoint config (drawer POST +
+// per-user, per-harness endpoint config (drawer POST +
 // events webhook URLs). HMAC secret generated on insert. FK to users;
 // migrated after userModel so the FK resolves, same pattern as
 // agent_tokens / calendar_sources.
 agentEndpoints.migrate(db);
-// #2880 (#2855 phase 1): agent_connections — companion-mediated
+// (#2855 phase 1): agent_connections — companion-mediated
 // pairing flow, separate table from agent_endpoints above (that path
 // stays untouched). Migrated after userModel for the same FK reason.
 agentConnections.migrate(db);
-// #1620: calendar_sources + calendar_event_cache schema. Migrated
+// calendar_sources + calendar_event_cache schema. Migrated
 // last so the FK to users(id) resolves, same boot-migration pattern.
 calendarSources.migrate(db);
-// #2149: media_uploads table. Same boot-migration pattern; FK to
+// media_uploads table. Same boot-migration pattern; FK to
 // users(id) so it runs after userModel.migrate.
 media.migrate(db);
-// #2150: walls/posts/reactions/comments. FKs to users(id) and
+// walls/posts/reactions/comments. FKs to users(id) and
 // media_uploads(id), so it runs after userModel.migrate and media.migrate.
 walls.migrate(db);
 walls.seed(db);
-// #4097: The Forum — additive columns + the few starter boards.
+// The Forum — additive columns + the few starter boards.
 forum.migrate(db);
 forum.seed(db);
-// #2646: Porch sweep scheduler ledger (sweep-state cadence gate +
+// Porch sweep scheduler ledger (sweep-state cadence gate +
 // agent-action budget/cooldown ledger). FKs to walls(id)/wall_posts(id)/
 // users(id), so it runs after walls.migrate().
 porchSweep.migrate(db);
-// #2645: participation contract's own ledger (banter memory for
+// participation contract's own ledger (banter memory for
 // dedupe/callbacks + per-wall opt-out). Same FK dependencies as
 // porchSweep above, so it runs right after.
 porchContract.migrate(db);
-// #2426: agent-to-agent mailbox. FKs to installed_apps(key) (created
+// agent-to-agent mailbox. FKs to installed_apps(key) (created
 // by agentTokens.migrate), users(id), and wall_posts(id), so it runs
 // after both agentTokens.migrate and walls.migrate.
 mailbox.migrate(db);
 analytics.migrate(db);
-// #2829: Hearth character table + per-user seed from agents/hearth/SOUL.md.
+// Hearth character table + per-user seed from agents/hearth/SOUL.md.
 // FKs to users(id), so it runs after userModel.migrate (same pattern as
 // the other primitives above). The seed fires lazily on first agent
 // module enable — not at boot — so a fresh install doesn't create a
 // character row until the user actually wants Hearth.
 hearthCharacters.migrate(db);
-// #2831 (#2827.D): Hearth is a Porch citizen, not just a drawer
+// (#2827.D): Hearth is a Porch citizen, not just a drawer
 // companion — ensure his built-in system account exists (or already
 // does) and is backfilled into every wall's membership, so
 // lib/porch/sweep.js's listAgentUserIds() and lib/walls.js's identity
@@ -166,22 +166,22 @@ hearthCharacters.migrate(db);
 // something to back-fill, and self-heals walls created since the last
 // boot on every restart.
 hearthCharacters.ensureBuiltinAgentUser(db);
-// #2851: media_queue, the table behind Hearth's enqueue_media action.
+// media_queue, the table behind Hearth's enqueue_media action.
 // FKs to users(id); its wall_post_id is a soft reference (see the module
 // header for why), so ordering against walls.migrate() is a courtesy
 // rather than a constraint — it still runs after it.
 hearthActions.migrate(db);
-// #2207 (#2200.6): invite codes. FKs to walls(slug), so it
+// invite codes. FKs to walls(slug), so it
 // runs after walls.migrate().
 invites.migrate(db);
-// #2586: lists + list_items tables. FKs to users(id), so it runs
+// lists + list_items tables. FKs to users(id), so it runs
 // after userModel.migrate (same boot-migration pattern as the other
 // primitives). seed() provisions one "Groceries" list for the
 // single-site household so a fresh install can demonstrate the
 // primitive end-to-end.
 lists.migrate(db);
 lists.seed(db);
-// #2852: house_rooms + house_room_members — rooms as LOCATIONS of
+// house_rooms + house_room_members — rooms as LOCATIONS of
 // the house (HALL / DEN / KITCHEN), distinct from the `room` nav
 // discriminator in lib/modules.js. FK to users(id) so it runs after
 // userModel.migrate; it also adds the additive `events.room_id`
@@ -191,13 +191,13 @@ lists.seed(db);
 // nothing is written until the user accepts them.
 houseRooms.migrate(db);
 
-// #2659: gazette_editions (the per-user, per-day edition cache).
+// gazette_editions (the per-user, per-day edition cache).
 // FK to users(id), so it runs after userModel.migrate — same
 // boot-migration pattern as the other primitives. No seed: an edition
 // only exists once its reader has opened the sheet that day.
 gazette.migrate(db);
 
-// v0.1.0: web push subscriptions (#1619)
+// v0.1.0: web push subscriptions
 db.exec(`
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   id INTEGER PRIMARY KEY,
@@ -211,7 +211,7 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   failure_count INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id);
--- v0.1.0: per-user notification preferences (#1619)
+-- v0.1.0: per-user notification preferences
 CREATE TABLE IF NOT EXISTS notification_prefs (
   user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   quiet_start_hour INTEGER NOT NULL DEFAULT 21,
@@ -220,7 +220,7 @@ CREATE TABLE IF NOT EXISTS notification_prefs (
   take_turns INTEGER NOT NULL DEFAULT 1,
   system INTEGER NOT NULL DEFAULT 1
 );
--- v0.1.0: notification delivery log (#1619)
+-- v0.1.0: notification delivery log
 CREATE TABLE IF NOT EXISTS notification_log (
   id INTEGER PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -234,9 +234,9 @@ CREATE TABLE IF NOT EXISTS notification_log (
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_notification_log_user ON notification_log(user_id, created_at DESC);
--- v0.1.22: install-funnel telemetry (#2219). Every step the
+-- v0.1.22: install-funnel telemetry. Every step the
 -- install coach emits lands here as a row; the analytics funnel
--- pipeline (#2210) consumes these rows to build the
+-- pipeline consumes these rows to build the
 -- invite → accepted → installed → push-enabled funnel. Steps are
 -- intentionally a closed enum (validated at the route handler) so
 -- dashboards can group on step without parsing free text.
@@ -254,7 +254,7 @@ CREATE INDEX IF NOT EXISTS idx_install_funnel_step ON install_funnel_events(step
 
 const app = express();
 app.set('trust proxy', 1);
-// #3116: capture the raw request body bytes onto req.rawBody so that
+// capture the raw request body bytes onto req.rawBody so that
 // signed-body routes (POST /api/agent-connections/:id/events) can verify
 // the HMAC over the exact bytes the client signed. The express.json()
 // verify hook runs once per request; when the body is a Buffer (raw
@@ -267,7 +267,7 @@ app.use(express.json({
     }
   },
 }));
-// #3200: fail-closed session secret. Throws at boot if SESSION_SECRET
+// fail-closed session secret. Throws at boot if SESSION_SECRET
 // is missing, empty, a known placeholder, or shorter than 32 chars. Same
 // posture as `lib/secret-box.js` loadKey() for CALENDAR_CRED_KEY — we'd
 // rather refuse to start than silently sign cookies with a public string.
@@ -284,18 +284,18 @@ app.use(session({
   cookie: {
     httpOnly: true,
     sameSite: 'lax',
-    // #3200: production must use Secure cookies. life.phatt.vip is
+    // production must use Secure cookies. life.phatt.vip is
     // HTTPS via SWAG/Cloudflare and app.set('trust proxy', 1) is set
     // above so Express can honour X-Forwarded-Proto. `secure: true`
     // blocks the cookie from being sent on a stray http:// hop. Tests
     // and local `npm start` over http://127.0.0.1 opt out via
     // HOMESTEAD_INSECURE_TEST_COOKIES=1 (set by _test-bootstrap.js).
     secure: sessionCookieSecure,
-    maxAge: 1000 * 60 * 60 * 24 * 14, // 14d; was 90d pre-#3200
+    maxAge: 1000 * 60 * 60 * 24 * 14, // 14d; was 90d pre
   },
 }));
 
-// #1617.6: in-memory consecutive-failure streak map, keyed by
+// in-memory consecutive-failure streak map, keyed by
 // agent_endpoints.id. Used by the drawer dispatcher to decide when
 // the per-endpoint circuit breaker should trip (5 consecutive
 // failures → enabled=0, §6.5). Resets to 0 on any successful dispatch.
@@ -303,7 +303,7 @@ app.use(session({
 // + last_error columns written by agentEndpoints.recordDispatch.
 app.locals.drawerStreakMap = new Map();
 
-// #1617.7: same in-memory consecutive-failure streak pattern as
+// same in-memory consecutive-failure streak pattern as
 // drawerStreakMap above, but tracked separately — a household's
 // drawer harness and events harness (often the same physical box, but
 // possibly different agent_endpoints rows) trip their circuit
@@ -319,11 +319,11 @@ function recordSessionStart(req, user, device) {
 
 // ---- auth middleware ----
 // Four-layer auth:
-//   1. Bearer PAT (#1617.2) — `Authorization: Bearer homestead_pat_...`
+//   1. Bearer PAT — `Authorization: Bearer homestead_pat_...`
 //      is verified against agent_tokens and, on success, synthesizes a
 //      req.session.user for the token's owner (not persisted to the
 //      session store — checked fresh on every request).
-//   2. Header-trust (#1574) — when SWAG forwards X-authentik-username
+//   2. Header-trust — when SWAG forwards X-authentik-username
 //      AND X-authentik-groups, provisionOrClaim establishes / refreshes
 //      the session row and treats the request as authenticated.
 //   3. Session-cookie — established by /api/login (LAN fallback) or by
@@ -345,7 +345,7 @@ function authenticate(req, res, next) {
       authProvider: 'pat',
       authProviderDetail: { tokenId: tokenRow.id, scopes: tokenRow.scopes },
     };
-    // #2231: third-party app accountability trail. app_id IS NULL is
+    // third-party app accountability trail. app_id IS NULL is
     // the existing #1617 user-level PAT and is never logged — this
     // table is scoped to app-issued tokens only. Written from 'finish'
     // (fires after the response is already sent) so the log write never
@@ -376,7 +376,7 @@ function authenticate(req, res, next) {
     } else {
       groups = groupsHeader.split(',').map(s => s.trim()).filter(Boolean);
     }
-    // #2207 (#2200.6): union in group_names from wall_memberships
+    // union in group_names from wall_memberships
     // rows for group-visibility walls so invite-granted group
     // membership survives subsequent header-trust reconciliations.
     const inviteGroups = db.prepare(`
@@ -468,7 +468,7 @@ function requireModuleEnabled(key) {
   };
 }
 
-// ---- VAPID keypair (#1619) ----
+// ---- VAPID keypair ----
 // Generated once on first startup, persisted to DATA_DIR/vapid.json.
 // The public key is exposed via /api/push/vapid-public-key so the service
 // worker can subscribe. The private key stays on the server and is loaded
@@ -496,7 +496,7 @@ function loadOrCreateVapid() {
 const VAPID = loadOrCreateVapid();
 webpush.setVapidDetails(VAPID.subject, VAPID.publicKey, VAPID.privateKey);
 
-// ---- notification helpers (#1619) ----
+// ---- notification helpers ----
 // notify(userId, {title, body, url, tag, category}) is the single delivery
 // primitive. category drives per-user preferences (chore_due, take_turns,
 // system) and quiet-hours enforcement. Returns { delivered, skipped, errors }.
@@ -584,7 +584,7 @@ async function notify(userId, payload, opts = {}) {
     }
   }
   logNotification(userId, category, payload, delivered, delivered === 0 && errors > 0 ? 'all_endpoints_failed' : null);
-  // #1617.7: mirror every attempted push out to the user's opted-in
+  // mirror every attempted push out to the user's opted-in
   // events endpoints (category 'push'). Fire-and-forget — a dead
   // events harness must never affect push delivery to the browser.
   const pushUser = db.prepare('SELECT id, username, display, color FROM users WHERE id = ?').get(userId);
@@ -602,7 +602,7 @@ const PKG_VERSION = require('./package.json').version;
 const COMMIT_SHA = process.env.COMMIT_SHA || null;
 
 // ---- public probes (no auth) ----
-// #3214 (#1647): /api/health and /api/version relocated to
+// /api/health and /api/version relocated to
 // routes/health.js. Behavior unchanged; see routes/health.js for
 // the readiness-signal rationale (CALENDAR_CRED_KEY, #3200
 // sessionSecret).
@@ -617,7 +617,7 @@ app.use('/api', healthRouter({
 // LAN fallback login (#1574 keeps built-in login working behind
 // SWAG for the local network). Header-trust users never hit this path.
 //
-// #2583: GET /api/login is the bounce target used by /invite/:code
+// GET /api/login is the bounce target used by /invite/:code
 // (and /welcome.html) when a signed-out visitor lands on a wall-link
 // URL. Without this GET handler the /api/* 404 catch-all below served
 // JSON `{"error":"not_found"}` to a browser expecting an HTML login
@@ -649,7 +649,7 @@ app.post('/api/login', (req, res) => {
   const { username, password } = req.body || {};
   const cleanUser = userModel.validateUsername(username);
   const u = db.prepare('SELECT id, username, display, color, is_admin FROM users WHERE username = ?').get(cleanUser || '');
-  // #2704: password lives in local_credentials now, not users.pass_hash.
+  // password lives in local_credentials now, not users.pass_hash.
   // hasLocalCredential() returns false for users without a local account
   // (e.g. header-trust-only profiles) — we still respond 401 in that case
   // so the LAN probe can't tell 'wrong password' from 'no local account'.
@@ -679,17 +679,17 @@ app.post('/api/logout', (req, res) => {
 });
 app.get('/api/logout', (req, res) => res.status(405).json({ error: 'method_not_allowed', allow: 'POST' }));
 app.get('/api/me', (req, res) => {
-  // Header-trust probe (#1574): when SWAG forwards X-authentik-username,
+  // Header-trust probe: when SWAG forwards X-authentik-username,
   // run provisionOrClaim inline so a header-trust user without a session
   // cookie yet still sees themselves. Unauthenticated requests return
   // { user: null } (200) instead of 401 so the SPA can use /api/me as a
   // "am I signed in?" check on every page load without a redirect.
   //
-  // #2204 (#2200.3) extension: when authenticated, also include
+  // extension: when authenticated, also include
   //   enabled_modules: ['wall','apps',...]  (registry order)
-  //   default_route:    '/forum'       (always The Forum, #4097)
+  //   default_route:    '/forum'       (always The Forum)
   //   first_run:        true | false        (first_run_completed_at IS NULL)
-  // so the SPA bootstrap (#2200.4) can render without a second
+  // so the SPA bootstrap can render without a second
   // /api/me/layout fetch.
   const headerUser = req.get('x-authentik-username');
   if (headerUser) {
@@ -734,10 +734,10 @@ function buildMeEnvelope(db, sessionUser) {
   };
 }
 
-// #1902 (#1617.9): the `homestead_get_user_context` snapshot
+// the `homestead_get_user_context` snapshot
 // endpoint. Single-call morning-brief context: today's tasks/events/
 // overdue, upcoming week, groups, recent activity. Backs both the
-// MCP tool (#1617.8) and the drawer POST `snapshot` field
+// MCP tool and the drawer POST `snapshot` field
 // (#1617.5/.6). Same builder under the hood so the three callers
 // can never drift apart on envelope shape.
 app.get('/api/me/snapshot', auth, (req, res) => {
@@ -956,7 +956,7 @@ app.post('/api/gazette/ask', auth, requireModuleEnabled('gazette'), async (req, 
   res.json({ ok: true, answer: result.text });
 });
 
-// ---- #2204 (#2200.3): module / layout API surface ----
+// ---- #2204: module / layout API surface ----
 //
 // Four read endpoints + two write endpoints:
 //   * GET  /api/me/layout       — SPA bootstrap; computed from enabled set
@@ -995,7 +995,7 @@ app.get('/api/me/modules', auth, (req, res) => {
 });
 
 // GET /api/modules — returns the full registry as an array of entries
-// in registry order. Used by the add-a-room sheet (#2200.4) to
+// in registry order. Used by the add-a-room sheet to
 // render the list of available modules the user can enable.
 app.get('/api/modules', auth, (req, res) => {
   res.json(modules.listModules());
@@ -1017,7 +1017,7 @@ app.post('/api/me/modules/:key/enable', auth, (req, res) => {
   try {
     const result = userModel.enableModule(db, u.id, key, { withRequirements });
 
-    // #2829: when the agent module is first enabled for a user, seed
+    // when the agent module is first enabled for a user, seed
     // the default Hearth character row from agents/hearth/SOUL.md +
     // agents/hearth/IDENTITY.md. Idempotent — re-enabling the agent
     // module does NOT clobber per-user edits (the seed function
@@ -1083,7 +1083,7 @@ app.post('/api/me/modules/:key/disable', auth, (req, res) => {
   }
 });
 
-// ---- #2207 (#2200.6): invite-to-wall flow + first-run-complete ----
+// ---- #2207: invite-to-wall flow + first-run-complete ----
 //
 // Three write endpoints + one read endpoint, plus a static HTML page
 // mount for /invite/:code (the redemption handshake):
@@ -1116,7 +1116,7 @@ function _resolveCaller(req, res) {
   } else {
     groups = groupsHeader.split(',').map(s => s.trim()).filter(Boolean);
   }
-  // #2207 (#2200.6): union in any group_names from
+  // union in any group_names from
   // wall_memberships for group-visibility walls. This makes
   // invite-granted group membership survive subsequent header-trust
   // reconciliations — provisionOrClaim otherwise replaces the full
@@ -1149,7 +1149,7 @@ app.post('/api/invites', auth, requireAdmin, (req, res) => {
   if (!me) return res.status(401).json({ error: 'unknown_user' });
   const { wall_slug, expires_in_days, note, max_uses } = req.body || {};
   if (!wall_slug || typeof wall_slug !== 'string') {
-    return res.status(400).json({ error: 'wall_slug required', hint: '#1575 wall-less invites are gone (see #2207).' });
+    return res.status(400).json({ error: 'wall_slug required', hint: 'wall-less invites are gone.' });
   }
   try {
     const inv = invites.create(db, { wall_slug, expires_in_days, note, created_by: me.id, max_uses });
@@ -1173,7 +1173,7 @@ app.get('/api/invites', auth, requireAdmin, (req, res) => {
   }
 });
 
-// POST /api/invites/:code/revoke — admin kills an invite early (#2674).
+// POST /api/invites/:code/revoke — admin kills an invite early.
 // Idempotent on an already-revoked/exhausted code; 404 on an unknown
 // code. Once revoked, peek()/redeem() 410 with code invite_revoked.
 app.post('/api/invites/:code/revoke', auth, requireAdmin, (req, res) => {
@@ -1430,7 +1430,7 @@ app.post('/api/password', auth, (req, res) => {
   const { current, next } = req.body || {};
   const u = db.prepare('SELECT id, username FROM users WHERE username = ?').get(req.session.user.username);
   if (!u) return res.status(401).json({ error: 'unknown_user' });
-  // #2704: read current password via identity.verifyLocalPassword;
+  // read current password via identity.verifyLocalPassword;
   // write the new password via identity.setLocalPassword. The legacy
   // users.pass_hash column is kept in sync as a deprecated shadow so
   // pre-#2704 readers (other lib/ modules, future migrations) still
@@ -1486,7 +1486,7 @@ app.put('/api/users/:username', auth, (req, res) => {
   );
   res.json({ ok: true });
 });
-// ---- identity foundation (#2704) ----
+// ---- identity foundation ----
 // Read/write endpoints for the canonical identity surface. New API
 // paths that downstream features (#2705 invite enrollment, #2706
 // Authentik linking, #2708 owner recovery) build on top of.
@@ -1505,7 +1505,7 @@ app.post('/api/me/identities', auth, (req, res) => {
   const me = db.prepare('SELECT id, is_admin FROM users WHERE username = ?').get(req.session.user.username);
   if (!me) return res.status(401).json({ error: 'unknown_user' });
   const { user_id, provider, issuer, provider_subject } = req.body || {};
-  // #2704 surface: link an identity on behalf of an existing user.
+  // surface: link an identity on behalf of an existing user.
   // Today this is admin-only — the self-service Authentik OIDC flow
   // lands in #2706. The admin path is required so the migration
   // tooling (#2703 release gate "provider collisions stop safely
@@ -1536,7 +1536,7 @@ app.delete('/api/me/identities', auth, (req, res) => {
     return res.status(400).json({ error: 'provider, issuer, provider_subject required' });
   }
   // Admins can target another user via user_id (recovery tooling per
-  // #2703 release gate "provider collisions require recovery/admin
+  // release gate "provider collisions require recovery/admin
   // review"). Self-service path is always me.id.
   let targetId = me.id;
   if (user_id != null && user_id !== me.id) {
@@ -1555,7 +1555,7 @@ app.delete('/api/me/identities', auth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---- owner recovery (#2708, ported forward as #2719) ----
+// ---- owner recovery (ported forward as #2719) ----
 //
 // Homestead's owner-recovery surface has two halves:
 //
@@ -1581,7 +1581,7 @@ app.delete('/api/me/identities', auth, (req, res) => {
 // Authentik is unreachable (no x-authentik-* headers, no way to
 // establish a session at all) — gating this route behind `auth` +
 // `requireAdmin` would make it unreachable in exactly the scenario
-// #2708 exists to fix. The one-shot, 256-bit, TTL-bound,
+// exists to fix. The one-shot, 256-bit, TTL-bound,
 // timing-safe-compared recovery token minted by
 // `scripts/owner-recovery.js` (host-side, out of band) IS the
 // authentication for this route, the same way a password IS the
@@ -1653,7 +1653,7 @@ app.post('/api/admin/owner/recover', (req, res) => {
   res.json({ ok: true, username: result.username });
 });
 
-// ---- identity linking: self-service OIDC flow (#2706) ----
+// ---- identity linking: self-service OIDC flow ----
 // "Link Authentik later" — a Homestead user who already has a local
 // password can add an OIDC identity (Authentik in production) as a
 // SECOND way to sign in. The flow is intentionally explicit:
@@ -1952,7 +1952,7 @@ app.post('/api/users/:username/password', auth, (req, res) => {
   const { current, next } = req.body || {};
   if (!next || next.length < 4) return res.status(400).json({ error: 'New password too short' });
   if (me.username === target.username) {
-    // #2704: same path as /api/password — verify via local_credentials,
+    // same path as /api/password — verify via local_credentials,
     // write via setLocalPassword, sync the legacy users.pass_hash shadow.
     if (!identity.verifyLocalPassword(db, target.id, current || '')) return res.status(400).json({ error: 'Current password is wrong' });
   } else if (!me.is_admin) {
@@ -1960,7 +1960,7 @@ app.post('/api/users/:username/password', auth, (req, res) => {
   }
   identity.setLocalPassword(db, target.id, next);
   db.prepare('UPDATE users SET pass_hash = (SELECT password_hash FROM local_credentials WHERE user_id = ?) WHERE id = ?').run(target.id, target.id);
-  // #2708 (ported forward as #2719): when an admin resets
+  // (ported forward as #2719): when an admin resets
   // another user's password (no `current` provided, actor != target),
   // record an audit event. This is the normal "non-recovery" admin
   // reset path — different from the owner-recovery break-glass path
@@ -1979,7 +1979,7 @@ app.post('/api/users/:username/password', auth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---- agent tokens (#1617.1) ----
+// ---- agent tokens ----
 // Personal access tokens for BYO-harness meta-agents. A token stands in
 // for its owning user: authenticate() (above) treats a valid Bearer PAT
 // exactly like a session login for that user. Plaintext is shown to the
@@ -2043,11 +2043,11 @@ app.delete('/api/users/:username/agent-tokens/:id', auth, requireAdmin, (req, re
   res.json({ ok: true });
 });
 
-// ---- app install flow (#2201.1 / #2229) ----
+// ---- app install flow ----
 // State machine: resolve -> consent -> install, plus list/get/revoke/
 // reinstall. All logic lives in lib/app-install.js (pure, no express);
 // these handlers just do auth + status-code mapping. Settings UI that
-// drives this flow is #2201.4 (#2232).
+// drives this flow is #2201.4.
 function sendAppInstallError(res, err) {
   if (err instanceof appInstall.AppInstallError) {
     return res.status(err.status).json({ error: err.code, message: err.message, ...err.extra });
@@ -2118,7 +2118,7 @@ app.post('/api/apps/:key/reinstall', auth, (req, res) => {
   }
 });
 
-// ---- Connector Forge form wizard (#2448) -----------------------------
+// ---- Connector Forge form wizard -----------------------------
 // The browser receives template metadata and a redacted preview only. It
 // never receives a ConnectorSpec factory or a stored plaintext API key.
 function sendConnectorWizardError(res, err) {
@@ -2199,7 +2199,7 @@ app.post('/api/connectors/installations/:id/uninstall', auth, (req, res) => {
   catch (err) { sendConnectorWizardError(res, err); }
 });
 
-// ---- app activity log (#2201.3 / #2231) ----
+// ---- app activity log ----
 // Read path over app_api_log; the write path lives in authenticate()
 // above.
 app.get('/api/apps/:key/activity', auth, (req, res) => {
@@ -2210,7 +2210,7 @@ app.get('/api/apps/:key/activity', auth, (req, res) => {
   res.json(appApiLog.list(db, me.id, req.params.key, { limit: req.query.limit, offset: req.query.offset }));
 });
 
-// ---- agent endpoints (#1617.4) ----
+// ---- agent endpoints ----
 // Per-user, per-harness config rows. The HMAC secret is the trust key
 // used to sign Homestead -> user-harness outbound POSTs (drawer + events
 // webhook, #1617.6/.7). Plaintext is shown ONCE on insert / rotate.
@@ -2362,7 +2362,7 @@ app.get('/api/drawer/intro', auth, (req, res) => {
 });
 
 // ---- #1617.6: drawer backend — outbound POST + SSE consumer + retry/circuit breaker ----
-// Design doc §6.2–6.5. The drawer UI (#1617.5) POSTs here with
+// Design doc §6.2–6.5. The drawer UI POSTs here with
 // {message, endpoint_id, conversation_id}; this route signs and forwards
 // the payload to the user's configured drawer_endpoint URL with the
 // morning-brief snapshot attached, consumes SSE chunks or single-shot
@@ -2370,7 +2370,7 @@ app.get('/api/drawer/intro', auth, (req, res) => {
 // exponential backoff (1s, 4s, 16s, 60s), and auto-disables the
 // endpoint after 5 consecutive failures (§6.5).
 //
-// Wire shape matches the stub (#1617.5) on purpose so the frontend
+// Wire shape matches the stub on purpose so the frontend
 // consumer in public/index.html doesn't need any changes:
 //   * SSE reply (default): text/event-stream with `event: chunk` /
 //     `event: done` — Design Trap #4 ("never make a human watch an
@@ -2532,7 +2532,7 @@ app.post('/api/drawer', auth, async (req, res) => {
       conversation_id: result.conversationId,
       text: result.text || '',
       ...(result.actions ? { actions: result.actions } : {}),
-      // #2851: same payload the SSE path emits as `tool_result`
+      // same payload the SSE path emits as `tool_result`
       // events, for the Accept: application/json consumer.
       ...(result.toolResults && result.toolResults.length
         ? { tool_results: result.toolResults.map(tr => ({
@@ -2574,7 +2574,7 @@ app.post('/api/drawer', auth, async (req, res) => {
     if (i > 0) await new Promise(r => setTimeout(r, 30));
     writeSse('chunk', { text: chunkList[i] });
   }
-  // #2851: one `tool_result` event per house-action Hearth ran, after
+  // one `tool_result` event per house-action Hearth ran, after
   // the prose and before `done`. A separate event rather than more
   // `chunk` text so the drawer can render it as a chip — a claim the
   // server stands behind ("this row exists") is a different kind of
@@ -2599,7 +2599,7 @@ app.post('/api/drawer', auth, async (req, res) => {
   res.end();
 });
 
-// ---- Hearth house-actions (#2851) ----
+// ---- Hearth house-actions ----
 //
 // The same two operations Hearth calls as provider tools, exposed as
 // plain REST so a human, a script, or an installed app can invoke them
@@ -2636,12 +2636,12 @@ app.post('/api/actions/enqueue-media', auth, requireScope('write:actions:media_q
 app.post('/api/actions/mention-user', auth, requireScope('write:actions:mention'),
   (req, res) => runHearthAction('mention_user', req, res));
 
-// ---- media (#2149) ----
-// General-purpose content-addressed media store. Walls (#2147.2) and
+// ---- media ----
+// General-purpose content-addressed media store. Walls and
 // future consumers (entity-graph covers, list-item photos, Popcorn Vote)
 // build on this rather than rolling their own upload handling.
 //
-// #2644: GET /api/media/:id/context returns the comprehension
+// GET /api/media/:id/context returns the comprehension
 // package (image: file+thumb+caption; video: scene-change keyframes
 // + first/last frame + whisper-class audio transcript + caption).
 // Per the issue, the audio transcript honours a request-scoped BYOK
@@ -2661,7 +2661,7 @@ app.delete('/api/media/:id', auth, (req, res) => {
   res.json({ ok: true });
 });
 
-// #2644: keyframe-serve endpoint. The comprehension package
+// keyframe-serve endpoint. The comprehension package
 // references frames at /api/media-frames/:mediaId/:filename. Files
 // live under DATA_DIR/media-frames/{mediaId}/ and were extracted
 // at comprehension-build time. Auth-gated, same as /api/media/:id.
@@ -2687,7 +2687,7 @@ app.get('/api/media-frames/:mediaId/:filename', auth, (req, res) => {
   res.sendFile(abs);
 });
 
-// ---- walls (#2150) ----
+// ---- walls ----
 // Group-scoped and direct-share walls of chronological posts. Every
 // route below resolves the caller's local user id first, then delegates
 // straight to lib/walls.js, which runs assertMember() before touching
@@ -2702,7 +2702,7 @@ app.get('/api/walls', auth, (req, res) => {
   if (!me) return res.status(401).json({ error: 'unknown_user' });
   res.json({ walls: walls.listForUser(me.id) });
 });
-// #2556: admin-only "every wall regardless of membership" listing.
+// admin-only "every wall regardless of membership" listing.
 // Backstops the wall-management sheet (#2556 admin UI) so admins
 // can see walls they haven't been added to yet — the regular GET
 // /api/walls intentionally scopes to assertMember-passing walls for
@@ -2729,7 +2729,7 @@ app.post('/api/walls/:slug/posts', auth, requireScope('write:walls:post'), (req,
     res.json(post);
   } catch (e) { wallsErr(res, e); }
 });
-// #2821: long-lived SSE stream so a wall live-updates for every member
+// long-lived SSE stream so a wall live-updates for every member
 // who has it open — reuses the SSE wire format #1899 established for
 // the drawer rather than standing up a second realtime transport. Unlike
 // the drawer's one-shot request/reply stream, this connection stays open
@@ -2814,9 +2814,9 @@ app.use(forumRouter({
   publicDir: path.join(__dirname, 'public'),
 }));
 
-// ---- agent-to-agent mailbox (#2426) ----
+// ---- agent-to-agent mailbox ----
 // A "foreign harness" here is nothing more than an installed third-party
-// app (#2201) whose token carries read:mailbox/write:mailbox — there
+// app whose token carries read:mailbox/write:mailbox — there
 // is no separate external-agent registry. `mailboxCallerContext` is the
 // one place that decides whose thread-scope a request gets: an
 // app-scoped token only ever sees its OWN app's threads (`ctx.appId`);
@@ -2884,7 +2884,7 @@ app.post('/api/mailbox/messages', auth, requireScope('write:mailbox'), (req, res
   } catch (e) { mailboxErr(res, e); }
 });
 
-// ---- notification prefs + mentions (#2218) ----
+// ---- notification prefs + mentions ----
 // Per-wall level (all/mentions/none), wall-scoped @mention autocomplete,
 // per-thread mute, and the badge-clearing endpoints. Membership gate is
 // the same walls.assertMember() the wall routes above already trust — a
@@ -2943,7 +2943,7 @@ app.delete('/api/walls/:slug/posts/:postId/mute', auth, (req, res) => {
 });
 
 // ---- #2556: wall CRUD + member management (admin only) ----
-// #2493 closed green without these, leaving a wall that no seeded
+// closed green without these, leaving a wall that no seeded
 // user could reach from the API alone. Adding POST /api/walls +
 // member management closes that loop: an admin can create a new wall
 // from the UI without sqlite surgery, and the seeded wall is visible
@@ -3048,7 +3048,7 @@ app.post('/api/me/notifications/seen', auth, (req, res) => {
   res.json({ ok: true, cleared });
 });
 
-// ---- link preview (#2151) ----
+// ---- link preview ----
 // Best-effort server-side fetch + lightweight <title>/description scrape
 // for the Porch Wall's "link" post composer. No new dependency (no
 // cheerio/jsdom) — a couple of forgiving regexes over the raw HTML.
@@ -3123,7 +3123,7 @@ app.post('/api/tasks', auth, requireModuleEnabled('chores'), (req, res) => {
   const r = db.prepare('INSERT INTO tasks (title,notes,assignee,alt_assignee,due_date,recur,rotate,created_by) VALUES (?,?,?,?,?,?,?,?)')
     .run(title, notes, assignee, alt, due_date, recur, rotate ? 1 : 0, req.session.user.username);
   const created = db.prepare('SELECT * FROM tasks WHERE id = ?').get(r.lastInsertRowid);
-  // #1617.7: fire-and-forget events webhook fan-out. Never awaited on
+  // fire-and-forget events webhook fan-out. Never awaited on
   // the request path — a dead events harness must not slow down or fail
   // task creation.
   eventsDispatch.dispatchEventForAssignee(db, app.locals.eventsStreakMap, assignee, 'task_created', { task: created }).catch(() => {});
@@ -3166,7 +3166,7 @@ app.post('/api/tasks/:id/toggle', auth, (req, res) => {
       .run(t.done ? 0 : 1, req.session.user.username, t.id);
   }
   const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(t.id);
-  // #1617.7: fire-and-forget events webhook fan-out. A rotating chore
+  // fire-and-forget events webhook fan-out. A rotating chore
   // that just handed off to the next assignee fires 'chore_rotated' (to
   // the NEW assignee, since that's who needs to know); a plain task
   // toggle fires 'task_completed'/'task_uncompleted'.
@@ -3185,7 +3185,7 @@ app.delete('/api/tasks/:id', auth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---- lists (#2586) ----
+// ---- lists ----
 //
 // Lists are the household-shared, multiple-contributor primitive
 // distinct from chores/tasks. The `lists` module in lib/modules.js
@@ -3300,7 +3300,7 @@ app.delete('/api/list-items/:itemId', auth, requireScope('write:lists'), (req, r
   }
 });
 
-// ---- house rooms (#2852) ----
+// ---- house rooms ----
 // Rooms as LOCATIONS of the house — HALL, DEN, KITCHEN. See
 // lib/house-rooms.js for why this is not the same thing as the `room`
 // nav discriminator in lib/modules.js.
@@ -3449,7 +3449,7 @@ app.delete('/api/me/rooms/:slug/members/:userId', auth, (req, res) => {
 });
 
 // ---- events ----
-// #2852: events can be tagged with a house room. `room_id` accepts
+// events can be tagged with a house room. `room_id` accepts
 // either a room id or a slug on write and is stored as the id; reads
 // decorate every row with room_slug/room_label/room_icon, left null
 // for rooms the caller can't see rather than leaking another user's
@@ -3486,7 +3486,7 @@ app.post('/api/events', auth, (req, res) => {
   const r = db.prepare('INSERT INTO events (title,date,time,notes,owner,created_by,room_id) VALUES (?,?,?,?,?,?,?)')
     .run(title, date, time, notes, owner, req.session.user.username, roomId);
   const created = db.prepare('SELECT * FROM events WHERE id = ?').get(r.lastInsertRowid);
-  // #1617.7: fire-and-forget events webhook fan-out (see /api/tasks).
+  // fire-and-forget events webhook fan-out (see /api/tasks).
   eventsDispatch.dispatchEventForAssignee(db, app.locals.eventsStreakMap, owner, 'event_created', { event: created }).catch(() => {});
   res.json(created);
 });
@@ -3518,7 +3518,7 @@ app.delete('/api/events/:id', auth, (req, res) => {
 });
 
 // ---- services ----
-// #1623: every /api/services response now inlines the latest health
+// every /api/services response now inlines the latest health
 // snapshot so the UI doesn't need a second round-trip to render the
 // red-dot indicator. Health state lives in service_health_state; the
 // tile config stays in services.
@@ -3573,7 +3573,7 @@ app.delete('/api/services/:id', auth, (req, res) => {
   if (healthCheckerHandle) healthCheckerHandle.refresh();
   res.json({ ok: true });
 });
-// #2643: admin-only "delegate apps to users" — reassigns a tile's owner
+// admin-only "delegate apps to users" — reassigns a tile's owner
 // without the admin-tightened path also blocking the existing self-serve
 // add/edit sheet, which every user still uses to create their own tiles.
 app.put('/api/admin/services/:id/owner', auth, requireAdmin, (req, res) => {
@@ -3586,7 +3586,7 @@ app.put('/api/admin/services/:id/owner', auth, requireAdmin, (req, res) => {
   res.json(withHealth([row])[0]);
 });
 
-// ---- Entity-graph sync admin endpoints (#1624 Phase B-1, #1873) ----
+// ---- Entity-graph sync admin endpoints (#1624 Phase B-1) ----
 //
 // POST /api/admin/sync/plex           admin-only manual trigger
 // GET  /api/admin/sync/plex/status    admin-only last-run summary
@@ -3649,7 +3649,7 @@ app.get('/api/admin/sync/plex/status', auth, (req, res) => {
   });
 });
 
-// ---- Entity-graph sync admin endpoints (#1624 Phase B-2, #1874) ----
+// ---- Entity-graph sync admin endpoints (#1624 Phase B-2) ----
 //
 // POST /api/admin/sync/kavita         admin-only manual trigger
 // GET  /api/admin/sync/kavita/status  admin-only last-run summary
@@ -3713,7 +3713,7 @@ app.get('/api/admin/sync/kavita/status', auth, (req, res) => {
   });
 });
 
-// #1876: manual trigger for the sibling_detector cron. Same
+// manual trigger for the sibling_detector cron. Same
 // shape as /api/admin/sync/plex — admin-only, synchronous (the
 // detector is pure DB and returns in <1s on a typical library).
 app.post('/api/admin/sync/sibling-detector', auth, (req, res) => {
@@ -3724,7 +3724,7 @@ app.post('/api/admin/sync/sibling-detector', auth, (req, res) => {
 });
 
 
-// ---- calendar sources (#1620) ----
+// ---- calendar sources ----
 // All routes never return cred_blob. The DTO is built by
 // calendarSources.publicView(). Adding a source requires CALENDAR_CRED_KEY.
 app.get('/api/calendar-sources', auth, (req, res) => {
@@ -3777,7 +3777,7 @@ app.post('/api/calendar-sources', auth, (req, res) => {
     // google: deferred to #1865. The provider name is allowed in
     // the allow-list above so the UI's "add source" form can ship
     // before that issue lands; POST is rejected here with a 501.
-    return res.status(501).json({ error: 'google provider not implemented (#1865)' });
+    return res.status(501).json({ error: 'google provider not implemented' });
   }
   let userId = me.id;
   if (shared) {
@@ -3806,7 +3806,7 @@ app.delete('/api/calendar-sources/:id', auth, (req, res) => {
   res.json({ ok: true });
 });
 
-// #1868: edit display metadata for an existing calendar source. Only
+// edit display metadata for an existing calendar source. Only
 // display_name / color / enabled are mutable here — provider, account_id,
 // calendar_id, base_url, and credentials are immutable (re-add if you
 // need to change them). The endpoint exists so the per-user source config
@@ -3843,7 +3843,7 @@ app.patch('/api/calendar-sources/:id', auth, (req, res) => {
   res.json(calendarSources.publicView(updated));
 });
 
-// #1868: provider metadata for the per-user source config UI.
+// provider metadata for the per-user source config UI.
 // Returns the list of providers the SPA can render an add form for, with
 // their credential-field schemas. The `disabled` flag lets the UI show
 // a "coming soon" placeholder for providers that are reserved in the
@@ -3908,7 +3908,7 @@ app.get('/api/calendar-sources/kinds', auth, (req, res) => {
         calendarIdLabel: 'Calendar ID',
         calendarIdPlaceholder: 'primary',
         credentialFields: [],
-        comingSoon: '#1865 (GoogleSource) ships in a parallel branch.',
+        comingSoon: '(GoogleSource) ships in a parallel branch.',
       },
     ],
   });
@@ -3931,7 +3931,7 @@ app.post('/api/calendar-sources/:id/refresh', auth, (req, res) => {
   res.json({ ok: true, status: 'syncing' });
 });
 
-// ---- calendar source write-back (#1866) ----
+// ---- calendar source write-back ----
 // Phase 2: round-trip createEvent / updateEvent / deleteEvent through
 // the provider's adapter. The HTTP route is a thin shim — the adapter
 // owns the URL composition, the VCALENDAR serialization, and the
@@ -4037,7 +4037,7 @@ app.delete('/api/calendar-sources/:id/events/:externalId', auth, (req, res) => {
 // provider events, tagged with `origin: 'native' | 'provider:<id>'`
 // so the month grid can paint per-provider pips.
 //
-// Overlap semantics (#1867):
+// Overlap semantics:
 //   * Native events match by their `date` column (single-day, all-day).
 //   * Provider cached events match by [start_at, end_at] overlap against
 //     the requested [from, to] window. An event that starts before `from`
@@ -4047,7 +4047,7 @@ app.delete('/api/calendar-sources/:id/events/:externalId', auth, (req, res) => {
 //     the window so the day-cell grouping can attribute it correctly.
 //   * Disabled sources (enabled = 0) are excluded — the operator toggle
 //     is the single switch for "stop showing this provider's events".
-//   * The shape stays the same as PR #5 (#1620): `origin` carries
+//   * The shape stays the same as PR #5: `origin` carries
 //     either `native` or `provider:<provider-kind>` so the frontend can
 //     distinguish without a second lookup. `cred_blob` is NEVER in the
 //     response — the publicView() contract from lib/calendar-sources.js
@@ -4121,7 +4121,7 @@ app.get('/api/events/merged', auth, (req, res) => {
   res.json({ events: [...native, ...cached] });
 });
 
-// ---- push notifications (#1619) ----
+// ---- push notifications ----
 // Public VAPID public key — fetched by the service worker at startup so
 // it can build a PushSubscription. No auth required: the public key is
 // not sensitive (it's the corresponding private key that authenticates
@@ -4209,7 +4209,7 @@ app.post('/api/notify', auth, async (req, res) => {
   res.json({ userId: target.id, username: target.username, ...result });
 });
 
-// ---- /api/funnel/install (#2219) ----
+// ---- /api/funnel/install ----
 // Auth-gated funnel event intake for the install coach. The client
 // emits a row per step; #2210 (analytics funnel umbrella) reads
 // these rows to compute install-rate / time-to-install /
@@ -4255,7 +4255,7 @@ app.post('/api/funnel/install', auth, (req, res) => {
   res.json({ ok: true, step });
 });
 
-// ---- /api/services/health (#1623) ----
+// ---- /api/services/health ----
 // Unauthenticated by design. Agents, container orchestrators, and
 // future push-notification integrations use this to learn which tiles
 // are down. Per-tile UI state stays on /api/services (auth-gated).
@@ -4459,7 +4459,7 @@ app.get('/api/review-queue', auth, (req, res) => {
   res.json({ items });
 });
 
-// ---- Phase C — dedup + review-queue UI (#1876 / #1624 §11) ----
+// ---- Phase C — dedup + review-queue UI ----
 // Merge is the ONLY path that collapses two entities into one. The
 // matcher itself never merges (it emits edges, aliases, and review
 // rows); this endpoint resolves a queued review by either merging B
@@ -4486,29 +4486,29 @@ app.post('/api/review-queue/:id/reject', auth, requireAdmin, (req, res) => {
 // 404 JSON for unknown /api/* paths.
 app.use('/api', (req, res) => res.status(404).json({ error: 'not_found' }));
 
-// lib/scope-display.js (#2201.2 / #2230) is the single source for
+// lib/scope-display.js is the single source for
 // third-party app scope → plain-language mapping, shared between the
 // consent screen (public/consent.js) and the future Settings "what this
-// app can do" view (#2201.4). It's the only lib/ file served to the
+// app can do" view. It's the only lib/ file served to the
 // browser — everything else in lib/ is server-only DB/HTTP logic.
 app.get('/lib/scope-display.js', (req, res) => {
   res.type('application/javascript');
-  // #2583: dotfiles:'allow' (see /invite/:code above for rationale).
+  // dotfiles:'allow' (see /invite/:code above for rationale).
   res.sendFile('lib/scope-display.js', { root: __dirname, dotfiles: 'allow' });
 });
 
-// #2207 (#2200.6): invite redemption handshake. Visiting
+// invite redemption handshake. Visiting
 // https://life.phatt.vip/invite/{code} serves the redemption page
 // (public/invite.html). The page itself does the POST to /api/invites/:code/redeem
 // once the SWAG/authentik layer has authenticated the user. Codes
 // contain only hex chars (32 chars from crypto.randomUUID without
 // dashes), so the regex anchor is safe — no path-confusion risk.
 //
-// #2557: registered BEFORE the express.static handler (which
+// registered BEFORE the express.static handler (which
 // now uses fallthrough:false) so the route still resolves for paths
 // the static middleware would otherwise 404.
 app.get(/^\/invite\/([A-Fa-f0-9]{16,64})$/, (req, res) => {
-  // #2583: dotfiles option forces send() to traverse any path that
+  // dotfiles option forces send() to traverse any path that
   // contains a `.`-prefixed segment (e.g. /root/.openclaw/...) instead
   // of returning 404. Production deployments use /app (no dotfile
   // segments) so this is a no-op there; sandbox/dev runs with the
@@ -4524,7 +4524,7 @@ app.get('/favicon.ico', (req, res) => {
   res.sendFile('public/favicon.svg', { root: __dirname });
 });
 
-// #2658: entity pages are an explicit SPA route, not a static asset.
+// entity pages are an explicit SPA route, not a static asset.
 // Keep this allowlist entry ahead of the strict static middleware below so a
 // refresh, shared URL, or PWA cold start receives the shell while unrelated
 // missing files (for example /lists.html) continue to be real 404s.
@@ -4532,7 +4532,7 @@ app.get('/entity/:id', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'), { dotfiles: 'allow' });
 });
 
-// #2557: catch-all tightening. The previous express.static default
+// catch-all tightening. The previous express.static default
 // (fallthrough: true) let unknown paths like /lists.html /calendar.html
 // /chores.html /apps.html fall through to the SPA fallback regex,
 // which then served public/index.html with status 200 — the same
@@ -4547,7 +4547,7 @@ app.get('/entity/:id', (req, res) => {
 // 404/handler paths and are untouched here.
 //
 // Removed: app.get(/^(?!\/api).*/, ...) — see git history.
-// #2583: dotfiles:'allow' on the static handler mirrors the same
+// dotfiles:'allow' on the static handler mirrors the same
 // fix on the /invite/:code sendFile below — sandbox/dev paths under
 // /root/.openclaw/... would otherwise 404 on every request because
 // `send`'s default dotfiles policy rejects any segment starting with
@@ -4556,7 +4556,7 @@ app.get('/entity/:id', (req, res) => {
 app.use(express.static(path.join(__dirname, 'public'), { fallthrough: false, dotfiles: 'allow' }));
 
 const PORT = process.env.PORT || 3080;
-// ---- v0.0.6 health checker boot (#1623) ----
+// ---- v0.0.6 health checker boot ----
 // One independent setInterval per service. At ~20 services (Brandon's
 // "the launcher fronts ~20 services"), this is exactly the scale
 // where setInterval is fine — the work order calls this out
@@ -4569,7 +4569,7 @@ function startHealthChecker() {
   healthCheckerHandle = healthChecker.start(db, {
     log: (...args) => console.log('[health]', ...args),
     onDownTransition: async ({ service, state }) => {
-      // #1623 step 5: notify admins when a tile flips to DOWN.
+      // step 5: notify admins when a tile flips to DOWN.
       // Admins only — a downstream service being sick is an operator
       // problem, not something Emily needs a 3am push about. force=true
       // bypasses quiet hours: an outage is worth waking up for.
@@ -4592,7 +4592,7 @@ function startHealthChecker() {
   });
 }
 
-// ---- Porch sweep scheduler boot (#2646 / #2844) ----
+// ---- Porch sweep scheduler boot ----
 // Same independent-setInterval pattern as startHealthChecker above.
 //
 // onDecision closes the loop #2827.D left open: sweep.js decides
@@ -4675,7 +4675,7 @@ function startPorchSweep() {
   });
 }
 if (require.main === module) {
-  // ---- daily digest scheduler (#1619) ----
+  // ---- daily digest scheduler ----
   // Runs once on boot and again every 30 minutes. The scheduler is
   // cheap: it only fires the actual digest at most once per day per
   // user, keyed by date + category in notification_log. Take-turns
@@ -4729,7 +4729,7 @@ if (require.main === module) {
       });
     }
   }
-  // Plex entity-graph sync (#1873): every 6h. Skipped silently when
+  // Plex entity-graph sync: every 6h. Skipped silently when
   // PLEX_TOKEN is unset (the household might not have Plex yet). The
   // tick is independent of the chore-digest tick; we use the same
   // setInterval handle but guard with an "if it's been 6h" check so we
@@ -4754,7 +4754,7 @@ if (require.main === module) {
     }
   }
 
-  // Kavita entity-graph sync (#1874): every 6h. Skipped silently
+  // Kavita entity-graph sync: every 6h. Skipped silently
   // when KAVITA_API_KEY is unset. Same 6h cadence + same
   // in-flight guard pattern as the Plex worker.
   const KAVITA_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;     // 6h
@@ -4785,18 +4785,18 @@ if (require.main === module) {
       try { await runTakeTurnsDigest(); } catch (e) { console.error('[scheduler] take-turns digest:', e.message); }
       try { await runPlexSyncTick(); } catch (e) { console.error('[scheduler] plex sync tick:', e.message); }
       try { await runKavitaSyncTick(); } catch (e) { console.error('[scheduler] kavita sync tick:', e.message); }
-      // sibling_detector (#1876): every 6h, scan for same-title
+      // sibling_detector: every 6h, scan for same-title
       // + same-author work entities that aren't linked via
       // adaptation_of and queue a review item. Cheap — pure DB.
       try { runSiblingDetectorTick(); } catch (e) { console.error('[scheduler] sibling detector tick:', e.message); }
-      // media retention sweep (#2149): cheap, runs every tick — soft-
+      // media retention sweep: cheap, runs every tick — soft-
       // deleted rows past their 24h grace window + expired rows get
       // reaped (file unlink + row delete).
       try {
         const r = media.cleanupSweep(db);
         if (r.reaped > 0) console.log(`[scheduler] media sweep: reaped ${r.reaped}`);
       } catch (e) { console.error('[scheduler] media sweep:', e.message); }
-      // #2853: Gazette daily issue generation. Per-tick self-check —
+      // Gazette daily issue generation. Per-tick self-check —
       // for each user with `gazette` enabled, mints today's typed issue
       // once their local clock crosses 04:00 and they don't have one yet.
       try {
@@ -4809,7 +4809,7 @@ if (require.main === module) {
     console.log('[scheduler] daily digest started; tick=30min; plex+kavita entity-sync + sibling_detector + media sweep every 6h/30min');
   }
 
-  // sibling_detector (#1876) — see lib/dedup/matcher.js. Runs
+  // sibling_detector — see lib/dedup/matcher.js. Runs
   // inside the same 6h gate as the plex/kavita sync ticks. Pure DB,
   // no I/O, returns synchronously.
   const SIBLING_DETECT_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -4828,7 +4828,7 @@ if (require.main === module) {
   startPorchSweep();
   app.listen(PORT, () => console.log(`Homestead on :${PORT}`));
 }
-// #3116: tests need direct db access for setup (e.g. seeding
+// tests need direct db access for setup (e.g. seeding
 // installed_apps before exercising routes that FK to it). Attach db
 // to the app object so existing tests using
 // `const app = require('../server.js'); app.listen(...)` keep

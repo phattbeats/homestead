@@ -1,4 +1,4 @@
-// Homestead — third-party app consent screen (#2201.2 / #2230).
+// Homestead — third-party app consent screen.
 //
 // Vanilla JS, no build step, no framework — same convention as
 // public/porch.js. Renders the manifest preview + the mapped scope
@@ -49,7 +49,7 @@
   // reusable piece. `root` is the container holding the ids below
   // (public/consent.html's #app, or any host markup with the same
   // structure). Throws if `scopes` contains anything outside the
-  // #2201 §3 vocabulary — see lib/scope-display.js.
+  // vocabulary — see lib/scope-display.js.
   function renderConsentScreen(root, manifest, scopes, handlers) {
     handlers = handlers || {};
 
@@ -126,7 +126,7 @@
       onInstall() {
         // POST /api/apps/install lands with #2229. Until then this
         // screen only proves the render contract, not the write.
-        window.alert('Install endpoint not built yet (#2229).');
+        window.alert('Install endpoint not built yet.');
       },
     });
   }

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PHATT Tech LLC
 
-// #2200.5 / #2206 smoke test (extends #2151's smoke-porch-ui):
+// smoke test (extends #2151's smoke-porch-ui):
 // verify BOTH placements of the wall feed component — /forum (the
 // standalone thin shell) and /index.html (the in-place #page-wall
 // mount) — load the SAME /components/feed.js and reference the SAME
@@ -200,7 +200,7 @@ function startFixtureServer() {
 
     // ---- 7. End-to-end: components/feed.js's whole flow against the real walls/
     //         media API (upload -> post -> react -> comment -> feed). ----
-    // #2556: the previous version open-coded an INSERT INTO user_groups
+    // the previous version open-coded an INSERT INTO user_groups
     // to put brandon in `media-club`, then tested against a wall the
     // product never made visible to anyone on a fresh boot. Same
     // anti-pattern as scripts/smoke-walls.js. Now brandon is already in

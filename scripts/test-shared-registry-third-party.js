@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// #2209 / #2200.8 — Amendment 1 acceptance test:
+// Amendment 1 acceptance test:
 // "Built-in modules pass the same shape validator as #2201 third-party apps."
 //
 // Per #2201 (third-party app contract), a third-party app
 // manifest MUST conform to the same 16-field shape as a built-in
 // registry entry. The validator at `lib/registry-validate.js` is
 // the canonical intake gate — third-party install endpoints
-// (#2229) call it before merging into the registry.
+// call it before merging into the registry.
 //
 // This test verifies:
 //   1. Every built-in entry in `lib/modules.js` passes
@@ -46,7 +46,7 @@ function assertErr(fn, label, detailMatch) {
   }
 }
 
-console.log('#2209 Amendment 1 — registry shared intake path\n');
+console.log('Amendment 1 — registry shared intake path\n');
 
 // -----------------------------------------------------------------------------
 // 1. Every built-in passes validateEntryShape.

@@ -1,4 +1,4 @@
-/* #2823: persistent cross-page navigation.
+/* persistent cross-page navigation.
  *
  * Homestead ships several standalone HTML entry points (porch.html,
  * modules.html, invites.html, connectors.html, ...) alongside the

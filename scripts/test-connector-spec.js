@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #2444 acceptance tests for the ConnectorSpec schema, validator,
+// acceptance tests for the ConnectorSpec schema, validator,
 // JSONPath parser, and Komga reference template.
 //
 // Acceptance criteria (from #2444 issue body):
@@ -103,7 +103,7 @@ function freshConnectivityOpt(overrides = {}) {
   }, overrides);
 }
 
-console.log('#2444 ConnectorSpec tests\n');
+console.log('ConnectorSpec tests\n');
 
 // ---- Schema versioning --------------------------------------------------
 

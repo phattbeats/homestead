@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// #3206: `npm test` runner — discover and run every `scripts/test-*.js`
+// `npm test` runner — discover and run every `scripts/test-*.js`
 // and every `test/**/*.test.mjs` without manual `&&` chains in package.json.
 //
 // Replaces the 5,242-character `&&` chain in package.json's `"test"` script.
 // Adding a new `scripts/test-foo.js` now runs on `npm test` with **zero**
 // package.json edits — fixing the silent-skip class of regression that bit
-// #2883 (events route shipped 404 while `scripts/test-companion-cli.js`
+// (events route shipped 404 while `scripts/test-companion-cli.js`
 // went green against a throwaway listener).
 //
 // Behavior parity with the old chain:
@@ -44,7 +44,7 @@ const { spawn, spawnSync } = require('child_process');
 // a script that opens a listener and forgets to close it (the classic
 // hang mode in this repo) trips within the first minute. Override via
 // env if a single test genuinely needs more time.
-const SCRIPT_TIMEOUT_MS = Number(process.env.PHA_3206_TEST_TIMEOUT_MS) || 120_000;
+const SCRIPT_TIMEOUT_MS = Number(process.env.TEST_TIMEOUT_MS) || 120_000;
 
 const repoRoot = path.resolve(__dirname, '..');
 const scriptsDir = path.join(repoRoot, 'scripts');
@@ -52,7 +52,7 @@ const porchDir = path.join(repoRoot, 'test', 'porch');
 const bootstrap = path.join(__dirname, '_test-bootstrap.js');
 
 if (!fs.existsSync(bootstrap)) {
-  console.error(`#3206: bootstrap shim missing at ${bootstrap}`);
+  console.error(`bootstrap shim missing at ${bootstrap}`);
   process.exit(2);
 }
 
@@ -65,7 +65,7 @@ const testFiles = entries
   .sort();
 
 if (testFiles.length === 0) {
-  console.error('#3206: no scripts/test-*.js files matched. Aborting.');
+  console.error('no scripts/test-*.js files matched. Aborting.');
   console.error('         cwd:', process.cwd());
   console.error('         scanned:', scriptsDir);
   process.exit(2);
@@ -78,14 +78,14 @@ if (testFiles.length === 0) {
 const MIN_EXPECTED = 50;
 if (testFiles.length < MIN_EXPECTED) {
   console.error(
-    `#3206: glob matched ${testFiles.length} files, expected >= ${MIN_EXPECTED}. ` +
+    `glob matched ${testFiles.length} files, expected >= ${MIN_EXPECTED}. ` +
       'A test file probably moved or was deleted without updating this floor. ' +
       'If intentional, update MIN_EXPECTED in scripts/run-tests.js.'
   );
   process.exit(2);
 }
 
-console.log(`#3206 runner: ${testFiles.length} scripts/test-*.js + porch tests`);
+console.log(`runner: ${testFiles.length} scripts/test-*.js + porch tests`);
 
 // ----- Run each script sequentially with the bootstrap shim ----------------
 
@@ -120,7 +120,7 @@ function runOne(rel) {
     });
     child.on('error', (err) => {
       clearTimeout(killTimer);
-      console.error(`#3206: spawn error for ${rel}: ${err.message}`);
+      console.error(`spawn error for ${rel}: ${err.message}`);
       resolve({ status: 1, killed: false, ms: Date.now() - t0 });
     });
   });
@@ -163,7 +163,7 @@ async function main() {
 
     if (mjsFiles.length > 0) {
       console.log(`\n=== porch (node --test, ${mjsFiles.length} files) ===`);
-      // #3206: pass --require so the #3200 bootstrap shim
+      // pass --require so the #3200 bootstrap shim
       // sets SESSION_SECRET / HOMESTEAD_INSECURE_TEST_COOKIES / NODE_ENV
       // before any test module imports server.js. Without it the
       // fail-closed loadSessionSecret throws "too short" on the porch
@@ -184,6 +184,6 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error('#3206 runner crashed:', e && e.stack || e);
+  console.error('runner crashed:', e && e.stack || e);
   process.exit(2);
 });

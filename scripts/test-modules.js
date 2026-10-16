@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #2203 acceptance tests for the v0.3.0 module registry.
+// acceptance tests for the v0.3.0 module registry.
 //
 // Drives `lib/modules.js`, `lib/registry-validate.js`, and the new
 // `getEnabledModules` / `getDefaultEnabledModules` helpers in
@@ -21,8 +21,8 @@
 //   * DEFAULT_ENABLED references are valid registered keys.
 //
 // Out of scope (these are PHAs 2200.3 / 2200.4 / 2201 etc.):
-//   * HTTP API routes (#2200.3)
-//   * Frontend rendering (#2200.4)
+//   * HTTP API routes
+//   * Frontend rendering
 //   * Third-party install flow (#2201 children)
 
 'use strict';
@@ -68,7 +68,7 @@ const SIX = ['wall', 'lists', 'calendar', 'chores', 'apps', 'agent'];
 // this line, which is exactly the point.
 const REGISTERED = [...SIX, 'gazette'];
 
-console.log('#2203 module-registry tests\n');
+console.log('module-registry tests\n');
 
 // -----------------------------------------------------------------------------
 // 1. Registry shape — six built-ins + DEFAULT_ENABLED = ['wall'].
@@ -284,10 +284,10 @@ console.log('#2203 module-registry tests\n');
   const defaults = userModel.getDefaultEnabledModules();
   assertEq(defaults.map(e => e.key), ['wall'], 'getDefaultEnabledModules returns [{ key: "wall", ...full registry entry }]');
   const wall = defaults[0];
-  // #2846: built-in icons are now SVG paths under /modules/ rather than
+  // built-in icons are now SVG paths under /modules/ rather than
   // emoji literals (third-party manifests still use emoji strings — see
   // the dispatch rule in public/modules.html + public/index.html). The
-  // 16-field contract (#2201) is preserved: `icon` is still a non-empty
+  // 16-field contract is preserved: `icon` is still a non-empty
   // string. The registry's wall entry is the source of truth.
   assert(wall && wall.key === 'wall' && wall.name === 'The Forum' && wall.icon === '/modules/porch.svg', 'default entry is the full wall registry entry (wall icon is /modules/porch.svg per #2846)');
 }

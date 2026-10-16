@@ -1,4 +1,4 @@
-# The Homestead Gazette — design note (#2659)
+# The Homestead Gazette — design note
 
 Status: **IMPLEMENTED** (2026-08-30). The four Porch-agents
 dependencies (#2644/2645/2646/2648 — PRs #78/#84/#85/#86) all landed
@@ -16,7 +16,7 @@ Shipped surface:
 | Provider call | `lib/agent-runtime.js` (`composeGazette`) |
 | Route | `server.js` — `GET /api/me/gazette/today` |
 | Launcher + sheet | `public/index.html` (`sheets[]` → `renderGazetteSheet`) |
-| Acceptance tests | `scripts/test-2659-gazette.js` |
+| Acceptance tests | `scripts/test-gazette.js` |
 
 ## What exists today vs. what the canon assumes
 
@@ -27,7 +27,7 @@ repo**:
 - **"Hearth"** is not a built surface. It appears only as a planned,
   unbuilt analytics read-API name (`docs/GLOSSARY.md:204-209`). There
   is no "ribbon" component for it to expand from.
-- **"Gazette gating in the agent module" (#2221)** — grepped the
+- **"Gazette gating in the agent module"** — grepped the
   whole tree, zero hits for "gazette" anywhere before this note. The
   agent module (`lib/modules.js:130-148`) has no Gazette-specific
   field or gate. This issue is the first line of Gazette code, full
@@ -121,7 +121,7 @@ nav concept.
 - **Trigger**: first open of the day per user (not pushed, not
   cron-generated). Server checks a per-user "last generated" date;
   cache miss → assemble context → call the user's BYOK harness (the
-  same harness backing the `agent` drawer, #1899) with an
+  same harness backing the `agent` drawer) with an
   edition-authoring prompt → store the rendered edition → serve it.
   Cache hit → serve the stored edition. This mirrors the `agent`
   module's existing BYOK dependency instead of adding a second LLM

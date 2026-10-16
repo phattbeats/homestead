@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# #2501 standing policy enforcement — one-shot verify command.
+# standing policy enforcement — one-shot verify command.
 #
 # Per Brandon's 2026-08-23 directive (Definition of Done), every Homestead
 # change must come with artifact-grade evidence (screenshot, curl transcript,
@@ -82,7 +82,7 @@ NODE_ENV=production \
   node scripts/smoke-postlogin-screenshot.js
 echo
 
-# #2556: fresh-install Porch acceptance smoke — logs in as brandon,
+# fresh-install Porch acceptance smoke — logs in as brandon,
 # taps the Porch tab, posts a text message, and captures 390x844
 # screenshots of (1) Porch with composer visible and (2) Porch with
 # the new post landed. This is the user-visible acceptance criterion
@@ -97,7 +97,7 @@ ADMIN_PASSWORD="verify-admin-pw" \
 BRANDON_PASSWORD="verify-brandon-pw" \
 SESSION_SECRET="verify-secret" \
 NODE_ENV=production \
-  node scripts/smoke-2556-porch-default.js
+  node scripts/smoke-porch-default.js
 echo
 
 # 4. #2583: unauthenticated invite-link bounce smoke. Validates that
@@ -107,10 +107,10 @@ echo
 #    Drop two screenshots into verify-out/ at 390x844 mobile viewport.
 echo "==> Step 4/5 — #2583 unauthenticated invite-link bounce smoke"
 VERIFY_OUT="$VERIFY_OUT" \
-  node scripts/smoke-2583-invite-bounce.js
+  node scripts/smoke-invite-bounce.js
 echo
 
-# #2585: Home / Today landing is always-visible after applyLayout.
+# Home / Today landing is always-visible after applyLayout.
 # Boots a fresh instance, logs in as brandon, asserts that the Home
 # tab is visible in the bottom nav regardless of which modules are
 # enabled. Drops two screenshots into verify-out/ at 390x844:
@@ -124,14 +124,14 @@ ADMIN_PASSWORD="verify-admin-pw" \
 BRANDON_PASSWORD="verify-brandon-pw" \
 SESSION_SECRET="verify-secret" \
 NODE_ENV=production \
-  node scripts/smoke-2585-home-always-visible.js
+  node scripts/smoke-home-always-visible.js
 echo
 
 # 6. #2586: a fresh DB must expose Groceries, then a household user
 #    opens Lists and adds an item through the actual mobile UI.
 echo "==> Step 6/7 — #2586 Lists fresh-install journey smoke"
 VERIFY_OUT="$VERIFY_OUT" \
-  node scripts/smoke-2586-lists-ui.js
+  node scripts/smoke-lists-ui.js
 echo
 
 # 7. Curl transcript of /api/health (proof of life on the same scratch instance).

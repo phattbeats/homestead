@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #2218 smoke test: boot server.js on an ephemeral port, exercise the
+// smoke test: boot server.js on an ephemeral port, exercise the
 // new HTTP surface end-to-end — members autocomplete, per-wall level
 // GET/PUT, an @-mentioned post, thread mute/unmute, the badge feed, and
 // seen-clearing. Same boot pattern as scripts/smoke-walls.js.
@@ -58,10 +58,10 @@ async function login(username, password) {
   if (!ready) throw new Error('homestead did not become ready');
   ok('server boots');
 
-  // #2556: the previous version open-coded INSERT INTO user_groups
+  // the previous version open-coded INSERT INTO user_groups
   // to put brandon + emily into 'media-club', then tested against a
   // wall that wasn't seeded visible to anyone. Same anti-pattern the
-  // #2556 issue flags in scripts/smoke-walls.js. Now both seeded
+  // issue flags in scripts/smoke-walls.js. Now both seeded
   // users are already in `household` (the seeded wall), so the wall
   // is reachable via the API alone. The remaining DB write below sets
   // notification_prefs.quiet_{start,end}_hour to 0/0 — this is a

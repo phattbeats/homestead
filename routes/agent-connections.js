@@ -1,4 +1,4 @@
-// #3198 (#1647): split server.js into Express routers.
+// split server.js into Express routers.
 //
 // This is the FIRST domain extraction — agent-connections (pairing +
 // the #3116 events route) — chosen because that surface already
@@ -17,7 +17,7 @@
 // handlers that previously lived at server.js L2339–L2554. Test
 // scripts/test-agent-connections.js (HTTP integration test, exercises
 // live routes against a real server.js) and
-// scripts/test-3116-events-route.js (signed-body HMAC path) are the
+// scripts/test-events-route.js (signed-body HMAC path) are the
 // acceptance gates; both must stay green with no edits.
 //
 // What depends on what:
@@ -122,7 +122,7 @@ module.exports = function agentConnectionsRouter({
     }
   });
 
-  // #3116: POST /api/agent-connections/:id/events — the inbound route
+  // POST /api/agent-connections/:id/events — the inbound route
   // the Homestead companion CLI's `relay-one-event` posts to. Each
   // companion holds a per-connection plaintext secret returned once at
   // pairing-redemption time; every event body is signed with
@@ -157,7 +157,7 @@ module.exports = function agentConnectionsRouter({
         required: ['X-Homestead-Request-Id', 'X-Homestead-Timestamp', 'X-Homestead-Signature'],
       });
     }
-    // #3199: reject malformed request ids before we touch any crypto
+    // reject malformed request ids before we touch any crypto
     // path — non-empty, max 128 chars, charset [A-Za-z0-9._-]. A
     // missing/oversized/junk-id is the same bucket as a missing header
     // (you can't be a real companion if you can't format an id).
@@ -188,7 +188,7 @@ module.exports = function agentConnectionsRouter({
     if (connection.status !== agentConnections.STATUS_ACTIVE) {
       return res.status(409).json({ error: 'connection_not_active', status: connection.status });
     }
-    // #3199: fail closed on missing rawBody. The verify hook in the
+    // fail closed on missing rawBody. The verify hook in the
     // express.json({ verify }) middleware above stashes req.rawBody when
     // it sees a non-empty Buffer. If it's missing (empty body, wrong
     // Content-Type, body parser short-circuited, etc.) there is NOTHING
@@ -206,7 +206,7 @@ module.exports = function agentConnectionsRouter({
     if (!agentConnections.verifySignature(connection.secret_plaintext, timestamp, rawBody, signature)) {
       return res.status(401).json({ error: 'bad_signature' });
     }
-    // #3199: signature is good. Now check the replay ledger BEFORE we
+    // signature is good. Now check the replay ledger BEFORE we
     // write to the mailbox so a duplicate request id never produces a
     // second inbound message. Cheap GC on the way in keeps the table
     // bounded to the last 6 minutes of activity.

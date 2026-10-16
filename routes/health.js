@@ -1,4 +1,4 @@
-// #3214 (#1647 / #3198): split server.js into Express routers.
+// split server.js into Express routers.
 //
 // Second domain extracted — the two public probes (/api/health and
 // /api/version). Chosen as PR2 of the #3214 workstream because the
@@ -12,7 +12,7 @@
 // on any incident is `curl /api/health`. Miss-risk here is small but
 // non-zero: if `/api/health` ever 404s, the entire Watchtower chain
 // goes red and stops auto-rolling. The same miss-risk that bit us on
-// #2883 (a stand-in listener that returned 200 while the real
+// (a stand-in listener that returned 200 while the real
 // route was never wired) applies even to a 2-handler module.
 //
 // Pattern (per the #3198 spec):
@@ -37,12 +37,12 @@
 //
 // Behavior must not change: this file is a pure relocation of the two
 // handlers that previously lived at server.js L597–L625. The smoke
-// scripts that hit /api/health (scripts/test-2588-health-default.js,
+// scripts that hit /api/health (scripts/test-health-default.js,
 // scripts/test-health-checker.js, scripts/smoke-*.js — see CONTRIBUTING.md
 // "verification recipe") are the acceptance gates; all must stay green
 // with no edits.
 //
-// #3200 fail-closed check: `sessionSecretReady` is the readiness
+// fail-closed check: `sessionSecretReady` is the readiness
 // signal the operator watches. If this regresses, a misconfigured
 // secret box that booted on a hardcoded fallback would show up as
 // `false` here — without it, a half-configured install could pass the
@@ -88,7 +88,7 @@ module.exports = function healthRouter({
       uptime: Math.round((Date.now() - PROCESS_STARTED_AT_MS) / 1000),
       db: dbStatus,
       calendarCredKeyReady: credKeyReady,
-      // #3200: separate readiness signal for the session cookie signer.
+      // separate readiness signal for the session cookie signer.
       // A misconfigured box that booted on a hardcoded fallback would have
       // logged `false` here — operators can spot it from a Watchtower
       // health probe without dumping the secret.

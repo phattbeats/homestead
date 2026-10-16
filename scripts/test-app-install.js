@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #2201.1 (#2229) acceptance tests for lib/app-install.js + the
+// acceptance tests for lib/app-install.js + the
 // six /api/apps/* routes in server.js.
 //
 // Two layers, no mocking of Homestead's own code — only the outbound
@@ -104,7 +104,7 @@ function tableCounts(db) {
   };
 }
 
-console.log('#2201.1 (#2229) app install flow tests\n');
+console.log('app install flow tests\n');
 
 async function main() {
 

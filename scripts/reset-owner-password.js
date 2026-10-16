@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #2711: owner-account break-glass reset.
+// owner-account break-glass reset.
 //
 // Mints a one-shot recovery token for a Homestead local-account user.
 // The token is valid for 1 hour, sha256-hashed in the DB, and

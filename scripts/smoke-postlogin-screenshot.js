@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #2501 standing policy enforcement smoke — Definition of Done guard.
+// standing policy enforcement smoke — Definition of Done guard.
 //
 // Per Brandon's 2026-08-23 directive, every UI-touching issue must ship with
 // a 390px-class mobile-viewport screenshot of the actual rendered result
@@ -110,7 +110,7 @@ async function main() {
       throw new Error(`SPA root returned ${root ? root.status() : 'no response'}`);
     }
 
-    // Log in as admin. The LAN fallback /api/login (#1574) seeds admin
+    // Log in as admin. The LAN fallback /api/login seeds admin
     // on first boot from ADMIN_PASSWORD.
     await page.waitForSelector('#username', { state: 'visible', timeout: 5000 });
     await page.fill('#username', 'admin');

@@ -2,17 +2,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PHATT Tech LLC
 
-// #2648 — Porch DoD smoke: a throwaway test post (never a real
+// Porch DoD smoke: a throwaway test post (never a real
 // friend's post — that's the manual launch ritual, later) driven
 // through the full pipeline this repo has actually shipped so far:
 //
 //   upload (#2149/2644) -> media-context comprehension package
-//   -> sweep loop picks the post up after its grace window (#2646)
+//   -> sweep loop picks the post up after its grace window
 //   -> participation contract gates a candidate reaction on whether it
 //      references something concrete in the comprehension package
-//      (#2645) -> the accepted candidate is posted as a REAL
+//      -> the accepted candidate is posted as a REAL
 //      comment via the production HTTP route, and the agent's badge +
-//      vote-off button are visible on the resulting thread (#2648).
+//      vote-off button are visible on the resulting thread.
 //
 // What this smoke intentionally does NOT exercise: #2636's
 // candidate-generation step (the LLM draft-per-register writer) is
@@ -71,7 +71,7 @@ async function makeTestImage() {
 }
 
 // 7s synthetic clip, two distinct scenes (blue -> gold) plus a 440Hz tone
-// audio track — same generator shape as scripts/test-2644-media-context.js's
+// audio track — same generator shape as scripts/test-media-context.js's
 // makeTestVideo, tuned to 7s/2-scene per the issue's "5-10s, one or two
 // distinct scenes, spoken audio" test-post shape. The audio is a pure tone,
 // not actual speech: real transcription needs an OpenAI key (BYOK or
@@ -147,10 +147,10 @@ export async function runSmoke() {
   // development: a fixed port produced a live server that answered
   // /api/health from a DIFFERENT process and 404'd on every other route).
   process.env.ADMIN_PASSWORD = 'porch-smoke-admin-pw';
-  // #3206: #3200 made loadSessionSecret fail-closed on a short /
+  // made loadSessionSecret fail-closed on a short /
   // placeholder secret. The 17-char 'porch-smoke-secret' triggered
   // "too short (17 chars; minimum 32)" on the first run of the
-  // #3206 runner in CI. Use a deterministic 64-char hex string
+  // runner in CI. Use a deterministic 64-char hex string
   // generated once for this smoke. Deterministic so re-runs match
   // any on-disk cookie state (the smoke boots a fresh DATA_DIR each
   // time so this doesn't actually matter, but keeping it stable
@@ -224,7 +224,7 @@ export async function runSmoke() {
   // architecture note: "agents are wall members with their own identity
   // ... via BYOK key", no separate agent registry table.
   const tokenRes = await api(emilyCookie, 'POST', '/api/agent-tokens', { label: 'porch-smoke-agent' });
-  assert(tokenRes.status === 200 && tokenRes.json.token_plaintext, 'emily mints her own agent PAT (self-service, #1617.1)');
+  assert(tokenRes.status === 200 && tokenRes.json.token_plaintext, 'emily mints her own agent PAT (self-service)');
   const emilyPat = tokenRes.json.token_plaintext;
   evidence.agentUsername = 'emily';
 
@@ -379,7 +379,7 @@ export async function runSmoke() {
     author: { username: 'emily', display: 'Emily', isAgent: true },
   }, /* isAdmin */ true, /* meUsername */ 'brandon');
   assert(postWithAgentAuthor.includes('agent-badge'), 'feed.js pure-render output includes the agent-badge markup for an isAgent author');
-  // #3206: the vote-off button class is 'vote-off' (feed.js:88), not
+  // the vote-off button class is 'vote-off' (feed.js:88), not
   // 'agent-vote-off'. The OLD smoke never ran in CI, so the typo
   // survived. Pass isAdmin=true and meUsername to _postHtml so the
   // isAgent && isAdmin branch in feed.js:109 actually renders the button.

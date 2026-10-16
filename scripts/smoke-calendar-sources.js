@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #1620 calendar-sources smoke test (v1): boot server.js in-process
+// calendar-sources smoke test (v1): boot server.js in-process
 // with a fake CalDAV server, mint an admin session via /api/login, add
 // a calendar source, kick a refresh, hit /api/events/merged, and
 // verify the provider events flow through. Designed to fail loudly
@@ -33,7 +33,7 @@ if (!process.env.CALENDAR_CRED_KEY) {
 }
 
 // ---- 1. Boot a tiny fake CalDAV server on a free port ---------------
-// #1866: the fake now also handles PUT/DELETE for write-back so the
+// the fake now also handles PUT/DELETE for write-back so the
 // round-trip create → update → delete flow can be exercised end-to-end
 // against the provider sandbox. The server keeps an in-memory list of
 // created events so the next REPORT returns them alongside the seed.

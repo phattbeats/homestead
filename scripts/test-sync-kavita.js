@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #1874 (#1624 Phase B-2) acceptance tests for the Kavita sync worker.
+// (#1624 Phase B-2) acceptance tests for the Kavita sync worker.
 //
 // Pure-DB tests: drive `lib/sync/kavita.js` against a temp SQLite file
 // with the entity-graph schema migrated from `lib/sync/_schema.js`. The

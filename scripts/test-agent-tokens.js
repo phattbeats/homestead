@@ -261,7 +261,7 @@ console.log('#1617.1/.2 agent-tokens tests\n');
 
 // ---- Test 8: #2228 — agent_tokens.app_id + installed_apps migration ----
 {
-  console.log('\nTest 8: app_id column + installed_apps table (#2228)');
+  console.log('\nTest 8: app_id column + installed_apps table');
   const { db, tmpDir } = freshDb();
   const brandon = db.prepare('SELECT id FROM users WHERE username = ?').get('brandon');
 

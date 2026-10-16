@@ -1,4 +1,4 @@
-// Homestead — tests for lib/connector-runner.js (#2445).
+// Homestead — tests for lib/connector-runner.js.
 //
 // Coverage:
 //

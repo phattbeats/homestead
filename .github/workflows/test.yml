@@ -33,7 +33,7 @@ jobs:
       - name: Run unit test suite
         run: npm test
 
-      # #2501 standing policy — Definition of Done guard. Two browser
+      # standing policy — Definition of Done guard. Two browser
       # smokes run on every PR: (1) the SPA page-error regression guard
       # (catches duplicate top-level declarations like #2494), and
       # (2) the post-login mobile-viewport screenshot smoke (catches
@@ -47,10 +47,10 @@ jobs:
       - name: Run post-login mobile screenshot smoke
         run: node scripts/smoke-postlogin-screenshot.js
 
-      - name: #2658 — entity deep-link refresh smoke
+      - name: entity deep-link refresh smoke
         run: node scripts/smoke-entity-deeplink.js
 
-      # #2498 (P2 UX batch): the three mobile smokes below are the
+      # (P2 UX batch): the three mobile smokes below are the
       # DoD evidence the walking report cited to close the parent issue.
       # They're additive to the #2501 standing smokes — same harness,
       # same fixtures, same screenshot outputs as the post-login smoke,
@@ -58,35 +58,35 @@ jobs:
       #   1. install coach does NOT auto-fire on login transition
       #   2. drawerFab docks into header (no bottom-right FAB pileup)
       #   3. drawerFab does NOT leak onto the login screen
-      - name: #2498 — install-coach deferral smoke
-        run: node scripts/smoke-2498-install-coach-deferral.js
+      - name: install-coach deferral smoke
+        run: node scripts/smoke-install-coach-deferral.js
 
-      - name: #2498 — FAB pileup smoke
-        run: node scripts/smoke-2498-fab-pileup.js
+      - name: FAB pileup smoke
+        run: node scripts/smoke-fab-pileup.js
 
-      - name: #2498 — pre-auth drawer-gate smoke
-        run: node scripts/smoke-2498-preauth-drawer.js
+      - name: pre-auth drawer-gate smoke
+        run: node scripts/smoke-preauth-drawer.js
 
-      # #2585: Home / Today landing is always-visible after
+      # Home / Today landing is always-visible after
       # applyLayout. Boots a fresh instance, logs in as brandon,
       # asserts Home is visible in the bottom nav regardless of
       # which modules the user has enabled, and captures two 390x844
       # mobile-viewport screenshots (all-modules + reduced-layout).
-      - name: #2585 — Home always-visible smoke
-        run: node scripts/smoke-2585-home-always-visible.js
+      - name: Home always-visible smoke
+        run: node scripts/smoke-home-always-visible.js
 
-      - name: #2586 — Lists fresh-install journey smoke
-        run: node scripts/smoke-2586-lists-ui.js
+      - name: Lists fresh-install journey smoke
+        run: node scripts/smoke-lists-ui.js
 
-      # #2707: post-invite-redemption welcome screen. Mints an
+      # post-invite-redemption welcome screen. Mints an
       # invite, signs up a fresh account through it, and asserts the
       # welcome screen actually explains Homestead + the Porch + the
       # wall/members + what the invite granted + a contextual first
       # action + (local-account) the Authentik-later note — plus the
       # dismiss (Escape), skip-for-returning-user, and explicit
       # ?revisit=1 reopen paths. Captures three 390px screenshots.
-      - name: #2707 — invite-redemption welcome screen smoke
-        run: node scripts/smoke-2707-invite-welcome.js
+      - name: invite-redemption welcome screen smoke
+        run: node scripts/smoke-invite-welcome.js
 
       - name: Upload verify-out screenshots
         if: always()

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #2201.2 (#2230) smoke test: boot server.js on an ephemeral port
+// smoke test: boot server.js on an ephemeral port
 // and exercise the third-party app consent screen surface — that
 // lib/scope-display.js is served to the browser at /lib/scope-display.js
 // (the one file from lib/ that's public), that public/consent.html /

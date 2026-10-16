@@ -120,7 +120,7 @@ whoever notices — the policy is the authority, no discussion needed.
 
 ## Maintenance
 
-This policy is itself subject to the policy: this issue (#2501) closes
+This policy is itself subject to the policy: this issue closes
 only when the smoke test exists in CI (SHA), `verify.sh` runs green
 (transcript), and the re-brief comments are posted on each agent's thread
 (links). Report back in the issue with all three.

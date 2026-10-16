@@ -1,4 +1,4 @@
-/* Homestead brand foundation (#2777).
+/* Homestead brand foundation.
  *
  * The canonical wordmark is the carved-wood vector traced from
  * `homestead/canonical/homestead-logo-canonical.png` (Brandon's lock 2026-08-28).
@@ -45,7 +45,7 @@
   --brand-hearth:#C4703C;
   --brand-hearth-canonical:#ad5c05;
   --brand-brass:#d49a40;
-  /* #2777 acceptance: muted label token darkened from #8A8177 (3.71:1)
+  /* acceptance: muted label token darkened from #8A8177 (3.71:1)
    * to #7a7269 (4.59:1) so muted labels and button text pass WCAG AA. */
   --muted:#7a7269;
   /* The canonical wordmark color (carved wood). Use currentColor in the SVG

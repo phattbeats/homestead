@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #2853 acceptance tests — the typed Gazette issue rework.
+// acceptance tests — the typed Gazette issue rework.
 //
 // Covers:
 //   1. `composeTypedPayload` produces typed, card-renderable sections
@@ -12,13 +12,13 @@
 //      with no issue.
 //   4. `POST /api/gazette/ask` round-trips through the real Hearth
 //      dispatch path (agentRuntime.dispatchHearth) against the same
-//      fake provider used by scripts/test-2659-gazette.js.
+//      fake provider used by scripts/test-gazette.js.
 //   5. The no-connectors first-run case (nothing enabled beyond
 //      gazette+agent+wall+calendar, no data seeded) produces a
 //      coherent thin edition rather than an error.
 //
 // Follows the DB-fixture / fake-provider / assert() conventions from
-// scripts/test-2659-gazette.js and scripts/test-snapshot.js.
+// scripts/test-gazette.js and scripts/test-snapshot.js.
 
 'use strict';
 
@@ -53,7 +53,7 @@ function assertEq(actual, expected, label) {
   if (a === e) ok(label); else ng(label, `expected ${e}, got ${a}`);
 }
 
-console.log('#2853 Gazette typed-issue tests\n');
+console.log('Gazette typed-issue tests\n');
 
 // -----------------------------------------------------------------------------
 // 1. Pure unit tests: composeTypedPayload
@@ -91,7 +91,7 @@ console.log('#2853 Gazette typed-issue tests\n');
   }
 
   const listing = issue.sections.find(s => s.key === 'listings').items[0];
-  assertEq(listing.room_label, 'Kitchen', '#2852 room-keyed listing carries room_label through to the typed item');
+  assertEq(listing.room_label, 'Kitchen', 'room-keyed listing carries room_label through to the typed item');
 
   const rotation = issue.sections.find(s => s.key === 'rotation_desk').items[0];
   assertEq(rotation.status, 'due_today', 'rotation desk item is typed with its due-status, not prose');
@@ -160,7 +160,7 @@ async function main() {
 
   console.log('\nTest 3: enabling gazette (with its widened requires) works out of the box');
   {
-    // #2853 widened requires to ['agent','wall','calendar']; all
+    // widened requires to ['agent','wall','calendar']; all
     // three are grandfathered-enabled on a fresh install, so this
     // should not need withRequirements.
     const en = await POST('/api/me/modules/gazette/enable');

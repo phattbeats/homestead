@@ -1,6 +1,6 @@
 // jobs/gazette-daily.js
 //
-// #2853 — the cron half of the Gazette rework. Composes and persists
+// the cron half of the Gazette rework. Composes and persists
 // a `gazette_issues` row for every user who has the `gazette` module
 // enabled, once per user per LOCAL day, at ~04:00 in that user's own
 // timezone (not one global cron time — a household spans timezones).

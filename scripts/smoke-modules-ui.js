@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #2205 (#2200.4) — layout-aware SPA browser/DOM smoke.
+// layout-aware SPA browser/DOM smoke.
 //
 // Drives Playwright Chromium through every layout shape the SPA renders:
 //   * feed-only   — 1 enabled module (wall) → bottom nav hidden, + Add rooms pill
@@ -170,7 +170,7 @@ async function disableAll() {
     assert(navState1.tasks === 'off', 'feed-tabs: nav tasks (chores) is hidden');
     assert(navState1['r-calendar'] === 'off', 'feed-tabs: nav calendar (r-calendar) is hidden');
     assert(navState1.svc === 'off', 'feed-tabs: nav svc (apps) is hidden');
-    // #2557: the rendered tab count MUST match the layout.tabs count.
+    // the rendered tab count MUST match the layout.tabs count.
     const renderedTabs1 = Object.values(navState1).filter(v => v === 'on').length;
     assertEq(renderedTabs1, layout.tabs.length,
       `feed-tabs: rendered tab count (${renderedTabs1}) === layout.tabs.length (${layout.tabs.length})`);
@@ -187,7 +187,7 @@ async function disableAll() {
     // All enabled → addRoomVisible should be false (all rooms on).
     const meadowPillDisplay = await page.evaluate(() => document.getElementById('addRoomPill').style.display);
     assertEq(meadowPillDisplay, 'none', 'meadow: + Add rooms pill is hidden (nothing to add)');
-    // #2557: rendered tab count parity for full-module user. All 6
+    // rendered tab count parity for full-module user. All 6
     // modules enabled → meadow layout → 5 nav tabs visible (wall, chores,
     // lists, calendar, apps — `agent` is drawer-mode, surfaces as FAB
     // not a nav button). The renderable count is layout.tabs.length - 1
@@ -301,7 +301,7 @@ async function disableAll() {
     // when the user has no wall memberships (#2206 component
     // contract). We assert the mount happened — inner feed content
     // rendering for an empty-walls user is the component's job, not
-    // the layout/nav concern this smoke covers (#2557).
+    // the layout/nav concern this smoke covers.
     const porchMountState = await page.evaluate(() => {
       const m = document.getElementById('porch-mount');
       const root = m && m.querySelector('.feed-root');
@@ -318,7 +318,7 @@ async function disableAll() {
     ok('wall-only: screenshot captured');
 
     // ---- 7. #2557 catch-all tightening: unknown *.html → 404 ---
-    // #2658: /entity/:id is the one explicit non-file SPA route. It must
+    // /entity/:id is the one explicit non-file SPA route. It must
     // receive the index shell, while the missing-file protections below stay
     // intact. This is intentionally checked without auth: the server route
     // owns shell delivery; the SPA owns the existing post-login restore.

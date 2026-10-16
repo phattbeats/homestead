@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #1618 acceptance tests for the v0.0.5 user model.
+// acceptance tests for the v0.0.5 user model.
 //
 // Drives `lib/user-model.js` directly against a temp SQLite file. No
 // HTTP server, no subprocess. Each test runs migrate() on a fresh DB
@@ -34,7 +34,7 @@ function freshDb() {
   return { db, tmpDir, dbPath };
 }
 
-console.log('#1618 user-model tests\n');
+console.log('user-model tests\n');
 
 // ---- Test 1: fresh install seeds ----
 {

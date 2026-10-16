@@ -1,6 +1,6 @@
 // Homestead — Wall feed/composer/reactions component.
 // Vanilla JS, no framework, no build step. Extracted from porch.js
-// (#2200.5/#2206/#2151). Mounted by both /forum and
+//. Mounted by both /forum and
 // /index.html's #page-wall; same component in both placements.
 //
 // API:
@@ -76,7 +76,7 @@
     }).join('')}</div>`;
   }
 
-  // #2647: agent badge + vote-off. #2827.D: Hearth ('built-in') gets its own label.
+  // agent badge + vote-off. #2827.D: Hearth ('built-in') gets its own label.
   function agentBadgeHtml(kind) {
     if (kind === 'built-in') {
       return `<span class="agent-badge" title="Hearth — the house's built-in agent">[hearth]</span>`;
@@ -141,7 +141,7 @@
                                // unmount can cancel an early-boot fetch.
     const disposers = [];      // [{el, evt, fn, opts}] for addEventListener cleanup.
 
-    // ---- live updates (#2821): one EventSource per mounted wall.
+    // ---- live updates: one EventSource per mounted wall.
     let sse = null;
     let sseErrorStreak = 0;
     let sseGaveUp = false;
@@ -246,11 +246,11 @@
       <option value="none">Notify: None</option>
     </select>`;
 
-      // #2727: centered FAB + util chip. Both opt-in via cfg so the index.html
+      // centered FAB + util chip. Both opt-in via cfg so the index.html
       // mount (which has its own chrome) is unaffected.
       const utilChipHtml = cfg.utilityChip ? `<button type="button" id="utilChip" class="util-chip" aria-label="Profile and settings">⋯</button>` : '';
       const composerWrapOpen = cfg.primaryFab ? '' : ' on';
-      // #2822: starting-room pill. Caller passes addRoomPill (porch.html).
+      // starting-room pill. Caller passes addRoomPill (porch.html).
       const addRoomPillHtml = cfg.addRoomPill ? `<a href="/modules.html" id="addRoomPill" class="add-room-pill">+ Add a room</a>` : '';
 
       root.innerHTML = `
@@ -389,7 +389,7 @@
       connectLive();
     }
 
-    // #2727: centered FAB toggles the composer card. Closes after a successful post.
+    // centered FAB toggles the composer card. Closes after a successful post.
     function wireComposeFab() {
       const fab = $('#composeFab', root);
       const wrap = $('#composerWrap', root);
@@ -414,7 +414,7 @@
       if (fab) fab.classList.remove('open');
     }
 
-    // #2727: standalone porch shell needed a profile/settings entry point.
+    // standalone porch shell needed a profile/settings entry point.
     function wireUtilChip() {
       const chip = $('#utilChip', root);
       const sheet = $('#utilSheet', root);
@@ -472,7 +472,7 @@
       });
     }
 
-    // #2656: notify-level dropdown wired to GET/PUT /api/walls/:slug/notifications.
+    // notify-level dropdown wired to GET/PUT /api/walls/:slug/notifications.
 
     async function refreshNotifyLevel() {
       const sel = $('#notifyLevel', root);
@@ -572,14 +572,14 @@
       wireVoteOffButtons(root);
     }
 
-    // #2647: wired after renderFeed() + each renderComments() re-render.
+    // wired after renderFeed() + each renderComments() re-render.
     function wireVoteOffButtons(scopeEl) {
       Array.from((scopeEl || root).querySelectorAll('.vote-off')).forEach((btn) => {
         on(btn, 'click', () => onVoteOffClick(btn));
       });
     }
 
-    // #2647: reversible per-wall opt-out.
+    // reversible per-wall opt-out.
     async function onVoteOffClick(btn) {
       const username = btn.dataset.username;
       if (!username) return;

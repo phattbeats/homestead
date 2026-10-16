@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #1874 (#1624 Phase B-2) smoke test for the Kavita sync worker.
+// (#1624 Phase B-2) smoke test for the Kavita sync worker.
 //
 // End-to-end smoke against a live Kavita server. Reads:
 //

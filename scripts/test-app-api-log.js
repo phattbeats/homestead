@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// #2201.3 (#2231) acceptance tests for lib/app-api-log.js +
+// acceptance tests for lib/app-api-log.js +
 // server.js's write-path hook and GET /api/apps/:key/activity.
 //
 // Drives lib/app-api-log.js directly against a temp SQLite file, plus
@@ -46,7 +46,7 @@ function installApp(db, key, userId) {
     .run(key, key, userId);
 }
 
-console.log('#2201.3 (#2231) app-api-log tests\n');
+console.log('app-api-log tests\n');
 
 // ---- Test 1: schema ----
 {
