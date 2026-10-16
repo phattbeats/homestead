@@ -17,10 +17,10 @@
 // CLI that runs against the live DB, the same way the seed / migrate
 // scripts do.
 //
-// This is the documented "Brandon's owner account has a working local
+// This is the documented "owner account has a working local
 // credential and documented break-glass reset path independent of
-// Authentik" path. #2711 explicitly requires both the working
-// credential (#2704 already backfilled pass_hash → local_credentials
+// Authentik" path. It requires both the working
+// credential (pass_hash is already backfilled → local_credentials
 // on first boot) and a way to recover it if the password is forgotten.
 
 'use strict';

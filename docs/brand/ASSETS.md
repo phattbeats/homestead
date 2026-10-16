@@ -1,6 +1,6 @@
 # Homestead brand asset index
 
-This document is the **single source of truth** for which brand file is canonical and where it is consumed in the app. If you change any of these paths, update both the path here AND the consumer in the same PR — out-of-sync assets have shipped twice (#2846 caught it).
+This document is the **single source of truth** for which brand file is canonical and where it is consumed in the app. If you change any of these paths, update both the path here AND the consumer in the same PR — out-of-sync assets have shipped twice.
 
 ## Locked palette
 
@@ -111,6 +111,4 @@ These are **durable** brand assets, not transient chat outputs. Do not overwrite
 
 ## Related
 
-- [#2846](https://paperclip.phatt.vip/issues) — this index's parent issue
-- [#2777](https://paperclip.phatt.vip/issues) — brand-system canonical assets (predecessor)
 - `agents/ledger/assets/homestead/canonical/README.md` — locked brand README (Brandon, 2026-08-28)

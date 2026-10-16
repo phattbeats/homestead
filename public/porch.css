@@ -133,7 +133,7 @@ textarea{resize:vertical;font-family:inherit}
   opacity:0;pointer-events:none;transition:opacity .25s var(--ease),transform .25s var(--ease);z-index:50;max-width:90vw;text-align:center}
 #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 
-/* ---- #2727: wall-only mobile layout (comp A — compact floating FAB) ----
+/* ---- wall-only mobile layout (comp A — compact floating FAB) ----
    No bottom bar exists on this standalone shell, so the composer is
    collapsed by default and the single available action (post to the
    wall) becomes a centered, unmissable FAB. Profile/settings — which had

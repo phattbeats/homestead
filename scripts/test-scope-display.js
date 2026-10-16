@@ -3,7 +3,7 @@
 //
 // Pure logic, no DB, no server — drives the module directly. Covers
 // the acceptance checklist from the issue:
-//   * every scope in the #2201 §3 vocabulary has a mapped phrase
+//   * every scope in the locked vocabulary has a mapped phrase
 //   * an unmapped scope throws rather than rendering raw
 //
 // Run: node scripts/test-scope-display.js

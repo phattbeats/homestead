@@ -14,7 +14,7 @@
 //   * agent-gate  — drawerFab visibility tracks agentDrawer flag
 //
 // For each shape the smoke captures a 390x844 mobile-viewport
-// screenshot into ./verify-out/ (per #2501 standing policy) and
+// screenshot into ./verify-out/ and
 // asserts the structural rules (nav buttons disabled by data-disabled,
 // pages hidden by data-disabled, body[data-layout] set correctly,
 // + Add rooms pill visibility, drawerFab visibility).
@@ -278,7 +278,7 @@ async function disableAll() {
     await page.screenshot({ path: path.join(OUT_DIR, 'modui-no-agent.png'), fullPage: false });
     ok('agent gating: drawerFab visibility tracks agentDrawer flag');
 
-    // ---- 6. wall-only screenshot (#2557 acceptance) -----------
+    // ---- 6. wall-only screenshot -----------
     // Disable every non-wall module. The SPA single-surface rule
     // redirects `/` to /forum when wall is the sole enabled
     // module (so we can't take the screenshot on `/` itself) — we
@@ -298,7 +298,7 @@ async function disableAll() {
     await page.goto('http://127.0.0.1:3194/forum', { waitUntil: 'load' });
     // The /forum shell mounts the HomesteadFeed component into
     // #porch-mount. The component creates a `.feed-root` child even
-    // when the user has no wall memberships (#2206 component
+    // when the user has no wall memberships (component
     // contract). We assert the mount happened — inner feed content
     // rendering for an empty-walls user is the component's job, not
     // the layout/nav concern this smoke covers.
@@ -317,7 +317,7 @@ async function disableAll() {
     await page.screenshot({ path: path.join(OUT_DIR, 'modui-wall-only.png'), fullPage: false });
     ok('wall-only: screenshot captured');
 
-    // ---- 7. #2557 catch-all tightening: unknown *.html → 404 ---
+    // ---- 7. catch-all tightening: unknown *.html → 404 ---
     // /entity/:id is the one explicit non-file SPA route. It must
     // receive the index shell, while the missing-file protections below stay
     // intact. This is intentionally checked without auth: the server route
@@ -331,7 +331,7 @@ async function disableAll() {
     // The static handler must NOT serve the SPA shell for non-existent
     // .html files. Previously /lists.html, /calendar.html, /chores.html,
     // /apps.html all returned 200 with the index.html shell (the same
-    // masking class as the #1704/1707/1708 /api bug). With the fix,
+    // masking class as the earlier /api bug). With the fix,
     // missing *.html returns 404 from the static handler before the SPA
     // catch-all swallows the request. We exercise /lists.html (which
     // exists as a registry route but no file) and assert it's 404.
@@ -349,7 +349,7 @@ async function disableAll() {
     // but the static file was never created).
     const choresRes = await fetch('http://127.0.0.1:3194/chores.html');
     assertEq(choresRes.status, 404, '/chores.html (no file) → 404');
-    // /api still returns 404 for unknown routes (the original #1704
+    // /api still returns 404 for unknown routes (the original
     // bug was /api returning 200 with the SPA shell for unknown paths).
     const apiRes = await fetch('http://127.0.0.1:3194/api/this-does-not-exist');
     assertEq(apiRes.status, 404, '/api/this-does-not-exist → 404');

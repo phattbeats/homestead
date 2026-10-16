@@ -5,7 +5,7 @@
 // HTTP server, no subprocess. Each test runs migrate() on a fresh DB
 // so they're independent and idempotent.
 //
-// Acceptance covered (per #2202 issue body):
+// Acceptance covered:
 //   * Migration runs without error on a DB with existing users (brandon, emily).
 //   * After migration, count(user_modules) == count(users) * 6.
 //   * Toggling a module to enabled_at = NULL and back preserves the
@@ -203,7 +203,7 @@ console.log('user-modules tests\n');
   const { db, tmpDir } = freshDb();
   const brandonId = db.prepare(`SELECT id FROM users WHERE username = 'brandon'`).get().id;
   const mods = userModel.getUserModules(db, brandonId);
-  // The map spans the CURRENT registry (7 keys as of #2659), while
+  // The map spans the CURRENT registry (7 keys at time of writing), while
   // the grandfather backfill only ever granted the six pre-modularity
   // modules. Modules registered after that backfill shipped are present
   // in the map but disabled — which is the shape the SPA relies on to

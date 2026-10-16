@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// #2846 / v0.5.10 acceptance smoke — bottom-nav icon migration.
+// v0.5.10 acceptance smoke — bottom-nav icon migration.
 //
-// Brandon reopened #2846 at 00:48 EDT pointing out that the persistent
+// After v0.5.9, the persistent
 // bottom-nav across `/` and `/forum` still rendered emoji literals
 // (`🏠 ✓ 📝 📅 🛰️ 📸`) instead of the canonical opening-door / module
-// SVGs. #2846 v0.5.9 had shipped the canonical icon set + the Add
+// SVGs. v0.5.9 had shipped the canonical icon set + the Add
 // Rooms picker wires but did not touch the bottom-nav (the nav predated
-// #2209's no-hardcoded-keys audit and was out of scope).
+// the no-hardcoded-keys audit and was out of scope).
 //
 // This smoke covers 6 acceptance criteria for v0.5.10:
 //   1. `public/index.html` rewrites the six bottom-nav buttons from
@@ -31,7 +31,7 @@
 //      console logs an error during boot).
 //
 // Run:  node scripts/smoke-bottomnav-canonical.js
-//       (also runs as part of scripts/verify.sh — see #2501 standing policy)
+//       (also runs as part of scripts/verify.sh — see the standing DoD policy)
 //
 // Output: ./verify-out/bottomnav-canonical-390.png   (post-login screenshot of the migrated bottom nav)
 //         ./verify-out/bottomnav-canonical-table.txt (asset MD5 reference table)
@@ -43,7 +43,7 @@ const os = require('os');
 const path = require('path');
 const { chromium } = require('playwright');
 
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-smoke-2846bn-'));
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-smoke-bottomnav-canonical-'));
 const port = 3113;
 const verifyOut = process.env.VERIFY_OUT
   ? path.resolve(process.env.VERIFY_OUT)
@@ -52,7 +52,7 @@ fs.mkdirSync(verifyOut, { recursive: true });
 
 process.env.DATA_DIR = tmpDir;
 process.env.PORT = String(port);
-process.env.ADMIN_PASSWORD = 'smoke-2846bn-admin-pw';
+process.env.ADMIN_PASSWORD = 'smoke-bottomnav-canonical-admin-pw';
 
 const REPO = path.resolve(__dirname, '..');
 const failures = [];
@@ -191,7 +191,7 @@ async function liveBoot() {
   await page.goto(`http://127.0.0.1:${port}/?home=1`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#username', { timeout: 10000 });
   await page.fill('#username', process.env.ADMIN_USERNAME || 'admin');
-  await page.fill('#pw', process.env.ADMIN_PASSWORD || 'smoke-2846bn-admin-pw');
+  await page.fill('#pw', process.env.ADMIN_PASSWORD || 'smoke-bottomnav-canonical-admin-pw');
   await page.click('#loginBtn');
   // Wait for the SPA to settle past #login onto #page-home.
   await page.waitForSelector('#appNav', { timeout: 10000 });

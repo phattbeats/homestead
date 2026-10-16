@@ -10,7 +10,7 @@
 // route on a fresh in-process express app, drives via http, and
 // asserts on the response shape per the issue's Definition of Done.
 //
-// Test scope (matches #2644 DoD, with pragmatic substitutions
+// Test scope (matches the Definition of Done, with pragmatic substitutions
 // where ffmpeg/whisper aren't reachable from this CI environment):
 //
 //   1. Image: upload + GET /api/media/:id/context returns
@@ -147,7 +147,7 @@ async function makeTestVideo({ duration = 5, sceneAt = 2, silent = false } = {})
   const brandon = db.prepare('SELECT id FROM users WHERE username = ?').get('brandon');
 
   // In-process express server mounting the comprehension route,
-  // frames-serve route, and the original #2149 routes so the
+  // frames-serve route, and the original media routes so the
   // same upload flow that production uses is exercised.
   const app = require('express')();
   app.use((req, res, next) => {

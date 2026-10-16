@@ -14,13 +14,13 @@
 // Without precaching, a returning PWA user with intermittent
 // connectivity would see an empty Porch. Cache-first for these URLs.
 //
-// #2846 / v0.5.10: cache bumped to homestead-v6 to ship the
+// v0.5.10: cache bumped to homestead-v6 to ship the
 // bottom-nav icon migration (the six emoji tabs now reference the
 // matching built-in module SVGs) plus the new /favicon-32.png
 // alternate-icon fallback for browsers that ask /favicon.ico before
 // /favicon.svg. The old homestead-v5 cache is dropped on activate so
 // the emoji tab labels don't persist offline for a returning PWA
-// user. #2846 v0.5.9 shipped the v5 cache for the original
+// user. v0.5.9 shipped the v5 cache for the original
 // opening-door repair; v0.5.10 layers the bottom-nav onto the same
 // canonical asset set without re-shipping the icons themselves (they
 // are already in v5). New asset: /favicon-32.png (32x32 PNG).
@@ -62,7 +62,7 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil((async () => {
-    // Drop old caches on activation. #2846 / v0.5.10: homestead-v5
+    // Drop old caches on activation. v0.5.10: homestead-v5
     // is now stale (its /sw.js reference predates the bottom-nav
     // migration; the emoji tab bar would persist offline). v4 (the
     // closed-arch icons) is two-generations stale.

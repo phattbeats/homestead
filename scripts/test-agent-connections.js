@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// (#2855 phase 1) acceptance tests for lib/agent-connections.js.
+// (phase 1) acceptance tests for lib/agent-connections.js.
 //
 // Drives `lib/agent-connections.js` directly against a temp SQLite file
 // (plus an HTTP integration test of the /api/agent-connections routes
@@ -209,7 +209,7 @@ console.log('agent-connections tests\n');
   threw = false;
   try { agentConnections.mintPairingCode(db, brandon.id, { provider: 'openclaw', label: 'X', scopes: ['read:not_a_real_scope'] }); }
   catch (e) { threw = /unmapped scope/i.test(e.message); }
-  assert(threw, 'unmapped scope is rejected (#2201 §3 vocabulary)');
+  assert(threw, 'unmapped scope is rejected (scope vocabulary)');
 
   threw = false;
   try { agentConnections.mintPairingCode(db, brandon.id, { provider: 'openclaw', label: 'X', scopes: 'agent:invoke' }); }

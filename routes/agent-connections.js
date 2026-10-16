@@ -1,12 +1,12 @@
 // split server.js into Express routers.
 //
 // This is the FIRST domain extraction — agent-connections (pairing +
-// the #3116 events route) — chosen because that surface already
-// missed a mount once (#2883 report: tests green against a stand-in
+// the events route) — chosen because that surface already
+// missed a mount once (tests green against a stand-in
 // listener while prod returned 404 for POST /api/agent-connections/:id/events
-// — see server.js history for the #3116 wire-up).
+// — see server.js history for the events wire-up).
 //
-// Pattern (per the #3198 spec):
+// Pattern:
 //   routes/<domain>.js exports a factory that takes the shared deps
 //   (db, authenticate, mailbox, …) and returns an Express Router with
 //   just this domain's endpoints. server.js mounts it via
@@ -169,7 +169,7 @@ module.exports = function agentConnectionsRouter({
         charset: 'A-Za-z0-9._-',
       });
     }
-    // The #3116 events route is the ONLY path that reads the stored
+    // The events route is the ONLY path that reads the stored
     // signing secret in steady state (mint/redeem/rotate are the other
     // three). Pass includeSecretPlaintext=true so toPublic surfaces
     // `secret_plaintext` for the signature check below; the value is

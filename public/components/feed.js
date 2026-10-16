@@ -76,7 +76,7 @@
     }).join('')}</div>`;
   }
 
-  // agent badge + vote-off. #2827.D: Hearth ('built-in') gets its own label.
+  // agent badge + vote-off. Hearth ('built-in') gets its own label.
   function agentBadgeHtml(kind) {
     if (kind === 'built-in') {
       return `<span class="agent-badge" title="Hearth — the house's built-in agent">[hearth]</span>`;
@@ -290,7 +290,7 @@
       aborter = new AbortController();
       // Render the static shell before the first network round-trip so the user
       // sees a populated UI immediately (Playwright `state: 'visible'` selectors
-      // fire even on slow networks). #2206 regression: boot() previously
+      // fire even on slow networks). Regression: boot() previously
       // forgot to call renderShell().
       renderShell();
       try {

@@ -135,7 +135,7 @@ console.log('Gazette tests\n');
 // 3. The user_modules CHECK-constraint rebuild
 // -----------------------------------------------------------------------------
 {
-  console.log('\nTest 3: migrate() rebuilds a pre-#2659 user_modules CHECK');
+  console.log('\nTest 3: migrate() rebuilds a pre-Gazette user_modules CHECK');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-gz-mig-'));
   const db = new Database(path.join(dir, 'life.db'));
 

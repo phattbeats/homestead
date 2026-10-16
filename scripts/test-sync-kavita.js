@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// (#1624 Phase B-2) acceptance tests for the Kavita sync worker.
+// (Phase B-2) acceptance tests for the Kavita sync worker.
 //
 // Pure-DB tests: drive `lib/sync/kavita.js` against a temp SQLite file
 // with the entity-graph schema migrated from `lib/sync/_schema.js`. The
@@ -498,6 +498,6 @@ function fakeKavitaHttpDo({ libraries, seriesByLibrary }) {
     exitCode = 1;
   }
 
-  console.log(`\n#1874 kavita sync worker: ${pass} passed, ${fail} failed`);
+  console.log(`\nkavita sync worker: ${pass} passed, ${fail} failed`);
   process.exit(exitCode || (fail === 0 ? 0 : 1));
 })();

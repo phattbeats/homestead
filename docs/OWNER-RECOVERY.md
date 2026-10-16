@@ -1,6 +1,6 @@
 # Owner Recovery — Operational Runbook
 
-_#2708: preventing another owner lockout._
+_Preventing another owner lockout._
 
 This document describes the break-glass pathway for the household
 owner. Read it before you need it. It does **not** contain any
@@ -28,7 +28,7 @@ account is your working admin). The reconciliation that sets
 [user-model.js] update users set is_admin = 1 where username in (members of 'admins' Authentik group)
 ```
 
-If you replace the owner (future PHA), the new row is whatever has
+If you replace the owner, the new row is whatever has
 `is_admin = 1` at the time of the recovery. The recovery primitives
 resolve `findOwnerUserId` lazily — they don't hard-code a username
 and don't migrate state across owner changes.
@@ -45,7 +45,7 @@ and don't migrate state across owner changes.
 3. **Every identity_link row for the owner was unlinked** AND the
    `local_credentials.password_hash` was rotated or deleted.
 
-#2708 closes all three loops with the same primitive: a
+Owner recovery closes all three loops with the same primitive: a
 host-side CLI (`scripts/owner-recovery.js`) that mints a
 short-lived, one-shot, sha256-hashed reset token directly against
 the SQLite DB and an HTTP endpoint that consumes it. The CLI does
@@ -241,7 +241,7 @@ SELECT ts, kind, subject_id, meta
 | Audit `meta` has no plaintext tokens or passwords. | `Group 2 + 4` |
 
 If any of these fail, reject the change. The owner lockout
-prevention isn't a feature add — it's the entire reason this PHA
+prevention isn't a feature add — it's the entire reason this work
 exists.
 
 ---
@@ -254,7 +254,7 @@ exists.
   if you're worried about a corruption event. Don't break glass
   on a database you cannot afford to lose.
 - It does NOT touch `identity_links` rows. Those belong to
-  #2706 / #2703. Rotating the owner's password has nothing
+  the identity-linking flow. Rotating the owner's password has nothing
   to do with linking them to a new Authentik subject.
 - It does NOT log the plaintext token to disk anywhere
   (analytics_events meta, ops logs, anywhere). The only place the
@@ -266,14 +266,11 @@ exists.
 ## See also
 
 - `lib/identity.js` — the canonical primitives. The comment block
-  at the top of the #2708 section explains the threat model.
+  at the top of the owner recovery section explains the threat model.
 - `scripts/test-owner-recovery.js` — the contract. If the
   runbook and the test disagree, the test wins.
 - `scripts/smoke-owner-recovery.js` — the end-to-end
   evidence generator. Run it on any Homestead install to capture
   verify-out/ artifacts for a deploy review.
-- (this issue) — original requirements.
-- the identity foundation this PHA builds on. Read
-  that first if you need to understand the schema.
 - `docs/DEFINITION-OF-DONE.md` — evidence requirements for a
   closed issue.

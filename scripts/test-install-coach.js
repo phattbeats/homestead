@@ -52,8 +52,8 @@ function assert(cond, label, detail) {
 // marker comment (the next /\* ---- */ block in source order).
 const HTML = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
 function extractCoach() {
-  const startMarker = '/* ---- #2219: PWA install coach ----';
-  const endMarker = '/* ---- #1872: entity graph';
+  const startMarker = '/* ---- PWA install coach ----';
+  const endMarker = '/* ---- entity graph';
   const start = HTML.indexOf(startMarker);
   const end = HTML.indexOf(endMarker, start);
   if (start < 0 || end < 0) throw new Error('install-coach block not found in index.html');
@@ -230,7 +230,7 @@ console.log('install-coach tests\n');
 // sets up the second-session / first-action / 75s-dwell arms via the
 // new `arms.v1` localStorage key.
 {
-  console.log('\nTest 11: installCoachShouldPrompt() respects the legacy first-prompted flag (#2498 #1, backwards compat)');
+  console.log('\nTest 11: installCoachShouldPrompt() respects the legacy first-prompted flag (backwards compat)');
   const s = evalCoach({
     ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
     platform: 'iPhone',
@@ -239,14 +239,14 @@ console.log('install-coach tests\n');
   assert(s.installCoachShouldPrompt() === false, 'legacy first-prompted=1 → no auto-prompt on existing users');
 }
 
-// ---- Test 11a: arms structure (#2498 #1, "situated" rule) ----
+// ---- Test 11a: arms structure ("situated" rule) ----
 // The new eligibility-tracking structure is `homestead.installCoach.arms.v1`
 // JSON. Schema: { count: number, firstActionAt: number|null, bootStartedAt:
 // number|null }. `loadArms()` reads from LS with a safe default; `saveArms()`
 // persists. The test asserts the round-trip through `localStorage` works
 // and that the schema fields all exist.
 {
-  console.log('\nTest 11a: arms structure round-trip (#2498 #1, situated rule)');
+  console.log('\nTest 11a: arms structure round-trip (situated rule)');
   const s = evalCoach({
     ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
     platform: 'iPhone',
@@ -278,7 +278,7 @@ console.log('install-coach tests\n');
 (async () => {
   // Test 11b: first boot — arms but no synchronous fire.
   {
-    console.log('\nTest 11b: maybeShowInstallCoach() does NOT auto-open on first boot (#2498 #1)');
+    console.log('\nTest 11b: maybeShowInstallCoach() does NOT auto-open on first boot');
     const calls = [];
     const captured = {
       // NB: don't override userAgent or platform here — buildSandbox uses
@@ -305,7 +305,7 @@ console.log('install-coach tests\n');
 
   // Test 11c: second boot — count bumps to 2, second-session arm scheduled.
   {
-    console.log('\nTest 11c: second-boot arms.count=2 → second-session arm scheduled (#2498 #1)');
+    console.log('\nTest 11c: second-boot arms.count=2 → second-session arm scheduled');
     const calls = [];
     const captured = {
       // NB: see Test 11b comment re userAgent/platform override.

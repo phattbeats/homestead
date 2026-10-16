@@ -277,7 +277,7 @@ console.log('\nAcceptance 2/3: events tagged to a room, filtered and joined');
 console.log('\nModule gate: room_kinds is additive');
 {
   assertEq(validator.REQUIRED_FIELDS.length, 16,
-    'REQUIRED_FIELDS is still exactly 16 — the #2201 contract is unbroken');
+    'REQUIRED_FIELDS is still exactly 16 — the manifest contract is unbroken');
   assert(!validator.REQUIRED_FIELDS.includes('room_kinds'), 'room_kinds is not a required field');
 
   assertEq(modules.getRoomKinds('calendar'), ['house_room'], 'calendar declares house_room');
@@ -288,7 +288,7 @@ console.log('\nModule gate: room_kinds is additive');
   assertEq(modules.modulesForRoomKind('house_room'), ['lists', 'calendar', 'chores'],
     'reverse lookup returns declaring modules in registry order');
 
-  // The live registry still validates, and a pre-#2852 manifest
+  // The live registry still validates, and a pre-room_kinds manifest
   // (16 fields, no room_kinds) is still a valid entry.
   assertEq(validator.validateRegistry(null), null, 'live registry passes validation with the new field');
   const legacy = {

@@ -67,7 +67,7 @@ async function login(username, password) {
   // notification_prefs.quiet_{start,end}_hour to 0/0 — this is a
   // legitimate test-infrastructure override (the product has no public
   // API for these fields yet), NOT the "missing feature" anti-pattern
-  // the #2556 spec calls out. It exists so the smoke's pass/fail
+  // the spec calls out. It exists so the smoke's pass/fail
   // doesn't depend on the wall-clock hour it runs at.
   const brandonCookie = await login('brandon', 'smoke-notif-brandon-pw');
   const emilyCookie = await login('emily', 'smoke-notif-emily-pw');

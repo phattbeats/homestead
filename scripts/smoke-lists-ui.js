@@ -12,18 +12,18 @@ const os = require('os');
 const path = require('path');
 const { chromium } = require('playwright');
 
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-smoke-2586-'));
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-smoke-lists-ui-'));
 const port = 3114;
-const brandonPassword = 'smoke-2586-brandon-pw';
+const brandonPassword = 'smoke-lists-ui-brandon-pw';
 const verifyOut = process.env.VERIFY_OUT
   ? path.resolve(process.env.VERIFY_OUT)
   : path.resolve(__dirname, '..', 'verify-out');
 
 process.env.DATA_DIR = tmpDir;
 process.env.PORT = String(port);
-process.env.ADMIN_PASSWORD = 'smoke-2586-admin-pw';
+process.env.ADMIN_PASSWORD = 'smoke-lists-ui-admin-pw';
 process.env.BRANDON_PASSWORD = brandonPassword;
-process.env.SESSION_SECRET = 'smoke-2586-secret-padding-to-meet-min-32-chars';
+process.env.SESSION_SECRET = 'smoke-lists-ui-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 // Scratch smokes use plain HTTP; production Secure cookies would not round-trip.
 process.env.HOMESTEAD_INSECURE_TEST_COOKIES = '1';

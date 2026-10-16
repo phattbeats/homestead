@@ -6,7 +6,7 @@
 // friend's post — that's the manual launch ritual, later) driven
 // through the full pipeline this repo has actually shipped so far:
 //
-//   upload (#2149/2644) -> media-context comprehension package
+//   upload -> media-context comprehension package
 //   -> sweep loop picks the post up after its grace window
 //   -> participation contract gates a candidate reaction on whether it
 //      references something concrete in the comprehension package
@@ -14,7 +14,7 @@
 //      comment via the production HTTP route, and the agent's badge +
 //      vote-off button are visible on the resulting thread.
 //
-// What this smoke intentionally does NOT exercise: #2636's
+// What this smoke intentionally does NOT exercise: the
 // candidate-generation step (the LLM draft-per-register writer) is
 // still blocked upstream, so this script plays that role itself with
 // two fixed candidates — one that quotes real comprehension-package
@@ -57,7 +57,7 @@ function section(title) { console.log(`\n=== ${title} ===`); }
 
 // A solid-field JPEG standing in for "an obvious meme". The joke lives in
 // the caption metadata (same as how the media-comprehension package
-// surfaces it — see #2644's `caption` upload field), not baked into
+// surfaces it — see the `caption` upload field), not baked into
 // pixels: this repo's ffmpeg build has no `drawtext` filter available.
 async function makeTestImage() {
   const out = path.join(os.tmpdir(), `porch-smoke-image-${crypto.randomUUID()}.jpg`);
@@ -220,7 +220,7 @@ export async function runSmoke() {
   const addEmily = await api(adminCookie, 'POST', `/api/walls/${WALL_SLUG}/members`, { username: 'emily' });
   assert(addEmily.status === 200, 'emily (will hold the agent PAT) added to the smoke wall');
 
-  // Emily's own self-issued PAT IS her agent identity — #1617's
+  // Emily's own self-issued PAT IS her agent identity — the
   // architecture note: "agents are wall members with their own identity
   // ... via BYOK key", no separate agent registry table.
   const tokenRes = await api(emilyCookie, 'POST', '/api/agent-tokens', { label: 'porch-smoke-agent' });
@@ -313,7 +313,7 @@ export async function runSmoke() {
 
   // Comprehension mapping: this adapter (media-context payload ->
   // participation-contract's {frames, captionNames, graphEntities,
-  // pastReactionRefs} shape) is exactly the piece #2636's
+  // pastReactionRefs} shape) is exactly the piece the
   // candidate-generation step will own once it lands. It's inlined here,
   // not in lib/porch/*, because that step is still blocked upstream.
   function toComprehension(ctx) {
@@ -390,7 +390,7 @@ export async function runSmoke() {
   // Vote-off endpoint itself (admin votes emily off this wall — the
   // route is requireAdmin-gated per server.js:2988; the "fellow wall
   // member" framing in the assertion label was aspirational, not
-  // what the route actually checks. #3206 fix: use adminCookie.).
+  // what the route actually checks, so use adminCookie).
   const voteOff = await api(adminCookie, 'POST', `/api/walls/${WALL_SLUG}/agents/emily/opt-out`, {});
   assert(voteOff.status === 200, 'POST vote-off endpoint succeeds for an admin', JSON.stringify(voteOff.json));
   const optedOut = porchContract.isWallOptedOut(dbDirect, wallRow.id, emilyRow.id, new Date());

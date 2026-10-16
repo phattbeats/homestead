@@ -2,16 +2,16 @@
 // smoke test — "Link Authentik later" full lifecycle.
 //
 // What this script captures (writes to verify-out/):
-//   * smoke-2706-db-shape.json — oidc_link_states + identity_links
+//   * smoke-oidc-link-db-shape.json — oidc_link_states + identity_links
 //     after the run (proves the schema + state machine).
-//   * smoke-2706-authorize-url.json — the authorize_url the server
+//   * smoke-oidc-link-authorize-url.json — the authorize_url the server
 //     returned to /start (proves PKCE + state + nonce are present).
-//   * smoke-2706-preview.json — the /preview response with both
+//   * smoke-oidc-link-preview.json — the /preview response with both
 //     identities named explicitly (proves the confirmation payload).
-//   * smoke-2706-link-row.json — the inserted identity_links row.
-//   * smoke-2706-collide.json — the 409 collision response.
-//   * smoke-2706-unlink.json — the post-unlink identity_links state.
-//   * smoke-2706-idp.log — the mock IdP's request log.
+//   * smoke-oidc-link-link-row.json — the inserted identity_links row.
+//   * smoke-oidc-link-collide.json — the 409 collision response.
+//   * smoke-oidc-link-unlink.json — the post-unlink identity_links state.
+//   * smoke-oidc-link-idp.log — the mock IdP's request log.
 //
 // Boot the server with: OIDC_ISSUER=http://127.0.0.1:<port>/ …
 // via the helper. Then drive the full happy path, the collision
@@ -77,7 +77,7 @@ async function waitForServer() {
   }
 
   // ---- happy path: brandon links OIDC identity ----
-  console.log('[smoke-2706] phase 1: happy path');
+  console.log('[smoke-oidc-link] phase 1: happy path');
   const startR = await fetch('http://127.0.0.1:3194/api/me/identities/link/start', {
     method: 'POST',
     headers: { ...HEAD_BRANDON, 'content-type': 'application/json' },
@@ -87,7 +87,7 @@ async function waitForServer() {
   // Redact the handle in the persisted artifact (the smoke log is a
   // durable artifact, but a handle is sensitive in the same way a
   // password reset token is).
-  fs.writeFileSync(path.join(verifyOut, 'smoke-2706-authorize-url.json'), JSON.stringify({
+  fs.writeFileSync(path.join(verifyOut, 'smoke-oidc-link-authorize-url.json'), JSON.stringify({
     ok: startBody.ok,
     handle_redacted: startBody.handle ? startBody.handle.slice(0, 8) + '…' + ' (len=' + startBody.handle.length + ')' : null,
     authorize_url: startBody.authorize_url,
@@ -107,7 +107,7 @@ async function waitForServer() {
     headers: { ...HEAD_BRANDON, accept: 'application/json' },
   });
   const cbBody = await cbR.json();
-  fs.writeFileSync(path.join(verifyOut, 'smoke-2706-preview.json'), JSON.stringify(cbBody, null, 2));
+  fs.writeFileSync(path.join(verifyOut, 'smoke-oidc-link-preview.json'), JSON.stringify(cbBody, null, 2));
   console.log('  /callback → 200, preview saved');
 
   const confR = await fetch('http://127.0.0.1:3194/api/me/identities/link/confirm', {
@@ -116,11 +116,11 @@ async function waitForServer() {
     body: JSON.stringify({ handle: startBody.handle }),
   });
   const confBody = await confR.json();
-  fs.writeFileSync(path.join(verifyOut, 'smoke-2706-link-row.json'), JSON.stringify(confBody, null, 2));
+  fs.writeFileSync(path.join(verifyOut, 'smoke-oidc-link-link-row.json'), JSON.stringify(confBody, null, 2));
   console.log(`  /confirm → ${confR.status} (link_id=${confBody.link_id})`);
 
   // ---- phase 2: alice tries to link the same OIDC subject → collision ----
-  console.log('[smoke-2706] phase 2: collision');
+  console.log('[smoke-oidc-link] phase 2: collision');
   const startR2 = await fetch('http://127.0.0.1:3194/api/me/identities/link/start', {
     method: 'POST',
     headers: { ...HEAD_ALICE, 'content-type': 'application/json' },
@@ -141,24 +141,24 @@ async function waitForServer() {
     body: JSON.stringify({ handle: startBody2.handle }),
   });
   const confBody2 = await confR2.json();
-  fs.writeFileSync(path.join(verifyOut, 'smoke-2706-collide.json'), JSON.stringify(confBody2, null, 2));
+  fs.writeFileSync(path.join(verifyOut, 'smoke-oidc-link-collide.json'), JSON.stringify(confBody2, null, 2));
   console.log(`  /confirm (alice) → ${confR2.status} (collision response saved)`);
 
   // ---- phase 3: unlink + db shape snapshot ----
-  console.log('[smoke-2706] phase 3: unlink + db snapshot');
+  console.log('[smoke-oidc-link] phase 3: unlink + db snapshot');
   const unlinkR = await fetch(`http://127.0.0.1:3194/api/me/identities/${confBody.link_id}/unlink`, {
     method: 'POST',
     headers: HEAD_BRANDON,
   });
   const unlinkBody = await unlinkR.json();
-  fs.writeFileSync(path.join(verifyOut, 'smoke-2706-unlink.json'), JSON.stringify(unlinkBody, null, 2));
+  fs.writeFileSync(path.join(verifyOut, 'smoke-oidc-link-unlink.json'), JSON.stringify(unlinkBody, null, 2));
 
   // Snapshot the schema for the durable record.
   const db = new Database(path.join(tmpDir, 'life.db'), { readonly: true });
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'oidc%' OR name='identity_links' ORDER BY name").all().map(r => r.name);
   const oidcCols = db.prepare("PRAGMA table_info(oidc_link_states)").all().map(c => c.name);
   const linkRows = db.prepare("SELECT user_id, provider, issuer, provider_subject FROM identity_links ORDER BY id").all();
-  fs.writeFileSync(path.join(verifyOut, 'smoke-2706-db-shape.json'), JSON.stringify({
+  fs.writeFileSync(path.join(verifyOut, 'smoke-oidc-link-db-shape.json'), JSON.stringify({
     oidc_tables: tables,
     oidc_link_states_columns: oidcCols,
     identity_links_rows: linkRows,
@@ -168,6 +168,6 @@ async function waitForServer() {
   console.log('  /unlink + db shape saved');
 
   mock.stop();
-  console.log('[smoke-2706] done.');
+  console.log('[smoke-oidc-link] done.');
   process.exit(0);
-})().catch(e => { console.error('[smoke-2706] crashed:', e); process.exit(2); });
+})().catch(e => { console.error('[smoke-oidc-link] crashed:', e); process.exit(2); });

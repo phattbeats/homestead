@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // dogfood acceptance suite: Popcorn Vote as the first app
-// installed through the #2201 third-party app contract, against a
+// installed through the third-party app contract, against a
 // fresh test user. HTTP-level, against a live server.js instance —
 // mirrors the harness in scripts/test-app-install.js Test 10, but adds
 // the checks that test suite doesn't cover: scope ENFORCEMENT (not
 // just scope storage/display) and the wall-post/notification path a
 // real app would use to "create posts on the feed."
 //
-// Manifest scope is deliberately smaller than the original #2052
+// Manifest scope is deliberately smaller than the original
 // backlog sketch: no `mcp`, no `webhooks`, no `entity_kinds`. Neither
 // an MCP tool host nor an outbound webhook dispatcher exists anywhere
 // in this codebase (confirmed by grep before writing this suite) —
@@ -41,8 +41,8 @@ function assert(cond, label, detail) {
   if (cond) ok(label); else ng(label, detail);
 }
 
-// The actual #2052 manifest (mirrors the documented stub in
-// lib/modules.js). Hosted URL is a placeholder per the ticket ("TBD
+// The actual manifest (mirrors the documented stub in
+// lib/modules.js). Hosted URL is a placeholder ("TBD
 // until Popcorn Vote has a real home") — the acceptance suite never
 // dials it, it stubs the fetch like every other manifest test in this
 // repo.
@@ -65,7 +65,7 @@ const POPCORN_VOTE_MANIFEST = {
   default_enabled: false,
 };
 
-console.log('dogfood acceptance: Popcorn Vote through the #2201 app contract\n');
+console.log('dogfood acceptance: Popcorn Vote through the third-party app contract\n');
 
 // ---- Check 1: manifest passes lib/registry-validate.js's shape check ----
 {
@@ -117,7 +117,7 @@ try {
   const pass_ = process.env.BRANDON_PASSWORD || process.env.ADMIN_PASSWORD || 'changeme';
 
   // "Fresh test user": brandon is the seeded profile the household
-  // actually uses (#2052 §"authored by Brandon"), but membership is
+  // actually uses, but membership is
   // reset here rather than assumed — the default seed puts brandon in
   // 'household' only (scripts/test-walls.js confirms this), and this
   // suite needs brandon IN media-club (to prove the positive read

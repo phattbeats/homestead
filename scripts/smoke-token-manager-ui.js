@@ -10,7 +10,7 @@
 //   * POST   /api/agent-tokens          — issue (returns plaintext ONCE)
 //   * DELETE /api/agent-tokens/:id      — revoke (immediate)
 //
-// And it does a regression check on the existing #1617.1/.2
+// And it does a regression check on the existing PAT
 // contract that the UI sits on top of:
 //
 //   * The plaintext format is `homestead_pat_` + 43-char base64url.

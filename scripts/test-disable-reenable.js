@@ -1,10 +1,9 @@
 #!/usr/bin/env node
-// Empty-state acceptance test (AC8 from
-/): "Brand-new user enables Calendar, sees the tab,
+// Empty-state acceptance test: "Brand-new user enables Calendar, sees the tab,
 // disables, tab disappears with data intact, re-enables, tab
 // returns with data."
 //
-// Per #2200 design note §3, the three layout modes are:
+// The three layout modes are:
 //   * 0 enabled     → 'empty'       (no rooms; onboarding shown)
 //   * 1 enabled     → 'feed-only'   (single tab)
 //   * 2-3 enabled   → 'feed-tabs'   (top tab strip)

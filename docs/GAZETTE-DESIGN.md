@@ -1,7 +1,7 @@
 # The Homestead Gazette — design note
 
 Status: **IMPLEMENTED** (2026-08-30). The four Porch-agents
-dependencies (#2644/2645/2646/2648 — PRs #78/#84/#85/#86) all landed
+dependencies (PRs #78/#84/#85/#86) all landed
 on `main`, which unblocked this. The note below is kept as the design
 record; where the build diverged from it, the "As built" section at the
 end says so and why.
@@ -21,7 +21,7 @@ Shipped surface:
 ## What exists today vs. what the canon assumes
 
 The July design canon (teaser mock: `brand/…/shot-gazette.png`) and the
-#2659 description assume two things that **do not exist in this
+original description assume two things that **do not exist in this
 repo**:
 
 - **"Hearth"** is not a built surface. It appears only as a planned,
@@ -34,7 +34,7 @@ repo**:
   stop — treat it as new, not as finishing a wire-up.
 
 So this design note re-derives the Gazette against the module system
-that actually exists (#2200 series), rather than against the
+that actually exists, rather than against the
 canon's architecture assumptions.
 
 ## The instruction that changed scope: module, not agent-drawer perk
@@ -49,7 +49,7 @@ issue overrides that:
 That means Gazette gets its **own registry key** (`gazette`), its own
 row in `user_modules`, and its own enable/disable toggle in the
 add-a-room sheet — the same contract every other module uses
-(`lib/modules.js:32-181`, #2200/2201). It should still `requires:
+(`lib/modules.js:32-181`). It should still `requires:
 ['agent']` in the registry (no BYOK harness, no edition — the
 dependency is real), which reuses the existing cross-module gate
 mechanism already proven by `chores.requires: ['lists']`
@@ -86,7 +86,7 @@ Two things above are new to the registry, not reuses:
 
 1. **`open_mode: 'sheet'`** doesn't exist yet. Current `open_mode`
    values are `frame` (in-SPA nav page), `drawer` (the agent chat
-   harness), `tab` (external, #2201 third-party). None of the
+   harness), `tab` (external, third-party). None of the
    three fit "full-screen, non-nav, opened on demand, cached
    per-day." `openSheet(html)` (`public/index.html:1476`) already
    renders arbitrary full-screen modal content — Gazette can be the
@@ -126,13 +126,13 @@ nav concept.
   Cache hit → serve the stored edition. This mirrors the `agent`
   module's existing BYOK dependency instead of adding a second LLM
   integration path.
-- **Context payload**: `GET /api/me/snapshot` (`lib/snapshot.js`,
-  #1902/1617.9) already assembles most of the needed shape —
+- **Context payload**: `GET /api/me/snapshot` (`lib/snapshot.js`)
+  already assembles most of the needed shape —
   `today_tasks`, `today_events`, `overdue_tasks`, `upcoming.*`,
   `lists`, `activity_recent`. What it does **not** yet have: overnight
   wall activity and entity arrivals in Gazette-usable form (that's
   the media-context / participation-contract plumbing landing via
-  #2644/2645, still open as PRs #78/#85) and tile health (not
+  PRs #78/#85, still open) and tile health (not
   found in this repo at all — flag as a possible scope gap to raise
   separately, not solved here).
 - **Editorial voice**: `docs/VOICE.md` Rule 2 is explicit — "One
@@ -158,10 +158,10 @@ nav concept.
 
 | Dependency | State (as of 2026-08-29) | Blocks |
 |---|---|---|
-| #2646 sweep scheduler | PR #84, CI green, 0 reviews | cadence patterns Gazette's daily-cache job can mirror |
-| #2645 participation contract | PR #85, mergeable, CI green | Porch brief section needs its register/lexicon rules |
-| #2648 DoD smoke | PR #86, mergeable, CI green | proves the Porch agent pipeline this brief section reads from |
-| #2644 media-context | PR #78, mergeable state unknown | Arts & Media brief section's media-comprehension input |
+| Sweep scheduler | PR #84, CI green, 0 reviews | cadence patterns Gazette's daily-cache job can mirror |
+| Participation contract | PR #85, mergeable, CI green | Porch brief section needs its register/lexicon rules |
+| DoD smoke | PR #86, mergeable, CI green | proves the Porch agent pipeline this brief section reads from |
+| Media-context | PR #78, mergeable state unknown | Arts & Media brief section's media-comprehension input |
 
 None merged yet. Implementation work (registry entry, `user_modules`
 migration, `open_mode: 'sheet'` handling, generation endpoint, prompt)
@@ -209,7 +209,7 @@ second migration.
   ARRAY of `{key, icon, label}` instead, derived from `open_mode`. A
   boolean would have hardcoded "gazette" into the layout contract and
   into `applyLayout`; the array means the SPA loop never names a module
-  key, which keeps the #2209 Amendment 3 audit passing on the
+  key, which keeps the registry-no-hardcoded-keys audit passing on the
   production code (only the acceptance test is allow-listed).
 * **The CHECK constraint is now derived, not typed.** The note framed
   the rebuild as a one-off migration for `gazette`. It's written as a
@@ -251,8 +251,8 @@ blank.
   a deliberate reading of "overnight" that the note didn't specify.
 * **BYOK per user.** The route calls `composeGazette` without a
   `byokKey`, so it resolves the server-staged key exactly like the
-  drawer's current default (`server.js` passes `byokKey: ''` there too,
-  per #2827.C). When per-user BYOK key storage lands, both call
+  drawer's current default (`server.js` passes `byokKey: ''` there too).
+  When per-user BYOK key storage lands, both call
   sites want the same one-line change.
 * **Token accounting.** `dispatchHearth` records analytics per
   dispatch; `composeGazette` does not. "Token spend is the soul" argues

@@ -25,7 +25,7 @@ by someone else from what is posted. **An issue closed without evidence gets
 reopened by whoever notices, no discussion needed — the policy is the
 authority.**
 
-### Fresh-install acceptance (#2556 amendment)
+### Fresh-install acceptance
 
 Acceptance criteria must be phrased as a **user-visible outcome from a fresh
 install**. A verification script may not perform setup the product itself
@@ -74,7 +74,7 @@ PLAYWRIGHT_BROWSERS_PATH=0 ./scripts/verify.sh
 
 It boots a scratch Homestead instance on an ephemeral port with a fresh DB,
 runs the SPA page-error guard (catches duplicate top-level declarations like
-the #2494 bug), runs the post-login 390px mobile screenshot smoke, and
+a past SPA bug), runs the post-login 390px mobile screenshot smoke, and
 prints a `/api/health` curl transcript. Screenshots land in `./verify-out/`.
 
 If you change anything UI-shaped, run `./scripts/verify.sh` before opening the
@@ -88,8 +88,8 @@ The `.github/workflows/test.yml` workflow runs:
 1. `npm ci`
 2. `npx playwright install --with-deps chromium`
 3. `npm test` (the existing 30-test chain)
-4. `node scripts/smoke-spa-pageerrors.js` (#2494 regression guard)
-5. `node scripts/smoke-postlogin-screenshot.js` (#2501 evidence smoke)
+4. `node scripts/smoke-spa-pageerrors.js` (SPA page-error regression guard)
+5. `node scripts/smoke-postlogin-screenshot.js` (evidence smoke)
 
 **Tags don't get cut with the smoke red.** If the smoke fails on a PR, the PR
 is not mergeable. The release workflow (`.github/workflows/release.yml`)

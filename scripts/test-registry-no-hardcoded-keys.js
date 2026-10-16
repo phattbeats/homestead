@@ -164,7 +164,7 @@ const EXCLUDE_FILES = new Set([
   // They are NEVER render code; everything under this directory should be
   // excluded from the audit by convention.
   'verify-out/',
-  'verify-out/smoke-2704-db-shape.json',
+  'verify-out/smoke-identity-foundation-db-shape.json',
   // house-rooms acceptance test: asserts which modules
   // declare the new optional `room_kinds` field, which means naming
   // 'calendar'/'chores'/'lists' and naming 'wall' as the counter-
@@ -195,7 +195,7 @@ function stripComments(src) {
   // <!-- ... --> blocks that document the surrounding markup. The
   // audit's intent is to keep render code reading from the registry,
   // not to police docstrings — strip HTML comments too so a key
-  // mentioned in a `<!-- #2557: ... -->` block doesn't flag.
+  // mentioned in a `<!-- ... -->` block doesn't flag.
   src = src.replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
   return src;
 }
@@ -224,8 +224,8 @@ function isJsObjectKeyContext(src, matchIndex, matchLen) {
 // + exact match-string). These are NOT violations of the
 // "no-hardcoded-keys" principle — they're different namespaces.
 //
-// These were called out as side-findings in #2203 PR #31 and
-// should be revisited when #2200.4 (SPA bootstrap) lands — the
+// These were called out as side-findings in PR #31 and
+// should be revisited when the SPA bootstrap lands — the
 // drawer stream-author namespace and the CalDAV XML element
 // namespace are separate concerns from the module registry, but
 // a future maintainer should not assume "'agent' = registry key"
@@ -249,7 +249,7 @@ const ALLOWED_LEGITIMATE = [
   // 'agent' as the drawer stream-author in public/index.html
   // (`appendDrawerStreaming('agent')` — the drawer SSE channel
   // author is 'agent', a separate namespace from the registry
-  // module-key 'agent'). Flagged for #2200.4 to disambiguate.
+  // module-key 'agent'). Flagged for the SPA bootstrap to disambiguate.
   { file: 'public/index.html', literal: "'agent'" },
   // 'lists' as a sqlite_master table-name lookup in
   // lib/snapshot.js (defensive `SELECT name FROM sqlite_master

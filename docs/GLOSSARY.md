@@ -44,7 +44,7 @@ each one is either a tile in the home grid or a tab in the top strip.
   the people the user shares a wall with. Photos, videos, link
   shares, and plain text. Idempotent emoji reactions and inline
   comments. The Porch is the only module enabled for new users
-  (per #2200 Amendment 2) — every fresh install lands here. The
+  — every fresh install lands here. The
   module key is `wall`; the deep link is `/forum`; the in-SPA
   page div is `#page-porch`. The decision to call the surface
   "Porch" instead of "Feed" or "Wall" was editorial — the wall is
@@ -82,7 +82,7 @@ each one is either a tile in the home grid or a tab in the top strip.
   media-club wall when it's a separate module from `wall`. The
   current code uses a single `wall` module with multiple wall kinds
   (including `media_club`); promoting it to its own module is a
-  #2152 follow-up.
+  follow-up.
 
 - **The Meadow** — the **home layout** when four or more rooms are
   enabled. The Meadow is the dense tile grid in the centre of the
@@ -228,8 +228,8 @@ each one is either a tile in the home grid or a tab in the top strip.
      reimplemented natively as a Homestead module (in-app,
      `apps.html` tile registry) or, for larger scope, as its own
      Docker/Unraid-deployed service that plugs into the same module
-     registry contract. Shipped example: Popcorn Vote (#2201 /
-     #2052) — the first third-party app built against the
+     registry contract. Shipped example: Popcorn Vote — the
+     first third-party app built against the
      manifest/consent/scoped-token contract rather than run as an
      external service. This rung is the most work and is scoped
      per-service, not attempted for everything.
@@ -247,18 +247,17 @@ each one is either a tile in the home grid or a tab in the top strip.
   drawer-mode agent and a registered porch
   character. The avatar is the
   forest-green enamel oil lantern in
-  `brand/hearth-agent-homestead-icon.png`. Spec:
-  #2827 / #2828. *(Renamed from "Hearth (planned) — the
-  analytics read API" by #2828; the read API took the name
-  "Analytics API" instead.)*
+  `brand/hearth-agent-homestead-icon.png`. *(Renamed from
+  "Hearth (planned) — the analytics read API"; the read API took
+  the name "Analytics API" instead.)*
 
 - **Analytics API** *(planned)* — the read surface behind PAT for
   Homestead analytics. The write path is `lib/analytics.js`
   (closed-enum `KINDS`); the read API is referenced in
-  #2210 follow-ups but has not shipped. When the read API
+  analytics-funnel follow-ups but has not shipped. When the read API
   lands, this entry becomes canonical. *(Renamed from the
-  planned "Hearth" surface name by #2828 — Brandon's call
-  was that "Hearth" stays the name of the agent.)*
+  planned "Hearth" surface name — "Hearth" stays the name of
+  the agent.)*
 
 - **The socket** — the meta-agent socket. The
   authenticated API surface that connected agents and CLIs use
@@ -335,7 +334,7 @@ each one is either a tile in the home grid or a tab in the top strip.
   the name doesn't match exactly, and is closed at the
   character-class level (no nested brackets, no pipe-aliased
   aliases). The render path is in `public/index.html` under the
-  `#1872` entity-graph marker.
+  entity-graph section marker.
 
 ---
 
@@ -395,6 +394,5 @@ each one is either a tile in the home grid or a tab in the top strip.
 
 ---
 
-*Last verified against `main` @ `da84273` (#2587 + #2588 —
-v0.4.3). If a term disagrees with the code, the code wins and
+*Last verified against `main` @ `da84273` (v0.4.3). If a term disagrees with the code, the code wins and
 this file gets a follow-up PR.*

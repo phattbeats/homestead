@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 PHATT Tech LLC
 
-// smoke test (extends #2151's smoke-porch-ui):
+// smoke test (extends the original smoke-porch-ui):
 // verify BOTH placements of the wall feed component — /forum (the
 // standalone thin shell) and /index.html (the in-place #page-wall
 // mount) — load the SAME /components/feed.js and reference the SAME
@@ -14,7 +14,7 @@
 //      logic in forum.html).
 //   2. The shared component file is reachable as /components/feed.js
 //      and exposes window.HomesteadFeed.
-//   3. The /api/link-preview backend route (added in #2151) still
+//   3. The /api/link-preview backend route still
 //      works (composer depends on it).
 //   4. /index.html references /components/feed.js for the in-place
 //      mount and the wall module visibility check.

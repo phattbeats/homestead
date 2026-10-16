@@ -3,10 +3,10 @@
 // Copyright (C) 2026 PHATT Tech LLC
 //
 // POST /api/agent-connections/:id/events
-//   * #3116: signed event body is accepted; unsigned/skewed/tampered
+//   * signed event body is accepted; unsigned/skewed/tampered
 //     bodies are rejected; revoked and missing connections are rejected;
 //     the event lands as a mailbox message.
-//   * #3199: same route, plus replay protection (Request-Id ledger)
+//   * same route, plus replay protection (Request-Id ledger)
 //     and fail-closed on missing rawBody. A captured signed POST can no
 //     longer be re-fired inside the 5-min skew window, and an
 //     attacker-supplied empty body never sees a re-serialized hash.
@@ -326,7 +326,7 @@ async function main() {
     }
 
     // ------------------------------------------------------------------
-    // 10. #3199: same Request-Id twice → second is 409, one mailbox row.
+    // 10. same Request-Id twice → second is 409, one mailbox row.
     //
     // Fresh connection for this test because connectionId was revoked
     // in Test 7 and we want a known-active state.
@@ -382,7 +382,7 @@ async function main() {
     assertEq(matchingMsgs.length, 1, 'mailbox has exactly ONE message for the replayed body (duplicate was rejected)');
 
     // ------------------------------------------------------------------
-    // 11. #3199: two DIFFERENT Request-Ids, same body, both succeed.
+    // 11. two DIFFERENT Request-Ids, same body, both succeed.
     //
     // The replay ledger is keyed on request_id, not on (body, sig).
     // Two distinct deliveries (distinct ids) are independent events
@@ -415,7 +415,7 @@ async function main() {
     assertEq(bResp.status, 202, 'delivery with id B returns 202');
 
     // ------------------------------------------------------------------
-    // 12. #3199: missing req.rawBody → 401 raw_body_unavailable.
+    // 12. missing req.rawBody → 401 raw_body_unavailable.
     //
     // The express.json({ verify }) hook only stashes rawBody when the
     // body parser actually saw a non-empty Buffer. If a client posts
@@ -442,7 +442,7 @@ async function main() {
     assert(empty.body && empty.body.error === 'raw_body_unavailable', 'empty-rawBody error code is raw_body_unavailable');
 
     // ------------------------------------------------------------------
-    // 13. #3199: invalid Request-Id (oversized, bad charset) → 401.
+    // 13. invalid Request-Id (oversized, bad charset) → 401.
     //
     // Without this guard, an attacker can stuff arbitrary-length junk
     // into the replay ledger and blow up the table size, or smuggle
@@ -473,12 +473,12 @@ async function main() {
     }
 
     // ------------------------------------------------------------------
-    // 14. #3199: skew > 300s still returns 401 (regression guard).
+    // 14. skew > 300s still returns 401 (regression guard).
     //
     // The replay table is the NEW replay guard; the timestamp check in
     // verifySignature is the EXISTING replay guard. Both must hold.
     // ------------------------------------------------------------------
-    console.log('\nTest 14 (#3199 backstop): skew > 300s still returns 401');
+    console.log('\nTest 14 (replay backstop): skew > 300s still returns 401');
     const skewBody = JSON.stringify({
       threadKey: 'replay:check', topic: 'replay test',
       body: 'an event signed too long ago', wallSlug: 'household',

@@ -13,12 +13,13 @@
 //      returning user is skipped unless ?revisit=1 (criterion 5).
 //
 // Criteria 2/3/4/6/7/8/9/10 are proved server-side by the existing
-// scripts/smoke-2704/2706/2708/2711 scripts (no UI surface involved)
+// smoke-identity-foundation, smoke-oidc-link, smoke-owner-recovery
+// and smoke-invite-signup scripts (no UI surface involved)
 // — this script only covers the two criteria that require an actual
 // rendered browser.
 //
 // Run: node scripts/smoke-release-gate.js
-// Output: ./verify-out/gate-2710-{invite-page,welcome-new-user,welcome-revisit}.png
+// Output: ./verify-out/smoke-release-gate-{invite-page,welcome-new-user,welcome-revisit}.png
 
 'use strict';
 
@@ -28,9 +29,9 @@ const path = require('path');
 const net = require('net');
 const { chromium } = require('playwright');
 
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-smoke-2710-'));
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-smoke-release-gate-'));
 const port = 3111;
-const adminPassword = 'smoke-2710-admin-pw';
+const adminPassword = 'smoke-release-gate-admin-pw';
 const verifyOut = process.env.VERIFY_OUT
   ? path.resolve(process.env.VERIFY_OUT)
   : path.resolve(__dirname, '..', 'verify-out');
@@ -39,7 +40,7 @@ fs.mkdirSync(verifyOut, { recursive: true });
 process.env.DATA_DIR = tmpDir;
 process.env.PORT = String(port);
 process.env.ADMIN_PASSWORD = adminPassword;
-process.env.SESSION_SECRET = 'smoke-2710-secret-padding-to-meet-min-32-chars';
+process.env.SESSION_SECRET = 'smoke-release-gate-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 process.env.ALLOW_HEADER_TRUST = '0';
 
@@ -117,7 +118,7 @@ function localRoutableIp() {
     assert(/admin/i.test(inviteText), 'invite page names the inviter');
     assert(/household/i.test(inviteText), 'invite page names the wall');
     assert(/access|join|member/i.test(inviteText), 'invite page describes the access granted');
-    const shotInvite = path.join(verifyOut, 'gate-2710-invite-page.png');
+    const shotInvite = path.join(verifyOut, 'smoke-release-gate-invite-page.png');
     await page.screenshot({ path: shotInvite, fullPage: true });
     ok(`screenshot saved: ${shotInvite}`);
 
@@ -141,7 +142,7 @@ function localRoutableIp() {
     assert(/household/i.test(welcomeText), 'welcome names the wall the user joined');
     const ctaText = await page.evaluate(() => document.getElementById('continueBtn').textContent);
     assert(/Porch/.test(ctaText), 'welcome CTA states a concrete next action', ctaText);
-    const shotWelcome = path.join(verifyOut, 'gate-2710-welcome-new-user.png');
+    const shotWelcome = path.join(verifyOut, 'smoke-release-gate-welcome-new-user.png');
     await page.screenshot({ path: shotWelcome, fullPage: true });
     ok(`screenshot saved: ${shotWelcome}`);
 
@@ -156,7 +157,7 @@ function localRoutableIp() {
 
     await page.goto(`${base}/welcome.html?wall=household&revisit=1`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#continueBtn:not(.hidden)', { state: 'visible', timeout: 5000 });
-    const shotRevisit = path.join(verifyOut, 'gate-2710-welcome-revisit.png');
+    const shotRevisit = path.join(verifyOut, 'smoke-release-gate-welcome-revisit.png');
     await page.screenshot({ path: shotRevisit, fullPage: true });
     ok(`?revisit=1 reopens welcome for a returning user; screenshot saved: ${shotRevisit}`);
 
@@ -168,7 +169,7 @@ function localRoutableIp() {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
   }
 })().catch((err) => {
-  console.error('smoke-2710 crashed:', err);
+  console.error('smoke-release-gate crashed:', err);
   console.log(`\n${pass} pass / ${fail} fail`);
   process.exit(1);
 });

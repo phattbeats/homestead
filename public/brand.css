@@ -9,8 +9,7 @@
  * typeset alternative.
  *
  * The brand-spec-v3 specified Fraunces SemiBold 600 as a fallback for places
- * the vector wouldn't render, but the second-pass correction (Brandon's
- * "STILL NOT THE RIGHT ASSETS" comment on #2777) replaced that hedge with
+ * the vector wouldn't render, but the second-pass correction replaced that hedge with
  * the canonical SVG. Fraunces is kept only for the login tagline (Fraunces
  * Italic 400) — the tagline was always typeset, never part of the lockup art.
  *

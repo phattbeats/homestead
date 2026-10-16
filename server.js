@@ -2,8 +2,8 @@
 //
 // Identity model (v0.0.5):
 //   * `users` is a PROFILE CACHE, not a directory of record.
-//   * Authentik is the directory of record (see #1574 for header-trust
-//     wiring + #1577 for the household/family/media-club/admins groups).
+//   * Authentik is the directory of record (header-trust wiring plus
+//     the household/family/media-club/admins groups).
 //   * Homestead never creates or deletes user rows on its own. The
 //     `X-authentik-username` header (carried by SWAG in front of
 //     life.phatt.vip) is the canonical CREATE path: a request with that
@@ -81,7 +81,7 @@ const hearthCharacters = require('./lib/hearth-characters');
 // and as the plain REST routes below, both landing on the same
 // permission-checked functions.
 const hearthActions = require('./lib/hearth-actions');
-// #2827.C: server-side Hearth runtime. Short-circuits the external
+// Server-side Hearth runtime. Short-circuits the external
 // drawer POST when the user's character is `hearth` and a model key is
 // configured. See lib/agent-runtime.js for the provider adapter + SOUL.md
 // system prompt loader.
@@ -91,7 +91,7 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const db = new Database(path.join(DATA_DIR, 'life.db'));
 userModel.migrate(db);
-// (design doc #1624 §3): entity graph schema, wired right
+// Entity graph schema (design doc §3), wired right
 // after userModel.migrate() to match the existing boot-migration pattern.
 // Phase A's canonical migrate() call — Phase B-1's and Phase B-2's
 // defensive self-installs (same underlying schema) are dropped now that
@@ -121,7 +121,7 @@ connectorWizard.migrate(db);
 // migrated after userModel so the FK resolves, same pattern as
 // agent_tokens / calendar_sources.
 agentEndpoints.migrate(db);
-// (#2855 phase 1): agent_connections — companion-mediated
+// agent_connections — companion-mediated
 // pairing flow, separate table from agent_endpoints above (that path
 // stays untouched). Migrated after userModel for the same FK reason.
 agentConnections.migrate(db);
@@ -157,7 +157,7 @@ analytics.migrate(db);
 // module enable — not at boot — so a fresh install doesn't create a
 // character row until the user actually wants Hearth.
 hearthCharacters.migrate(db);
-// (#2827.D): Hearth is a Porch citizen, not just a drawer
+// Hearth is a Porch citizen, not just a drawer
 // companion — ensure his built-in system account exists (or already
 // does) and is backfilled into every wall's membership, so
 // lib/porch/sweep.js's listAgentUserIds() and lib/walls.js's identity
@@ -346,7 +346,7 @@ function authenticate(req, res, next) {
       authProviderDetail: { tokenId: tokenRow.id, scopes: tokenRow.scopes },
     };
     // third-party app accountability trail. app_id IS NULL is
-    // the existing #1617 user-level PAT and is never logged — this
+    // the existing user-level PAT and is never logged — this
     // table is scoped to app-issued tokens only. Written from 'finish'
     // (fires after the response is already sent) so the log write never
     // sits on this request's critical path.
@@ -403,7 +403,7 @@ function authenticate(req, res, next) {
 // Legacy alias used by route definitions below.
 const auth = authenticate;
 
-// ---- app-scoped token authorization (#2052 dogfood) ----
+// ---- app-scoped token authorization ----
 // `authenticate()` above accepts a Bearer app token and synthesizes the
 // SAME req.session.user shape a real household member gets — on its own
 // that means an app-scoped PAT is authorized as if it were the full
@@ -452,7 +452,7 @@ function requireWallReadScope(req, res, next) {
 
 // requireModuleEnabled(key): the session user must have this module
 // turned on (per user_modules) before the route may write data into
-// it. #2811: POST /api/tasks had no such gate, so a chore added
+// it. POST /api/tasks had no such gate, so a chore added
 // without the `chores` module enabled wrote a row that never rendered
 // anywhere — no nav tab, no home-page task list, nothing. Scopes
 // (requireScope) only gate third-party app tokens; first-party
@@ -604,7 +604,7 @@ const COMMIT_SHA = process.env.COMMIT_SHA || null;
 // ---- public probes (no auth) ----
 // /api/health and /api/version relocated to
 // routes/health.js. Behavior unchanged; see routes/health.js for
-// the readiness-signal rationale (CALENDAR_CRED_KEY, #3200
+// the readiness-signal rationale (CALENDAR_CRED_KEY,
 // sessionSecret).
 app.use('/api', healthRouter({
   db,
@@ -614,7 +614,7 @@ app.use('/api', healthRouter({
 }));
 
 // ---- auth ----
-// LAN fallback login (#1574 keeps built-in login working behind
+// LAN fallback login (keeps built-in login working behind
 // SWAG for the local network). Header-trust users never hit this path.
 //
 // GET /api/login is the bounce target used by /invite/:code
@@ -725,11 +725,11 @@ function buildMeEnvelope(db, sessionUser) {
     db.prepare('SELECT id FROM users WHERE username = ?').get(sessionUser.username).id);
   const enabledKeys = enabledRows.map(e => e.key);
   const userId = db.prepare('SELECT id FROM users WHERE username = ?').get(sessionUser.username).id;
-  forum.touchActivity(userId); // #4097: /api/me fires on every page load — the cheapest "is here" signal
+  forum.touchActivity(userId); // /api/me fires on every page load — the cheapest "is here" signal
   return {
     user: sessionUser,
     enabled_modules: enabledKeys, // registry order, deterministic
-    default_route: FORUM_ROUTE, // #4097: every user lands on The Forum, regardless of enabled modules
+    default_route: FORUM_ROUTE, // every user lands on The Forum, regardless of enabled modules
     first_run: userModel.isFirstRun(db, userId),
   };
 }
@@ -737,8 +737,8 @@ function buildMeEnvelope(db, sessionUser) {
 // the `homestead_get_user_context` snapshot
 // endpoint. Single-call morning-brief context: today's tasks/events/
 // overdue, upcoming week, groups, recent activity. Backs both the
-// MCP tool and the drawer POST `snapshot` field
-// (#1617.5/.6). Same builder under the hood so the three callers
+// MCP tool and the drawer POST `snapshot` field.
+// Same builder under the hood so the three callers
 // can never drift apart on envelope shape.
 app.get('/api/me/snapshot', auth, (req, res) => {
   const username = req.session.user && req.session.user.username;
@@ -753,7 +753,7 @@ app.get('/api/me/snapshot', auth, (req, res) => {
   }
 });
 
-// ---- #2659: The Homestead Gazette ----
+// ---- The Homestead Gazette ----
 //
 // GET /api/me/gazette/today — serve today's edition, minting it on the
 // first open of the day. This is the whole Gazette API surface;
@@ -766,7 +766,7 @@ app.get('/api/me/snapshot', auth, (req, res) => {
 // temporarily-broken harness.
 //
 // The module toggle is the only thing that decides whether this route
-// answers — same `requireModuleEnabled` gate #2811 put on
+// answers — same `requireModuleEnabled` gate already on
 // POST /api/tasks. The registry's `requires` edge means enabling
 // Gazette already pulled in the harness module it needs.
 app.get('/api/me/gazette/today', auth, requireModuleEnabled('gazette'), async (req, res) => {
@@ -844,7 +844,7 @@ app.get('/api/me/gazette/today', auth, requireModuleEnabled('gazette'), async (r
   res.json({ ...stored, cached: false, retryable: false });
 });
 
-// ---- #2853: typed Gazette issues (standalone page) ----
+// ---- typed Gazette issues (standalone page) ----
 //
 // A second, TYPED surface alongside the sheet route above. Both read the
 // same `assembleContext()` / `SECTIONS` material in lib/gazette.js — one
@@ -913,7 +913,7 @@ app.get('/api/gazette/:date', auth, requireModuleEnabled('gazette'), (req, res) 
 
 // POST /api/gazette/ask — "ask the editor". Routes the question through
 // the same Hearth dispatch every other agent-facing surface in this app
-// uses (`agentRuntime.dispatchHearth`, #1899/#2827.C) rather than
+// uses (`agentRuntime.dispatchHearth`) rather than
 // inventing a second LLM call path. `actions: false` keeps this
 // text-only on purpose — asking the editor a question about today's
 // issue should never let a model queue a chore or post to a wall as a
@@ -956,7 +956,7 @@ app.post('/api/gazette/ask', auth, requireModuleEnabled('gazette'), async (req, 
   res.json({ ok: true, answer: result.text });
 });
 
-// ---- #2204: module / layout API surface ----
+// ---- module / layout API surface ----
 //
 // Four read endpoints + two write endpoints:
 //   * GET  /api/me/layout       — SPA bootstrap; computed from enabled set
@@ -1083,14 +1083,14 @@ app.post('/api/me/modules/:key/disable', auth, (req, res) => {
   }
 });
 
-// ---- #2207: invite-to-wall flow + first-run-complete ----
+// ---- invite-to-wall flow + first-run-complete ----
 //
 // Three write endpoints + one read endpoint, plus a static HTML page
 // mount for /invite/:code (the redemption handshake):
 //
 //   * POST /api/invites                    — admin issues a new invite.
 //                                             body: {wall_slug, expires_in_days?, note?}
-//                                             400 if wall_slug missing (legacy #1575 path).
+//                                             400 if wall_slug missing (legacy path).
 //   * POST /api/invites/:code/redeem       — authed user redeems; auto-enrolls into the wall.
 //   * GET  /api/invites                    — admin list view (no redeemed by default).
 //   * POST /api/me/first-run-complete      — caller stamps first_run_completed_at = now.
@@ -1141,7 +1141,7 @@ function _resolveCaller(req, res) {
 }
 
 // POST /api/invites — admin issues a new invite. The reframe says:
-//   * wall_slug is REQUIRED (legacy #1575 wall-less invites return 400)
+//   * wall_slug is REQUIRED (legacy wall-less invites return 400)
 //   * expires_in_days defaults to 7, max 90
 //   * only admins can create
 app.post('/api/invites', auth, requireAdmin, (req, res) => {
@@ -1202,7 +1202,7 @@ app.get('/api/invites/:code/redemptions', auth, requireAdmin, (req, res) => {
   res.json({ redemptions: rows });
 });
 
-// ---- #2711: same-day closed-beta vertical path ----
+// ---- same-day closed-beta vertical path ----
 //
 // Public (no-auth) invite-handshake endpoints so a fresh browser can
 // complete the entire path without an Authentik session or a
@@ -1225,11 +1225,11 @@ app.get('/api/invites/:code/redemptions', auth, requireAdmin, (req, res) => {
 // card + the inviter + the admin note without an auth round-trip.
 //
 // All three paths use the existing users/pass_hash local-account
-// model (#2711 implementation boundary). They do NOT depend on
-// #2704's local_credentials table — but they DO write to it
+// model (implementation boundary). They do NOT depend on
+// the local_credentials table — but they DO write to it
 // because identity.createUser is the canonical path and it populates
 // both users and local_credentials in one tx, with users.pass_hash
-// shadow-synced. Future #2705/2706 hardening is additive and
+// shadow-synced. Future hardening is additive and
 // lossless against this data.
 //
 // Break-glass: POST /api/public/invites/reset consumes a one-shot
@@ -1433,7 +1433,7 @@ app.post('/api/password', auth, (req, res) => {
   // read current password via identity.verifyLocalPassword;
   // write the new password via identity.setLocalPassword. The legacy
   // users.pass_hash column is kept in sync as a deprecated shadow so
-  // pre-#2704 readers (other lib/ modules, future migrations) still
+  // older readers (other lib/ modules, future migrations) still
   // see the value. New code MUST go through the local_credentials table.
   if (!identity.verifyLocalPassword(db, u.id, current || '')) return res.status(400).json({ error: 'Current password is wrong' });
   if (!next || next.length < 4) return res.status(400).json({ error: 'New password too short' });
@@ -1458,7 +1458,7 @@ app.get('/api/users/:username', auth, (req, res) => {
   if (!u) return res.status(404).json({ error: 'not found' });
   res.json(u);
 });
-// Profile-only edit (#1618: no Homestead user CRUD beyond profile
+// Profile-only edit (no Homestead user CRUD beyond profile
 // fields). Display, color, avatar_url, preferences are user-owned; the
 // caller must be the user themselves or an admin. Identity, groups, and
 // username live in authentik.
@@ -1488,11 +1488,11 @@ app.put('/api/users/:username', auth, (req, res) => {
 });
 // ---- identity foundation ----
 // Read/write endpoints for the canonical identity surface. New API
-// paths that downstream features (#2705 invite enrollment, #2706
-// Authentik linking, #2708 owner recovery) build on top of.
+// paths that downstream features (invite enrollment,
+// Authentik linking, owner recovery) build on top of.
 //
 // GET  /api/me/identities       — list linked external identities for the signed-in user
-// POST /api/me/identities       — link a new external identity (admin-gated; #2706 will
+// POST /api/me/identities       — link a new external identity (admin-gated; the OIDC flow will
 //                                  replace this with the OIDC-flow version)
 // DELETE /api/me/identities     — unlink an external identity (refuses the last link when
 //                                  the user also has no local credential)
@@ -1507,9 +1507,9 @@ app.post('/api/me/identities', auth, (req, res) => {
   const { user_id, provider, issuer, provider_subject } = req.body || {};
   // surface: link an identity on behalf of an existing user.
   // Today this is admin-only — the self-service Authentik OIDC flow
-  // lands in #2706. The admin path is required so the migration
-  // tooling (#2703 release gate "provider collisions stop safely
-  // and require recovery/admin review") can resolve collisions.
+  // lands separately. The admin path is required so the migration
+  // tooling ("provider collisions stop safely and require
+  // recovery/admin review") can resolve collisions.
   if (!me.is_admin) return res.status(403).json({ error: 'admin only' });
   if (!provider || !issuer || !provider_subject) {
     return res.status(400).json({ error: 'provider, issuer, provider_subject required' });
@@ -1555,7 +1555,7 @@ app.delete('/api/me/identities', auth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---- owner recovery (ported forward as #2719) ----
+// ---- owner recovery ----
 //
 // Homestead's owner-recovery surface has two halves:
 //
@@ -1592,7 +1592,7 @@ app.delete('/api/me/identities', auth, (req, res) => {
 //      from any client — no prior login required. The audit log
 //      gets `owner_recovery_consumed`.
 //
-// This mechanism is intentionally separate from #2711's
+// This mechanism is intentionally separate from the
 // general-purpose `POST /api/public/invites/reset` (any user, via
 // `lib/invites.js` createResetToken/consumeResetToken, stored in
 // `local_credentials.recovery_token_hash`). Owner recovery is
@@ -1926,7 +1926,7 @@ app.post('/api/me/identities/link/cancel', auth, (req, res) => {
 // row id. Used by the identities-list page where each row carries
 // its identity_links.id. Refuses the last viable login path via the
 // existing identity.unlinkIdentity() guard (no_login_path → 409, or
-// would_lock_out_owner → 409 for the household owner — #2708).
+// would_lock_out_owner → 409 for the household owner).
 app.post('/api/me/identities/:linkId/unlink', auth, (req, res) => {
   const me = db.prepare('SELECT id FROM users WHERE username = ?').get(req.session.user.username);
   if (!me) return res.status(401).json({ error: 'unknown_user' });
@@ -1960,7 +1960,7 @@ app.post('/api/users/:username/password', auth, (req, res) => {
   }
   identity.setLocalPassword(db, target.id, next);
   db.prepare('UPDATE users SET pass_hash = (SELECT password_hash FROM local_credentials WHERE user_id = ?) WHERE id = ?').run(target.id, target.id);
-  // (ported forward as #2719): when an admin resets
+  // When an admin resets
   // another user's password (no `current` provided, actor != target),
   // record an audit event. This is the normal "non-recovery" admin
   // reset path — different from the owner-recovery break-glass path
@@ -2047,7 +2047,7 @@ app.delete('/api/users/:username/agent-tokens/:id', auth, requireAdmin, (req, re
 // State machine: resolve -> consent -> install, plus list/get/revoke/
 // reinstall. All logic lives in lib/app-install.js (pure, no express);
 // these handlers just do auth + status-code mapping. Settings UI that
-// drives this flow is #2201.4.
+// drives this flow lives in the apps settings page.
 function sendAppInstallError(res, err) {
   if (err instanceof appInstall.AppInstallError) {
     return res.status(err.status).json({ error: err.code, message: err.message, ...err.extra });
@@ -2213,7 +2213,7 @@ app.get('/api/apps/:key/activity', auth, (req, res) => {
 // ---- agent endpoints ----
 // Per-user, per-harness config rows. The HMAC secret is the trust key
 // used to sign Homestead -> user-harness outbound POSTs (drawer + events
-// webhook, #1617.6/.7). Plaintext is shown ONCE on insert / rotate.
+// webhook). Plaintext is shown ONCE on insert / rotate.
 // Admin cross-household view is read-only (NO secret exposure) — admins
 // can disable other users' endpoints but cannot read or rotate their
 // secrets (the "user owns their endpoint" model).
@@ -2315,14 +2315,14 @@ app.delete('/api/users/:username/agent-endpoints/:id', auth, requireAdmin, (req,
   res.json({ ok: true });
 });
 
-// ---- #3198: agent_connections HTTP surface is now in routes/agent-connections.js.
+// ---- agent_connections HTTP surface is now in routes/agent-connections.js.
 // Mounted once at /api/agent-connections so the URL paths below stay
 // byte-identical to the pre-split server.js. The router owns:
 //   GET    /api/agent-connections
 //   POST   /api/agent-connections/pair
 //   POST   /api/agent-connections/redeem-pairing-code
 //   PATCH  /api/agent-connections/:id          (rename / rotate_secret / revoke)
-//   POST   /api/agent-connections/:id/events   (#3116 signed-body inbound)
+//   POST   /api/agent-connections/:id/events   (signed-body inbound)
 // Five handlers, ~211 lines moved out of server.js. lib/agent-connections.js
 // is unchanged — pure relocation.
 app.use('/api/agent-connections', agentConnectionsRouter({
@@ -2333,7 +2333,7 @@ app.use('/api/agent-connections', agentConnectionsRouter({
   mailbox,
 }));
 
-// ---- #2829: Hearth first-open intro path ----
+// ---- Hearth first-open intro path ----
 // When a user opens the drawer for the first time after enabling the
 // Agent module, the server returns the seeded Hearth intro text
 // directly from the characters row (no external POST, no LLM call).
@@ -2361,7 +2361,7 @@ app.get('/api/drawer/intro', auth, (req, res) => {
   });
 });
 
-// ---- #1617.6: drawer backend — outbound POST + SSE consumer + retry/circuit breaker ----
+// ---- drawer backend — outbound POST + SSE consumer + retry/circuit breaker ----
 // Design doc §6.2–6.5. The drawer UI POSTs here with
 // {message, endpoint_id, conversation_id}; this route signs and forwards
 // the payload to the user's configured drawer_endpoint URL with the
@@ -2407,7 +2407,7 @@ app.post('/api/drawer', auth, async (req, res) => {
   // persistent record of recent dispatch health.
   const streakMap = (req.app && req.app.locals && req.app.locals.drawerStreakMap) || null;
 
-  // #2827.C: log drawer_call_started BEFORE the dispatch so the
+  // Log drawer_call_started BEFORE the dispatch so the
   // analytics timeline matches the existing closed-enum contract
   // (started → completed|failed). Subject is the endpoint row; the
   // completed/failed event records whether the call took the server-
@@ -2427,9 +2427,9 @@ app.post('/api/drawer', auth, async (req, res) => {
     message,
     endpointId,
     conversationId,
-    // byokKey: #2827.C ships with server-staged env as the default
+    // byokKey: ships with server-staged env as the default
     // (HEARTH_*_KEY). A future per-user BYOK column on `agent_endpoints`
-    // would feed through here; out of scope for C (tracked separately).
+    // would feed through here; out of scope for now.
     byokKey: '',
   });
 
@@ -2481,7 +2481,7 @@ app.post('/api/drawer', auth, async (req, res) => {
   if (result.status === 'endpoint_not_found') {
     return res.status(404).json({ error: 'endpoint_not_found' });
   }
-  // #2827.C: Hearth short-circuit fallbacks.
+  // Hearth short-circuit fallbacks.
   if (result.status === 'hearth_no_key') {
     // No BYOK or server-staged key configured for the default Hearth
     // character. Render the in-drawer prompt that points the user at the
@@ -2703,7 +2703,7 @@ app.get('/api/walls', auth, (req, res) => {
   res.json({ walls: walls.listForUser(me.id) });
 });
 // admin-only "every wall regardless of membership" listing.
-// Backstops the wall-management sheet (#2556 admin UI) so admins
+// Backstops the wall-management sheet (admin UI) so admins
 // can see walls they haven't been added to yet — the regular GET
 // /api/walls intentionally scopes to assertMember-passing walls for
 // the constitutional 404-private wall existence rule.
@@ -2730,7 +2730,7 @@ app.post('/api/walls/:slug/posts', auth, requireScope('write:walls:post'), (req,
   } catch (e) { wallsErr(res, e); }
 });
 // long-lived SSE stream so a wall live-updates for every member
-// who has it open — reuses the SSE wire format #1899 established for
+// who has it open — reuses the SSE wire format established for
 // the drawer rather than standing up a second realtime transport. Unlike
 // the drawer's one-shot request/reply stream, this connection stays open
 // for the tab's lifetime; events are pushed in from wallEvents.publish()
@@ -2808,7 +2808,7 @@ app.post('/api/walls/posts/:postId/comments', auth, (req, res) => {
   } catch (e) { wallsErr(res, e); }
 });
 
-// ---- #4097: The Forum read API + /forum page (routes/forum.js) ----
+// ---- The Forum read API + /forum page (routes/forum.js) ----
 app.use(forumRouter({
   db, auth, requireAdmin, tokenScopes, userModel, forum, wallsErr,
   publicDir: path.join(__dirname, 'public'),
@@ -2822,8 +2822,8 @@ app.use(forumRouter({
 // app-scoped token only ever sees its OWN app's threads (`ctx.appId`);
 // a full-access caller (household session, or this household's own
 // user-level PAT) sees every thread, matching the household-wide
-// visibility the Porch mirror post already gives this data (#2426
-// rule 3 — there is no hidden layer to additionally restrict).
+// visibility the Porch mirror post already gives this data (there
+// is no hidden layer to additionally restrict).
 function mailboxCallerContext(req) {
   const scopes = tokenScopes(req);
   if (scopes === null) return { appScoped: false };
@@ -2942,7 +2942,7 @@ app.delete('/api/walls/:slug/posts/:postId/mute', auth, (req, res) => {
   } catch (e) { wallsErr(res, e); }
 });
 
-// ---- #2556: wall CRUD + member management (admin only) ----
+// ---- wall CRUD + member management (admin only) ----
 // closed green without these, leaving a wall that no seeded
 // user could reach from the API alone. Adding POST /api/walls +
 // member management closes that loop: an admin can create a new wall
@@ -2981,7 +2981,7 @@ app.delete('/api/walls/:slug/members/:username', auth, requireAdmin, (req, res) 
   }
 });
 
-// ---- #2647: Porch agent identity — "vote off the porch" wall opt-out ----
+// ---- Porch agent identity — "vote off the porch" wall opt-out ----
 // Admin-only, same tier as the wall CRUD/member routes above. Both the
 // per-post button and the wall-settings "Agents" toggle hit these same
 // two mutating routes — there's exactly one piece of state
@@ -3027,7 +3027,7 @@ app.get('/api/groups', auth, requireAdmin, (req, res) => {
   res.json({ groups: rows });
 });
 
-// GET /api/me/notifications: the badge/activity-feed list backing #1617's
+// GET /api/me/notifications: the badge/activity-feed list backing the
 // clearable-badge promise. ?unseen=1 filters to seen_at IS NULL. Distinct
 // from /api/me/snapshot's activity_recent (the morning-brief dashboard
 // feed, unfiltered) — this one is the badge itself.
@@ -3092,7 +3092,7 @@ app.get('/api/link-preview', auth, async (req, res) => {
 });
 
 // ---- groups ----
-// Read-only view (#1618: authentik owns the group lifecycle). The
+// Read-only view (authentik owns the group lifecycle). The
 // `?mine=1` query param returns just the authenticated user's groups so
 // the frontend can ask "what groups am I in?" without scanning /api/users.
 app.get('/api/groups', auth, (req, res) => {
@@ -3309,7 +3309,7 @@ app.delete('/api/list-items/:itemId', auth, requireScope('write:lists'), (req, r
 // /api/me/* and follow the same posture as /api/me/modules and
 // /api/me/layout — they are user-scoped by construction (every query
 // is keyed to the caller's own user id), and adding a `read:rooms` /
-// `write:rooms` pair would mean extending the LOCKED #2201 §3
+// `write:rooms` pair would mean extending the LOCKED
 // scope vocabulary in lib/scope-display.js. That's a deliberate
 // follow-up, not a thing to do quietly: until then an installed
 // third-party app inherits its user's room access, exactly as it
@@ -3423,7 +3423,7 @@ app.get('/api/me/rooms/:slug/events', auth, (req, res) => {
 });
 
 // Members: owner manages, members read (the whole ACL — richer
-// per-room grants are the v2 conversation #2852 defers).
+// per-room grants are deferred to v2).
 app.get('/api/me/rooms/:slug/members', auth, (req, res) => {
   const me = _roomsCaller(req, res);
   if (!me) return;
@@ -3586,7 +3586,7 @@ app.put('/api/admin/services/:id/owner', auth, requireAdmin, (req, res) => {
   res.json(withHealth([row])[0]);
 });
 
-// ---- Entity-graph sync admin endpoints (#1624 Phase B-1) ----
+// ---- Entity-graph sync admin endpoints (Phase B-1) ----
 //
 // POST /api/admin/sync/plex           admin-only manual trigger
 // GET  /api/admin/sync/plex/status    admin-only last-run summary
@@ -3649,7 +3649,7 @@ app.get('/api/admin/sync/plex/status', auth, (req, res) => {
   });
 });
 
-// ---- Entity-graph sync admin endpoints (#1624 Phase B-2) ----
+// ---- Entity-graph sync admin endpoints (Phase B-2) ----
 //
 // POST /api/admin/sync/kavita         admin-only manual trigger
 // GET  /api/admin/sync/kavita/status  admin-only last-run summary
@@ -3774,9 +3774,9 @@ app.post('/api/calendar-sources', auth, (req, res) => {
       scope: body.scope || null,
     };
   } else {
-    // google: deferred to #1865. The provider name is allowed in
+    // google: deferred. The provider name is allowed in
     // the allow-list above so the UI's "add source" form can ship
-    // before that issue lands; POST is rejected here with a 501.
+    // before the provider lands; POST is rejected here with a 501.
     return res.status(501).json({ error: 'google provider not implemented' });
   }
   let userId = me.id;
@@ -3847,7 +3847,7 @@ app.patch('/api/calendar-sources/:id', auth, (req, res) => {
 // Returns the list of providers the SPA can render an add form for, with
 // their credential-field schemas. The `disabled` flag lets the UI show
 // a "coming soon" placeholder for providers that are reserved in the
-// allow-list but not yet shipped (e.g. google until #1865 merges).
+// allow-list but not yet shipped (e.g. google).
 //
 // The endpoint never echoes any credential — it only describes the shape
 // the UI should render. The actual POST /api/calendar-sources path stays
@@ -4189,7 +4189,7 @@ app.put('/api/push/prefs', auth, (req, res) => {
 //   { userId?: <users.id>, username?: <users.username>, payload: {title, body, url, tag, category}, force?: bool }
 // userId wins over username; both default to the caller. force=true bypasses
 // quiet hours (useful for take-turns handoff that lands at 3am). Agents /
-// automation call this through the same primitive (#1617 will too).
+// automation call this through the same primitive.
 app.post('/api/notify', auth, async (req, res) => {
   const me = userModel.getMe(db, req.session.user.username);
   if (!me) return res.status(401).json({ error: 'unknown_user' });
@@ -4211,7 +4211,7 @@ app.post('/api/notify', auth, async (req, res) => {
 
 // ---- /api/funnel/install ----
 // Auth-gated funnel event intake for the install coach. The client
-// emits a row per step; #2210 (analytics funnel umbrella) reads
+// emits a row per step; the analytics funnel reads
 // these rows to compute install-rate / time-to-install /
 // permission-grant-rate. We deliberately do NOT add a get-list
 // endpoint here — funnel data is for the analytics worker, not the
@@ -4274,7 +4274,7 @@ app.get('/api/services/health', (req, res) => {
   });
 });
 
-// ---- entity graph read API (#1872 / design doc #1624 §10.1) ----
+// ---- entity graph read API (design doc §10.1) ----
 // Phase A: read-only. No write API yet (that's Phase F). Every route is
 // behind the existing `auth` middleware per §10.5 ("Read: every
 // authenticated user"). 404s match the existing `{error:'not_found'}`
@@ -4536,7 +4536,7 @@ app.get('/entity/:id', (req, res) => {
 // (fallthrough: true) let unknown paths like /lists.html /calendar.html
 // /chores.html /apps.html fall through to the SPA fallback regex,
 // which then served public/index.html with status 200 — the same
-// masking class as the #1704/1707/1708 /api bug (a user deep-linking
+// masking class as the earlier /api bug (a user deep-linking
 // or a nav honoring the layout API's `route` field gets the SPA shell
 // instead of a real 404). With fallthrough:false the static handler
 // returns 404 directly for any path that doesn't match a real file
@@ -4595,7 +4595,7 @@ function startHealthChecker() {
 // ---- Porch sweep scheduler boot ----
 // Same independent-setInterval pattern as startHealthChecker above.
 //
-// onDecision closes the loop #2827.D left open: sweep.js decides
+// onDecision closes the loop: sweep.js decides
 // WHEN an agent (Hearth or any installed character) should consider a
 // post; from here we resolve who they are (porchContract.resolveCharacter),
 // build what they'd see (porchComprehension.buildComprehension), draft
@@ -4608,7 +4608,7 @@ function startHealthChecker() {
 //
 // An agent with no `characters` row (resolveCharacter returns null —
 // an installed agent nobody has wired a character for yet) falls back
-// to the pre-#2844 log-only behavior rather than erroring: sweep
+// to the earlier log-only behavior rather than erroring: sweep
 // proposing a decision for an agent doesn't guarantee that agent has
 // anything to say yet.
 async function porchOnDecision(decision, log) {

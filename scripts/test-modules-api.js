@@ -6,7 +6,7 @@
 // runner, no supertest — `fetch` against the listening socket is
 // enough and matches the smoke scripts in this repo.
 //
-// Acceptance covered (per #2204 issue body):
+// Acceptance covered:
 //   * GET /api/me includes enabled_modules, default_route, first_run.
 //   * GET /api/me/layout returns feed-only / feed-tabs / meadow per
 //     enabled-set size; addRoomVisible + agentDrawer flags set correctly.
@@ -20,7 +20,7 @@
 //   * Cascade-conflict returns 409 with the unmet/dependent list.
 //   * Unauthenticated requests are rejected.
 //
-// Out of scope (handled by sibling PHAs):
+// Out of scope (covered elsewhere):
 //   * DB schema
 //   * Registry
 //   * SPA rendering
@@ -292,8 +292,8 @@ const NOAUTH = (urlPath) => fetch('http://127.0.0.1:3191' + urlPath);
   console.log('\nTest 11: first_run flips to false after completeFirstRun');
   {
     // Hit a custom endpoint via the API: we don't expose completeFirstRun
-    // over HTTP yet (out of scope per #2200.3 — the SPA calls it directly
-    // via a dedicated endpoint in #2200.4). Validate the underlying
+    // over HTTP yet (out of scope here — the SPA calls it directly
+    // via a dedicated endpoint). Validate the underlying
     // helper by poking the DB through the user-model module and confirming
     // /api/me reflects it.
     const Database = require('better-sqlite3');
@@ -316,7 +316,7 @@ const NOAUTH = (urlPath) => fetch('http://127.0.0.1:3191' + urlPath);
     liveDb.close();
   }
 
-  console.log(`\n#2204 modules-api: ${pass} passed, ${fail} failed`);
+  console.log(`\nmodules-api: ${pass} passed, ${fail} failed`);
   process.exit(fail === 0 ? 0 : 1);
 })().catch((e) => {
   console.error('FATAL:', e);

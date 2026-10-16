@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // regression: a standalone post-login smoke must boot a real
 // Homestead instance and retain the post-login session while it loads the
-// SPA. #3200 made production cookies Secure; the smoke talks to its
+// SPA. Production cookies are Secure; the smoke talks to its
 // scratch instance over plain HTTP and therefore sets the explicit
 // test-only transport opt-out before requiring server.js.
 

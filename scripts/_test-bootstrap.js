@@ -5,9 +5,9 @@
 // `node scripts/test-*.js` invocation in `npm test`. Centralizes the
 // three env vars Homestead now requires to boot on a workstation:
 //
-//   - SESSION_SECRET: a 64-char random hex string. #3200 made the
-//     server fail-closed on a missing/placeholder/short secret. Most
-//     pre-#3200 tests relied on the silent fallback
+//   - SESSION_SECRET: a 64-char random hex string. The server is now
+//     fail-closed on a missing/placeholder/short secret. Most
+//     older tests relied on the silent fallback
 //     (`process.env.SESSION_SECRET || 'life-app-secret-change-me'`)
 //     and never set it; this shim keeps those tests running without
 //     touching every file. Tests that explicitly want to exercise the

@@ -7,7 +7,7 @@
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#FFFBF5">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<!-- #2846 / v0.5.10: apple-touch-icon falls back to the canonical 512px install icon so iOS Safari / shared-sheet home-screen installs show the same opening-door mark instead of a generic thumbnail. SVG opens aren't supported by Safari's home-screen install path, hence the .png. -->
+<!-- v0.5.10: apple-touch-icon falls back to the canonical 512px install icon so iOS Safari / shared-sheet home-screen installs show the same opening-door mark instead of a generic thumbnail. SVG opens aren't supported by Safari's home-screen install path, hence the .png. -->
 <link rel="apple-touch-icon" href="/icon-512.png">
 <!-- Same canonical mark, also as a 32x32 PNG, in case any browser fetches /favicon.ico before /favicon.svg. -->
 <link rel="alternate icon" href="/favicon-32.png" type="image/png" sizes="32x32">
@@ -184,7 +184,7 @@ nav button.on{color:var(--accent)}
 nav .ico{font-size:20px;display:inline-flex;align-items:center;justify-content:center;line-height:1;width:24px;height:24px}
 nav .ico img{display:block;width:22px;height:22px;object-fit:contain}
 
-/* ---- #2205: layout-aware nav + Add rooms pill ---- */
+/* ---- layout-aware nav + Add rooms pill ---- */
 /* feed-only layout: hide the bottom nav entirely; the Add-rooms pill
    is the only nav affordance. */
 body[data-layout="feed-only"] #appNav{display:none}
@@ -211,8 +211,8 @@ body[data-layout="meadow"] #addRoomPill:active{transform:scale(.96)}
    defaultRoute (e.g. /forum for a wall-only user). */
 .page[data-disabled="1"]{display:none}
 
-/* ---- #1898 + #2498 (UX batch #2): meta-agent chat drawer FAB. ----
-   #2498 #2 closed the FAB pileup on Home/Tasks: two competing
+/* ---- meta-agent chat drawer FAB. ----
+   We closed the FAB pileup on Home/Tasks: two competing
    circular buttons in the bottom-right were unreadable on a 390px
    screen. The directive was "one primary FAB per screen; the drawer
    affordance docks into the tab bar / header / or a smaller pill."
@@ -324,7 +324,7 @@ body[data-layout="meadow"] #addRoomPill:active{transform:scale(.96)}
 .sheet h2{font-size:19px;font-weight:800;letter-spacing:-.01em;margin-bottom:18px}
 .sheet h3{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
   margin:18px 0 8px}
-/* ---- #2219: install coach ---- */
+/* ---- install coach ---- */
 .coach-visual{text-align:center}
 .coach-steps{margin:8px 0 4px;padding:0 0 0 22px;font-size:14px;line-height:1.55;color:var(--ink)}
 .coach-steps li{margin-bottom:10px}
@@ -387,7 +387,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 .showall{font-size:12px;font-weight:600;color:var(--muted)}
 @media(min-width:768px){.svc-grid{grid-template-columns:repeat(3,1fr)}}
 
-/* entity page (design doc #1624 §7) */
+/* entity page */
 #entityPage{position:fixed;inset:0;z-index:120;background:var(--bg,#fff);display:none;overflow-y:auto;padding:16px 16px 90px}
 #entityPage.on{display:block}
 .ent-back{background:none;border:none;font-size:15px;color:var(--muted);cursor:pointer;padding:6px 0}
@@ -427,7 +427,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 .palette-hit .kind{color:var(--muted);font-size:12px}
 .palette-empty{padding:16px;color:var(--muted);font-size:13px}
 
-/* ---- #1868: calendar sources management ---- */
+/* ---- calendar sources management ---- */
 .src-list{display:flex;flex-direction:column;gap:8px}
 .src-row{display:flex;gap:12px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--surface);align-items:center}
 .src-color{width:8px;align-self:stretch;border-radius:4px;background:var(--uc,var(--muted));flex-shrink:0}
@@ -488,7 +488,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 .act-row .act-status.err{color:#b3453a}
 
 /* Embedded consent screen (public/consent.js's renderConsentScreen,
-   reused here per the #2201 design note §4 — same copy, same
+   reused here — same copy, same
    mapping, different host markup). Scoped under .consent-embed so it
    doesn't touch this page's own .btn/.app-icon-style rules. */
 .consent-embed .app-preview{display:flex;align-items:center;gap:14px;margin-bottom:16px}
@@ -536,7 +536,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
            override on the pill below). applyLayout's agentDrawer flag
            toggles .off on this FAB when the agent module is
            disabled for the current user. Note: backticks are absent
-           here on purpose — the #2209 Amendment 3 audit's regex
+           here on purpose — the no-hardcoded-keys audit's regex
            matches them in HTML comments (not stripped), so the
            registry-key guard would flag the word. -->
       <button id="drawerFab" type="button" title="Open chat" aria-label="Open chat drawer">💬</button>
@@ -598,12 +598,12 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
          this div when the feed module is enabled for the current user
          (see boot() below). When the feed module is the user's SOLE
          enabled module, the SPA redirects to /forum instead of
-         mounting here (per #2200 §6 dual-surface design). The
+         mounting here (dual-surface design). The
          page id matches the nav button's data-p attribute so the
          existing tab-switching handler (curPage = b.dataset.p; show
          #page-{curPage}) finds it. We use 'porch' (the room
          discriminator) instead of the registry key to avoid colliding
-         with #2209's no-hardcoded-keys audit. -->
+         with the no-hardcoded-keys audit. -->
     <div class="page" id="page-porch"></div>
   </main>
   <button id="fab">+</button>
@@ -620,10 +620,10 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
          matches each button against the layout payload's `room` field.
          The `home` button is always on (no module backing it — it's
          the always-visible "today + tasks + events" landing page). -->
-    <!-- #2846 / v0.5.10: bottom-nav icon migration to the canonical
+    <!-- v0.5.10: bottom-nav icon migration to the canonical
          brand SVG set. Previous emoji literals (🏠 ✓ 📝 📅 🛰️ 📸)
-         were a documented exception to #2209's audit because the
-         nav predated #2777 (canonical brand system). Each tab now
+         were a documented exception to the no-hardcoded-keys audit because the
+         nav predated the canonical brand system. Each tab now
          references the matching built-in module's SVG:
            * Home (always-on landing, no module backing) -> /icon.svg
              (the canonical opening-door mark — the same one /favicon.svg
@@ -649,17 +649,17 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
          current user. The data-p attribute is a tab-discriminator
          string (matches the page div id, not the module key) so we
          use the room name 'porch' to avoid colliding with the
-         #2209 no-hardcoded-keys audit. -->
+         no-hardcoded-keys audit. -->
     <button data-p="porch" id="navWall" style="display:none" aria-label="The Forum"><span class="ico"><img src="/modules/porch.svg" alt="" width="22" height="22"></span>Forum</button>
   </nav>
 
   <!-- meta-agent chat drawer.
-       The chat drawer PANEL lives inside #app (pre-auth hiding per
-       #2498 #3, structural). The FAB itself lives in the header
-       (#2498 #2 — docked out of the bottom-right FAB stack).
+       The chat drawer PANEL lives inside #app (pre-auth hiding,
+       structural). The FAB itself lives in the header
+       (docked out of the bottom-right FAB stack).
        Frontend-only shell: composer + SSE/JSON consumer. POSTs to
        /api/drawer; the HMAC-signed outbound forwarding to the user's
-       harness URL is wired in #1617.6. -->
+       harness URL is wired separately. -->
   <div id="drawer" role="dialog" aria-label="Chat drawer" aria-hidden="true">
     <div class="drawer-head">
       <div class="title">Chat</div>
@@ -688,7 +688,7 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 </div>
 <div id="dot">🏡</div>
 
-<!-- entity page (design doc #1624 §7) -->
+<!-- entity page -->
 <div id="entityPage">
   <button class="ent-back" id="entBack">‹ Back</button>
   <div id="entBody"></div>
@@ -713,9 +713,9 @@ const api=async(m,u,b)=>{const r=await fetch(u,{method:m,headers:{'Content-Type'
 
 /* ---- state ---- */
 let ME=null, USERS={};
-let ENABLED_MODULE_KEYS=new Set(); // #2811: populated by applyLayout(), used to gate the FAB picker
+let ENABLED_MODULE_KEYS=new Set(); // populated by applyLayout(), used to gate the FAB picker
 let TASKS=[],EVENTS=[],SVCS=[];
-let MERGED=[]; // #1867: native + cached provider events for the current month
+let MERGED=[]; // native + cached provider events for the current month
 let calY,calM,selDate=today();
 
 function today(){const d=new Date();return d.toISOString().slice(0,10)}
@@ -826,7 +826,7 @@ function renderLoginChips(){
 }
 
 /* ---- boot ---- */
-/* ---- #2205: layout-aware SPA bootstrap ---- */
+/* ---- layout-aware SPA bootstrap ---- */
 
 // `applyLayout(layout)`: consumes the payload from
 // GET /api/me/layout (see lib/modules.computeLayout) and applies the
@@ -845,11 +845,11 @@ function renderLoginChips(){
 //      AND the user is authenticated. Clicking the pill opens
 //      /modules.html (the add-a-room sheet).
 //
-// `agentDrawer` toggles the meta-agent chat-drawer FAB (#1898 /
-/). When the `agent` module is disabled, the FAB is
+// `agentDrawer` toggles the meta-agent chat-drawer FAB.
+// When the `agent` module is disabled, the FAB is
 // hidden — the chat composer simply isn't reachable. This is the
 // structural fix for "every wall-only user sees the chat FAB even
-// though they have no harness" (regression flagged in #2495).
+// though they have no harness" (a past regression).
 //
 // The function is idempotent — safe to call multiple times, e.g.
 // after every POST /api/me/modules/:key/enable from the add-a-room
@@ -884,7 +884,7 @@ function applyLayout(layout) {
   //
   // We derive the on/off state by checking whether ANY enabled key's
   // room matches the data-p attribute — no module-key literals appear
-  // in this file. #2209 Amendment 3 audit passes.
+  // in this file. The no-hardcoded-keys audit passes.
   const enabledRooms = new Set();
   for (const t of (Array.isArray(layout.tabs) ? layout.tabs : [])) {
     if (t && typeof t.room === 'string') enabledRooms.add(t.room);
@@ -896,7 +896,7 @@ function applyLayout(layout) {
   // the Home tab/page (`data-p="home"`) is the always-on
   // landing (today's events + today's tasks) and is NOT a module
   // room — it must remain enabled regardless of which modules the
-  // user has turned on. #2205 / #2557 treat every nav button
+  // user has turned on. The layout code treats every nav button
   // uniformly, but the SPA bootstrap comments (line ~531) explicitly
   // promise "The home button is always on." Honor that promise here:
   // never mark the Home button or #page-home as data-disabled.
@@ -930,7 +930,7 @@ function applyLayout(layout) {
   // sheet-module launchers. `layout.sheets` carries one entry
   // per enabled open-mode-sheet module ({key, icon, label}); the server
   // derives that list from the registry's open_mode, so this loop never
-  // names a module key and the #2209 Amendment 3 audit stays clean.
+  // names a module key and the no-hardcoded-keys audit stays clean.
   // Rebuilt wholesale on every applyLayout so a module toggled off in
   // the add-a-room sheet loses its launcher immediately.
   const launchers = document.getElementById('sheetLaunchers');
@@ -1061,8 +1061,8 @@ async function boot(user){
   // in #page-wall and shares the HomesteadFeed component with /forum.
   // We identify the feed module by its `room === 'porch'` discriminator
   // in the /api/modules registry — NOT by hardcoding the literal key —
-  // so #2209's "no hardcoded module-key literals in render code"
-  // audit (Amendment 3) doesn't flag this SPA bootstrap. The same
+  // so the "no hardcoded module-key literals in render code"
+  // audit doesn't flag this SPA bootstrap. The same
   // discriminator matches the wall entry's `room: 'porch'` in lib/modules.js.
   // Three things happen here, in order:
   //   1. Fetch /api/me/modules — the caller's enabled-keys list in
@@ -1074,8 +1074,7 @@ async function boot(user){
   //      the page-wall div doesn't render a stale feed.
   //   3. If the feed module is the user's ONLY enabled module, redirect
   //      to /forum — that placement is the full standalone page,
-  //      not an SPA tab. This is the dual-surface rule from
-  //      #2200 §6.
+  //      not an SPA tab. This is the dual-surface rule.
   try{
     const enabled=await api('GET','/api/me/modules');
     let feedKey=null;
@@ -1436,8 +1435,8 @@ function evRow(e){
     ${e.notes?`<div class="t-meta">${esc(e.notes)}</div>`:''}</div>
     <button class="x" onclick="event.stopPropagation();delEvent(${e.id})">✕</button></div>`;
 }
-// provider events are read-only in v1 (Phase 2 write-back lives
-// in #1866). The row uses a chip tag to show the source display_name
+// provider events are read-only in v1 (write-back is a later
+// phase). The row uses a chip tag to show the source display_name
 // and a coloured left bar in the source's color. No edit/delete buttons
 // because we never wrote it locally — the source of truth is the provider.
 function providerEvRow(e){
@@ -2028,7 +2027,7 @@ function openSettingsSheet(){
   };
 }
 
-// ---- #2556: walls admin sheet ----
+// ---- walls admin sheet ----
 // Renders a list of every wall in the system (visibility, members),
 // a "Create wall" form, and an inline member-management UI per wall.
 // Lives in its own sheet so the household-members form above doesn't
@@ -2120,7 +2119,7 @@ async function openWallsAdminSheet(){
     }catch(_){/* wall exists but caller isn't a member (404-private) — skip member list */}
   }
 
-  // Wire "Agents" buttons (one per existing wall) — #2647.
+  // Wire "Agents" buttons (one per existing wall).
   document.querySelectorAll('[data-agents]').forEach(btn=>{
     btn.onclick=()=>openWallAgentsSheet(btn.dataset.agents);
   });
@@ -2257,7 +2256,7 @@ function openUserEditSheet(username){
   };
 }
 
-/* ---- #1868: per-user calendar source config UI ----
+/* ---- per-user calendar source config UI ----
 // The sheet is reachable from the avatar menu. Every authenticated
 // user can manage their own per-user sources; admins additionally see
 // shared sources and can edit/delete them. POST /api/calendar-sources
@@ -2449,10 +2448,10 @@ function openCalendarSourceEditSheet(src, kinds, afterSave){
 
 /* ---- connected agents / token manager ----
 //
-// Surfaces the /api/agent-tokens endpoints added in #1617.1 (.1 ships
-// the schema + routes; this is .3, the user-facing UI).
+// Surfaces the /api/agent-tokens endpoints (the server ships
+// the schema + routes; this is the user-facing UI).
 //
-// Design-doc reference: #1617 doc 'meta-agent-socket-design' rev 1,
+// Design-doc reference: 'meta-agent-socket-design' rev 1,
 // §9.1 (User settings UI) — and §4.3 for the REST contract the sheets
 // consume. Copy-once plaintext modal follows §4.2 (token format /
 // `homestead_pat_<43-char base64url>`).
@@ -2677,7 +2676,7 @@ function platformTokenLabel(){
 
 /* ---- Agent endpoints ----
    No SPA form existed for POST /api/agent-endpoints (create() has lived
-   in lib/agent-endpoints.js since #1617.4) — users had to curl it
+   in lib/agent-endpoints.js for a while) — users had to curl it
    manually. Two sheets, mirroring the connected-agents pattern:
      1. openAgentEndpointsListSheet() — list of the user's endpoints
         (label, kind, URL, secret prefix chip, remove button).
@@ -2767,20 +2766,20 @@ function openAgentEndpointSheet(defaultKind, afterCreate){
   };
 }
 
-/* ---- Connect an agent wizard (#2882 / #2855 phase 3) ----
+/* ---- Connect an agent wizard ----
    Companion-mediated counterpart to the agent-endpoints/agent-tokens
    sheets above. Three sheets:
      1. openConnectAgentWizardSheet() — provider tiles (OpenClaw, Claude
         Code, Codex) + a "Manage connections" link + an Advanced
         disclosure that reuses openAgentEndpointSheet() unchanged (the
-        generic-webhook path from #2813 is untouched by this feature).
+        generic-webhook path is untouched by this feature).
      2. openAgentConnectionPairSheet(provider, providerLabel) — mints a
         pairing code (POST /api/agent-connections/pair), shows the code
         + a copy-paste companion command, and polls GET
         /api/agent-connections every 3s until this connection flips to
         'active' (the companion redeemed it) or the sheet is closed.
      3. openAgentConnectionsListSheet() — list/rename/revoke, mirroring
-        the #2201 app-consent revoke UX and the tok-row list pattern
+        the app-consent revoke UX and the tok-row list pattern
         used by Connected agents / Agent endpoints above. */
 const CONNECT_AGENT_PROVIDERS = [
   { key: 'openclaw', icon: '🦾', label: 'OpenClaw' },
@@ -2978,7 +2977,7 @@ function openAgentConnectionsListSheetWith(conns){
 }
 
 /* ---- Settings → Apps ----
-   Design note #2201 §2 (install flow) / §5 (revoke). Three sheets:
+   Covers the install flow and revoke. Three sheets:
      1. openAppsSheet() — every app the user has on, built-in AND
         third-party, from the same GET /api/apps registry read path
         (lib/app-install.js's listApps()).
@@ -2988,10 +2987,10 @@ function openAgentConnectionsListSheetWith(conns){
         built-ins have no app-scoped token to revoke).
      3. openAppInstallSheet() → openAppConsentSheet() — paste a
         manifest URL, resolve, then render the SAME consent screen
-        consent.html uses (window.HomesteadConsent.renderConsentScreen,
-        #2230) inside this sheet, then consent -> install. The
+        consent.html uses (window.HomesteadConsent.renderConsentScreen)
+        inside this sheet, then consent -> install. The
         newly-minted app token is shown exactly once via the existing
-        copy-once reveal (openTokenRevealSheet, #1617.3 pattern). */
+        copy-once reveal (openTokenRevealSheet pattern). */
 // shared icon renderer for the Apps sheet + App detail
 // header. Built-in modules ship a path-style icon ("/modules/{key}.svg");
 // third-party manifests ship an emoji string. We render <img> for the
@@ -3286,7 +3285,7 @@ async function renderPushPrefs(){
   };
 }
 
-/* ---- #2219: PWA install coach ----
+/* ---- PWA install coach ----
 // First-login flow that helps non-technical friends get from
 // "I have the URL in Safari" to "I get a real push notification."
 // The PWA + VAPID pipeline already works; this layer
@@ -3518,8 +3517,8 @@ async function openInstallCoach(source){
 
 // Boot-time coach trigger. Called from boot() AFTER refresh() and
 // the walls check have settled, so the friend sees the feed first
-// ("after they are situated" — Brandon's directive). #2498 (UX
-// batch #1): we honour the "situated" rule from #2219's decision,
+// ("after they are situated"). We honour the "situated" rule from
+// the install-coach design,
 // which the legacy one-shot boot prompt violated. Three arms qualify
 // a session as "situated":
 //   1. Second session on this device — count >= 2.
@@ -3578,8 +3577,8 @@ async function maybeShowInstallCoach(){
   // Arm #2: First meaningful in-app action. Capture-phase listener
   // so we catch taps even on elements that stop propagation later
   // (the FAB on Home/Tasks, any nav button, the drawer chip in the
-  // avatar menu, etc.). The capture-phase trick is the same as
-  // #2494's defensive pattern.
+  // avatar menu, etc.). The capture-phase trick is the same
+  // defensive pattern used elsewhere in this file.
   function _firstActionListener(){
     if(arms.firstActionAt)return;
     arms.firstActionAt = Date.now();
@@ -3662,7 +3661,7 @@ document.addEventListener('visibilitychange',async()=>{
   }catch(_){}
 });
 
-/* ---- #1872: entity graph — entity page + cmd-k search palette ---- */
+/* ---- entity graph — entity page + cmd-k search palette ---- */
 /* Route: /entity/:id (design doc §10.2 deep_links + nav are id-based). */
 const EDGE_GROUP_LABELS={
   available_as:'Available as', available_via:'Available via', authored_by:'Authored by',
@@ -3868,9 +3867,9 @@ $('#paletteInput').addEventListener('keydown',e=>{
   },150);
 })();
 
-/* ---- #1898: meta-agent chat drawer (design doc §6.3) ----
+/* ---- meta-agent chat drawer (design doc §6.3) ----
    Frontend-only shell: composer + SSE/JSON consumer. Talks to the
-   stub /api/drawer backend (#1617.6 will replace the stub with the
+   stub /api/drawer backend (a later change will replace the stub with the
    HMAC-signed outbound forwarder; the wire shape stays the same). */
 const DRAWER = {
   open: false,

@@ -3,22 +3,22 @@
 //
 // Boots server.js on an ephemeral port against a fresh SQLite DB,
 // exercises the full owner-recovery surface end-to-end, and writes
-// verify-out artifacts that #2501 expects from any done-state
+// verify-out artifacts expected from any done-state
 // change. Captures:
 //
-//   smoke-2708-db-shape.json          — post-migration local_credentials
+//   smoke-owner-recovery-db-shape.json          — post-migration local_credentials
 //                                      and identity_links rows for admin.
-//   smoke-2708-login-paths.json       — GET /api/admin/owner/login-paths
+//   smoke-owner-recovery-login-paths.json       — GET /api/admin/owner/login-paths
 //                                      response + status.
-//   smoke-2708-mint.json              — CLI mint stdout (no plaintext
+//   smoke-owner-recovery-mint.json              — CLI mint stdout (no plaintext
 //                                      token persisted; only length + first 8 chars).
-//   smoke-2708-recover-success.json   — POST /api/admin/owner/recover
+//   smoke-owner-recovery-recover-success.json   — POST /api/admin/owner/recover
 //                                      200 response (correct token).
-//   smoke-2708-recover-replay.json    — POST /api/admin/owner/recover
+//   smoke-owner-recovery-recover-replay.json    — POST /api/admin/owner/recover
 //                                      401 response (replayed token).
-//   smoke-2708-recover-badtoken.json  — POST /api/admin/owner/recover
+//   smoke-owner-recovery-recover-badtoken.json  — POST /api/admin/owner/recover
 //                                      401 response (wrong token).
-//   smoke-2708-audit-events.json      — analytics_events rows tagged
+//   smoke-owner-recovery-audit-events.json      — analytics_events rows tagged
 //                                      subject_type='owner_recovery'.
 //
 // The smoke PROVES the contract: CLI mints → HTTP consumes → password
@@ -33,7 +33,7 @@ const path = require('path');
 const Database = require('better-sqlite3');
 const { execFileSync } = require('child_process');
 
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-smoke-2708-'));
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-smoke-owner-recovery-'));
 const port = 3195;
 const verifyOut = process.env.VERIFY_OUT
   ? path.resolve(process.env.VERIFY_OUT)
@@ -42,9 +42,9 @@ fs.mkdirSync(verifyOut, { recursive: true });
 
 process.env.DATA_DIR = tmpDir;
 process.env.PORT = String(port);
-process.env.ADMIN_PASSWORD = 'smoke-2708-admin-pw';
-process.env.BRANDON_PASSWORD = 'smoke-2708-brandon-pw';
-process.env.SESSION_SECRET = 'smoke-2708-secret-padding-to-meet-min-32-chars';
+process.env.ADMIN_PASSWORD = 'smoke-owner-recovery-admin-pw';
+process.env.BRANDON_PASSWORD = 'smoke-owner-recovery-brandon-pw';
+process.env.SESSION_SECRET = 'smoke-owner-recovery-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 
 const HEAD_ADMIN = {
@@ -96,7 +96,7 @@ const POST = (urlPath, body, head = HEAD_ADMIN) => fetch(`http://127.0.0.1:${por
         FROM identity_links
        WHERE user_id = (SELECT id FROM users WHERE is_admin = 1 LIMIT 1)
     `).all();
-    fs.writeFileSync(path.join(verifyOut, 'smoke-2708-db-shape.json'), JSON.stringify({
+    fs.writeFileSync(path.join(verifyOut, 'smoke-owner-recovery-db-shape.json'), JSON.stringify({
       owner_local_credential: ownerLocal ? {
         has_password: !!ownerLocal.has_password,
         owner_recovery_token_hash_present: !!ownerLocal.rt_hash_present,
@@ -105,16 +105,16 @@ const POST = (urlPath, body, head = HEAD_ADMIN) => fetch(`http://127.0.0.1:${por
       owner_identity_links_count: ownerLinks.length,
       owner_identity_link_providers: ownerLinks.map(l => l.provider),
     }, null, 2));
-    console.log(`[smoke-2708] wrote smoke-2708-db-shape.json (admin has ${ownerLinks.length} identity link(s))`);
+    console.log(`[smoke-owner-recovery] wrote smoke-owner-recovery-db-shape.json (admin has ${ownerLinks.length} identity link(s))`);
 
     // 2) GET /api/admin/owner/login-paths (admin header-trust).
     const lp1 = await GET('/api/admin/owner/login-paths', HEAD_ADMIN);
     const lp1body = await lp1.json();
-    fs.writeFileSync(path.join(verifyOut, 'smoke-2708-login-paths.json'), JSON.stringify({
+    fs.writeFileSync(path.join(verifyOut, 'smoke-owner-recovery-login-paths.json'), JSON.stringify({
       status: lp1.status,
       body: lp1body,
     }, null, 2));
-    console.log(`[smoke-2708] GET /api/admin/owner/login-paths → ${lp1.status}`);
+    console.log(`[smoke-owner-recovery] GET /api/admin/owner/login-paths → ${lp1.status}`);
     if (lp1.status !== 200) throw new Error('login-paths returned non-200');
     if (!lp1body.login_paths.local_credential) throw new Error('login-paths: local_credential must be true');
     if (lp1body.login_paths.identity_links < 1) throw new Error('login-paths: identity_links must be >= 1');
@@ -129,7 +129,7 @@ const POST = (urlPath, body, head = HEAD_ADMIN) => fetch(`http://127.0.0.1:${por
       encoding: 'utf8',
     });
     const cliJson = JSON.parse(cliRaw);
-    fs.writeFileSync(path.join(verifyOut, 'smoke-2708-mint.json'), JSON.stringify({
+    fs.writeFileSync(path.join(verifyOut, 'smoke-owner-recovery-mint.json'), JSON.stringify({
       action: cliJson.action,
       userId: cliJson.userId,
       username: cliJson.username,
@@ -144,7 +144,7 @@ const POST = (urlPath, body, head = HEAD_ADMIN) => fetch(`http://127.0.0.1:${por
       has_warning: !!cliJson.warning,
       has_curl_example: !!cliJson.curl_example,
     }, null, 2));
-    console.log(`[smoke-2708] wrote smoke-2708-mint.json (owner=${cliJson.username}, actor=${cliJson.actor})`);
+    console.log(`[smoke-owner-recovery] wrote smoke-owner-recovery-mint.json (owner=${cliJson.username}, actor=${cliJson.actor})`);
 
     // 4) POST /api/admin/owner/recover with the FRESH token, and NO
     //    Authentik headers / session at all — this is the true
@@ -157,11 +157,11 @@ const POST = (urlPath, body, head = HEAD_ADMIN) => fetch(`http://127.0.0.1:${por
       new_password: 'rotated-via-recovery-pw-12345',
     }, HEAD_NONE);
     const recoverBody = await recoverResp.json();
-    fs.writeFileSync(path.join(verifyOut, 'smoke-2708-recover-success.json'), JSON.stringify({
+    fs.writeFileSync(path.join(verifyOut, 'smoke-owner-recovery-recover-success.json'), JSON.stringify({
       status: recoverResp.status,
       body: recoverBody,
     }, null, 2));
-    console.log(`[smoke-2708] POST /api/admin/owner/recover (fresh token) → ${recoverResp.status}`);
+    console.log(`[smoke-owner-recovery] POST /api/admin/owner/recover (fresh token) → ${recoverResp.status}`);
     if (recoverResp.status !== 200) throw new Error('recover: fresh token must return 200');
 
     // 5) Owner can now log in with the new password, NO Authentik
@@ -172,7 +172,7 @@ const POST = (urlPath, body, head = HEAD_ADMIN) => fetch(`http://127.0.0.1:${por
       password: 'rotated-via-recovery-pw-12345',
     }, HEAD_NONE);
     const reloginBody = await relogin.json();
-    console.log(`[smoke-2708] POST /api/login (new pw, no headers) → ${relogin.status}`);
+    console.log(`[smoke-owner-recovery] POST /api/login (new pw, no headers) → ${relogin.status}`);
     if (relogin.status !== 200) throw new Error('relogin: owner must be able to log in with new password');
     if (!reloginBody.user || reloginBody.user.username !== 'admin') throw new Error('relogin: response.user.username must be admin');
 
@@ -182,11 +182,11 @@ const POST = (urlPath, body, head = HEAD_ADMIN) => fetch(`http://127.0.0.1:${por
       new_password: 'replay-attempt-pw-9999',
     }, HEAD_NONE);
     const replayBody = await replay.json();
-    fs.writeFileSync(path.join(verifyOut, 'smoke-2708-recover-replay.json'), JSON.stringify({
+    fs.writeFileSync(path.join(verifyOut, 'smoke-owner-recovery-recover-replay.json'), JSON.stringify({
       status: replay.status,
       body: replayBody,
     }, null, 2));
-    console.log(`[smoke-2708] POST /api/admin/owner/recover (replay) → ${replay.status}`);
+    console.log(`[smoke-owner-recovery] POST /api/admin/owner/recover (replay) → ${replay.status}`);
     if (replay.status !== 401) throw new Error('replay must return 401');
 
     // 7) Wrong token, no auth → 401.
@@ -195,11 +195,11 @@ const POST = (urlPath, body, head = HEAD_ADMIN) => fetch(`http://127.0.0.1:${por
       new_password: 'wrong-token-pw-1234',
     }, HEAD_NONE);
     const wrongBody = await wrong.json();
-    fs.writeFileSync(path.join(verifyOut, 'smoke-2708-recover-badtoken.json'), JSON.stringify({
+    fs.writeFileSync(path.join(verifyOut, 'smoke-owner-recovery-recover-badtoken.json'), JSON.stringify({
       status: wrong.status,
       body: wrongBody,
     }, null, 2));
-    console.log(`[smoke-2708] POST /api/admin/owner/recover (wrong token) → ${wrong.status}`);
+    console.log(`[smoke-owner-recovery] POST /api/admin/owner/recover (wrong token) → ${wrong.status}`);
     if (wrong.status !== 401) throw new Error('wrong token must return 401');
 
     // 8) Mint a fresh CLI token, then --revoke it before consume.
@@ -223,7 +223,7 @@ const POST = (urlPath, body, head = HEAD_ADMIN) => fetch(`http://127.0.0.1:${por
     });
     const revokeJson = JSON.parse(revokeOut);
     if (revokeJson.action !== 'revoke' || !revokeJson.cleared) throw new Error('--revoke must clear the active token');
-    console.log(`[smoke-2708] CLI --revoke cleared ${revokeJson.cleared}`);
+    console.log(`[smoke-owner-recovery] CLI --revoke cleared ${revokeJson.cleared}`);
 
     // 9) Audit trail capture.
     const auditRows = db.prepare(`
@@ -242,11 +242,11 @@ const POST = (urlPath, body, head = HEAD_ADMIN) => fetch(`http://127.0.0.1:${por
         created_at: r.created_at,
       };
     });
-    fs.writeFileSync(path.join(verifyOut, 'smoke-2708-audit-events.json'), JSON.stringify({
+    fs.writeFileSync(path.join(verifyOut, 'smoke-owner-recovery-audit-events.json'), JSON.stringify({
       rows: auditRows,
       kinds: [...new Set(auditRows.map(r => r.kind))],
     }, null, 2));
-    console.log(`[smoke-2708] wrote smoke-2708-audit-events.json (${auditRows.length} audit rows)`);
+    console.log(`[smoke-owner-recovery] wrote smoke-owner-recovery-audit-events.json (${auditRows.length} audit rows)`);
 
     // 10) Confirm the database does NOT contain a plaintext token
     //     and the operational recovery state — a hygiene guard that
@@ -258,9 +258,9 @@ const POST = (urlPath, body, head = HEAD_ADMIN) => fetch(`http://127.0.0.1:${por
     if (storedRows.owner_recovery_token_expires_at !== null) throw new Error('owner_recovery_token_expires_at must be NULL after consume + revoke');
     db2.close();
 
-    console.log('[smoke-2708] ALL ASSERTIONS PASSED');
+    console.log('[smoke-owner-recovery] ALL ASSERTIONS PASSED');
   } catch (err) {
-    console.error('[smoke-2708] FATAL:', err.stack || err.message);
+    console.error('[smoke-owner-recovery] FATAL:', err.stack || err.message);
     exitCode = 1;
   } finally {
     server.close(() => process.exit(exitCode));

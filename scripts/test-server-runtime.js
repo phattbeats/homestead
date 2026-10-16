@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// #2827.C acceptance — server-side Hearth runtime.
+// Acceptance — server-side Hearth runtime.
 //
-// Three test groups (issue acceptance, no real API calls anywhere):
+// Three test groups (no real API calls anywhere):
 //
 //   1. **Hearth short-circuit (positive)**
 //      - User has a default `hearth` character row AND a server-staged
@@ -130,7 +130,7 @@ function freshStack() {
 }
 
 // Force-create a SOUL.md on disk for tests so loadSystemPrompt returns a
-// non-empty prompt without depending on #2828 having shipped.
+// non-empty prompt without depending on the real SOUL.md being present.
 function plantCanon(rootDir) {
   const agentsDir = path.join(rootDir, 'agents', 'hearth');
   fs.mkdirSync(agentsDir, { recursive: true });

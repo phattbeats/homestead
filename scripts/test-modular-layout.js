@@ -14,8 +14,8 @@
 //     return first_run === false.
 //   * The agent-drawer flag: when the agent module is enabled,
 //     /api/me.layout.agentDrawer === true; when disabled, false
-//     (#2200.7 — even though #2221 wires the actual drawer
-//     UI, the flag MUST be present and correct).
+//     (even though the drawer UI is wired separately, the
+//     flag MUST be present and correct).
 //   * The `+ Add rooms` pill affordance: addRoomVisible === true
 //     when at least one module is un-enabled, false when all 6 are
 //     enabled. The user can still disable-then-re-enable to verify

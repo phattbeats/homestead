@@ -83,7 +83,7 @@ async function main() {
     if (drawerFabVisible) {
       throw new Error('UX FAIL: #drawerFab is visible on the LOGIN screen — pre-auth leak not closed');
     }
-    console.log('✓ drawerFab is hidden on the login screen (#2498 #3)');
+    console.log('✓ drawerFab is hidden on the login screen');
 
     // Assertion 2: submit button is fully visible at 390x844.
     const submitBox = await page.locator('#loginBtn').boundingBox();
@@ -109,7 +109,7 @@ async function main() {
     }
     console.log('✓ no page errors, no blocking console errors');
 
-    // Screenshot for #2501 evidence.
+    // Screenshot for DoD evidence.
     fs.mkdirSync(verifyOut, { recursive: true });
     const outPath = path.join(verifyOut, 'mobile-preauth-390.png');
     await page.screenshot({ path: outPath, fullPage: false });

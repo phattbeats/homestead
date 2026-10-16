@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Homestead local companion — reference CLI (#2855 phase 2).
+// Homestead local companion — reference CLI.
 //
 // This is the OTHER end of lib/agent-connections.js's pairing flow
 // (phase 1). It runs on the USER's own machine — laptop,
@@ -45,7 +45,7 @@
 //
 // State lives in $HOMESTEAD_COMPANION_HOME (default ~/.homestead-companion)
 // as connection.json: { base_url, connection_id, provider, secret, session_cookie }.
-// This is a reference skeleton for the #2855 phase 4 acceptance proof,
+// This is a reference skeleton for the end-to-end pairing proof,
 // not a packaged/distributed binary — no auto-update, no keychain
 // integration, no multi-connection management yet.
 
@@ -237,7 +237,7 @@ async function cmdSign(args) {
 // `relay-one-event` — signs and POSTs a single JSON event body to
 // `--url` (defaults to `<base_url>/api/agent-connections/<id>/events`,
 // the inbound route future phases wire up). This is the end-to-end
-// proof #2855 phase 4's acceptance test drives: mint code -> pair ->
+// proof the acceptance test drives: mint code -> pair ->
 // relay-one-event -> Homestead verifies the signature with
 // lib/agent-connections.js's verifySignature() against the stored
 // secret.

@@ -35,7 +35,7 @@ jobs:
 
       # standing policy — Definition of Done guard. Two browser
       # smokes run on every PR: (1) the SPA page-error regression guard
-      # (catches duplicate top-level declarations like #2494), and
+      # (catches duplicate top-level declarations), and
       # (2) the post-login mobile-viewport screenshot smoke (catches
       # broken renders of the login surface). Both must pass for the
       # PR to merge. The wider `npm run test:smoke` chain is left for
@@ -52,7 +52,7 @@ jobs:
 
       # (P2 UX batch): the three mobile smokes below are the
       # DoD evidence the walking report cited to close the parent issue.
-      # They're additive to the #2501 standing smokes — same harness,
+      # They're additive to the standing DoD smokes — same harness,
       # same fixtures, same screenshot outputs as the post-login smoke,
       # each asserting one of the four fix points:
       #   1. install coach does NOT auto-fire on login transition

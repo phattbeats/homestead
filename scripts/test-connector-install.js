@@ -2,7 +2,7 @@
 // acceptance tests for lib/connector-install.js — the
 // ConnectorInstallation model + per-user encrypted secret store.
 //
-// Acceptance criteria (from #2446 issue body):
+// Acceptance criteria:
 //   * Install/uninstall flow creates/destroys ConnectorInstallation
 //     without leaking secret material.
 //   * Secret is round-tripped via the existing encrypted per-user
@@ -484,7 +484,7 @@ function visibilityTests() {
 // ----- Module-registry adapter -------------------------------------------
 
 function moduleRegistryAdapterTests() {
-  console.log('— module-registry adapter (#2200 integration) —');
+  console.log('— module-registry adapter (registry integration) —');
   const { db, tmpDir } = freshDb();
   try {
     const user = freshUser(db, 'brandon');

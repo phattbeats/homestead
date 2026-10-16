@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Amendment 1 acceptance test:
-// "Built-in modules pass the same shape validator as #2201 third-party apps."
+// "Built-in modules pass the same shape validator as third-party apps."
 //
-// Per #2201 (third-party app contract), a third-party app
+// Per the third-party app contract, a third-party app
 // manifest MUST conform to the same 16-field shape as a built-in
 // registry entry. The validator at `lib/registry-validate.js` is
 // the canonical intake gate — third-party install endpoints
@@ -12,7 +12,7 @@
 //   1. Every built-in entry in `lib/modules.js` passes
 //      `validateEntryShape(entry) === null`.
 //   2. A representative third-party-shaped entry (Popcorn Vote
-//      per the #2201 manifest spec) ALSO passes.
+//      per the third-party manifest spec) ALSO passes.
 //   3. A deliberately-malformed third-party entry FAILS (so we
 //      know the validator actually validates).
 //   4. The validator rejects common drift classes (missing field,
@@ -76,7 +76,7 @@ const THIRD_PARTY_POPCORN_VOTE = {
   version: '0.1.0',
   author: 'homestead-external', // third-party author namespace
   url: 'https://popcorn.example.com/manifest',
-  open_mode: 'tab', // external-host mode (per #2201)
+  open_mode: 'tab', // external-host mode
   scopes: ['read:walls:media_club'],
   mcp: true,
   webhooks: ['on_pick'],

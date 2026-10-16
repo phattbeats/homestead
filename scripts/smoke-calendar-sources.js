@@ -209,7 +209,7 @@ function assertEq(actual, expected, label) {
     const calDavBody = JSON.stringify(calDavHits);
     assert(!calDavBody.includes(APP_PW), 'plaintext app_password never appears in any CalDAV request body or URL');
 
-    // ---- #1866: Phase 2 write-back round-trip ----
+    // ---- Phase 2 write-back round-trip ----
     // Create an event on the provider, verify it surfaces in the merged
     // feed, update it, verify the update, then delete it and verify
     // the deletion. The fake CalDAV server keeps the new event in

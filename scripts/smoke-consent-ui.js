@@ -82,7 +82,7 @@ function assert(cond, label, detail) { if (cond) ok(label); else ng(label, detai
     assert(!html.includes('<pre') && !html.includes('JSON.stringify'), 'consent.html does not render raw manifest JSON (design note §4 exclusion)');
 
     assert(js.includes('window.ScopeDisplay'), 'consent.js reads the shared mapping off window.ScopeDisplay');
-    assert(js.includes('renderConsentScreen'), 'consent.js exposes the reusable render function for #2229 to call directly');
+    assert(js.includes('renderConsentScreen'), 'consent.js exposes the reusable render function for direct callers');
     assert(js.includes('See any other walls'), 'consent.js carries the verbatim §4 "will NOT" copy — other walls');
     assert(js.includes('private notes, lists, or calendar'), 'consent.js carries the verbatim §4 "will NOT" copy — private data');
     assert(js.includes('Act as you to other users'), 'consent.js carries the verbatim §4 "will NOT" copy — no impersonation');

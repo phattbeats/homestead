@@ -33,7 +33,7 @@ fs.mkdirSync(OUT_DIR, { recursive: true });
 function record(name, payload) {
   const file = path.join(OUT_DIR, name + '.json');
   fs.writeFileSync(file, JSON.stringify(payload, null, 2));
-  console.log(`[smoke-2711] wrote ${path.relative(process.cwd(), file)}`);
+  console.log(`[smoke-invite-signup] wrote ${path.relative(process.cwd(), file)}`);
 }
 
 function request(port, opts) {
@@ -77,7 +77,7 @@ function assertEq(actual, expected, label) {
 }
 
 async function main() {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-smoke-2711-'));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-smoke-invite-signup-'));
   const dbPath = path.join(tmpDir, 'life.db');
 
   // Migrate the DB so we have an admin user + walls + invites tables.
@@ -122,7 +122,7 @@ async function main() {
     const newInv = await request(port, { method: 'POST', path: '/api/invites', headers: { cookie: adminCookie }, body: { wall_slug: 'household', expires_in_days: 7, max_uses: 2, note: 'smoke' } });
     assertEq(newInv.status, 201, 'mint invite → 201');
     const code = newInv.body.id;
-    record('smoke-2711-invite-mint', newInv.body);
+    record('smoke-invite-signup-invite-mint', newInv.body);
 
     // 3. Public peek.
     const peek = await request(port, { path: '/api/public/invites/' + code });
@@ -130,7 +130,7 @@ async function main() {
     assertEq(peek.body.wall_slug, 'household', 'peek returns wall_slug');
     assertEq(peek.body.note, 'smoke', 'peek returns admin note');
     assertEq(peek.body.remaining, 2, 'peek returns remaining');
-    record('smoke-2711-peek', peek.body);
+    record('smoke-invite-signup-peek', peek.body);
 
     // 4. Signup.
     const signup = await request(port, { method: 'POST', path: '/api/public/invites/' + code + '/signup', body: { username: 'smokeuser', display: 'Smoke User', password: 'smoke-pass-1234' } });
@@ -139,7 +139,7 @@ async function main() {
     assertEq(signup.body.first_run, true, 'signup returns first_run=true');
     const cookie = extractCookie(signup.headers['set-cookie']);
     if (!cookie) { console.error('no session cookie from signup'); throw new Error('no_signup_cookie'); }
-    record('smoke-2711-signup', { status: signup.status, user: signup.body.user, wall_slug: signup.body.wall_slug, first_run: signup.body.first_run, redirect: signup.body.redirect });
+    record('smoke-invite-signup-signup', { status: signup.status, user: signup.body.user, wall_slug: signup.body.wall_slug, first_run: signup.body.first_run, redirect: signup.body.redirect });
 
     // 5. /api/me on the signup cookie.
     const meSigned = await request(port, { path: '/api/me', headers: { cookie } });
@@ -162,7 +162,7 @@ async function main() {
     assertEq(signin.status, 200, 're-signin → 200');
     const cookie2 = extractCookie(signin.headers['set-cookie']);
     if (!cookie2) { console.error('no session cookie from signin'); throw new Error('no_signin_cookie'); }
-    record('smoke-2711-signin', { status: signin.status, user: signin.body.user, wall_slug: signin.body.wall_slug });
+    record('smoke-invite-signup-signin', { status: signin.status, user: signin.body.user, wall_slug: signin.body.wall_slug });
 
     // 9. /api/me on the re-signin cookie.
     const meAgain = await request(port, { path: '/api/me', headers: { cookie: cookie2 } });
@@ -181,9 +181,9 @@ async function main() {
     verifyDb.close();
 
     if (process.exitCode) {
-      console.error('[smoke-2711] FAILED');
+      console.error('[smoke-invite-signup] FAILED');
     } else {
-      console.log('[smoke-2711] PASSED');
+      console.log('[smoke-invite-signup] PASSED');
     }
   } finally {
     child.kill('SIGTERM');

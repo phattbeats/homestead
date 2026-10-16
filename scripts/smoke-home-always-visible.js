@@ -2,7 +2,7 @@
 // acceptance smoke: after applyLayout() runs, the Home tab
 // in the bottom nav MUST remain visible (no data-disabled="1") and
 // the #page-home MUST also be visible — independent of which modules
-// the user has enabled. #2557's tighten-SPA-catch-all change hid
+// the user has enabled. The tighten-SPA-catch-all change hid
 // Home because data-p="home" is not a module room. This smoke boots a
 // fresh server, logs in as brandon, asserts that:
 //   1. The Home button in #appNav is visible (not hidden via
@@ -13,7 +13,7 @@
 //   4. Tapping Home shows the Today + On the list landing content.
 //   5. Other tabs (Tasks, Lists, Calendar, Apps, Porch) still hide
 //      when their module is disabled — i.e. we didn't break the
-//      #2557 "render every frame-mode module as a tab" behavior.
+//      "render every frame-mode module as a tab" behavior.
 //   6. 390x844 mobile-viewport screenshot of the post-login nav that
 //      INCLUDES the Home tab, captured by Playwright Chromium. We
 //      capture the screenshot on a fresh-install (all modules) state
@@ -37,9 +37,9 @@ const os = require('os');
 const path = require('path');
 const { chromium } = require('playwright');
 
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-smoke-2585-'));
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-smoke-home-always-visible-'));
 const port = 3110;
-const brandonPassword = 'smoke-2585-brandon-pw';
+const brandonPassword = 'smoke-home-always-visible-brandon-pw';
 const verifyOut = process.env.VERIFY_OUT
   ? path.resolve(process.env.VERIFY_OUT)
   : path.resolve(__dirname, '..', 'verify-out');
@@ -47,9 +47,9 @@ fs.mkdirSync(verifyOut, { recursive: true });
 
 process.env.DATA_DIR = tmpDir;
 process.env.PORT = String(port);
-process.env.ADMIN_PASSWORD = 'smoke-2585-admin-pw';
+process.env.ADMIN_PASSWORD = 'smoke-home-always-visible-admin-pw';
 process.env.BRANDON_PASSWORD = brandonPassword;
-process.env.SESSION_SECRET = 'smoke-2585-secret-padding-to-meet-min-32-chars';
+process.env.SESSION_SECRET = 'smoke-home-always-visible-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 // Scratch smokes use plain HTTP; production Secure cookies would not round-trip.
 process.env.HOMESTEAD_INSECURE_TEST_COOKIES = '1';
@@ -284,7 +284,7 @@ const consoleErrorSink = [];
 
     // 7. Disable most modules (keep tasks + porch) via API, then
     //    confirm Home STILL stays visible. This is the actual
-    //    regression: #2557 hid Home precisely because no module
+    //    regression: the catch-all change hid Home precisely because no module
     //    has room='home'.
     //
     //    We keep TWO modules enabled (not just feed) so the SPA
@@ -369,7 +369,7 @@ const consoleErrorSink = [];
 
       // Module tabs (Apps, Porch) should still be enabled in
       // this reduced layout; other modules should be data-disabled
-      // and visually hidden. #2557 contract: "render every
+      // and visually hidden. Contract: "render every
       // frame-mode module as a tab; hide when disabled".
       const appsDisabled = await page.evaluate(() => {
         const btn = document.querySelector('#appNav button[data-p="svc"]');
@@ -417,7 +417,7 @@ const consoleErrorSink = [];
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
   }
 })().catch((err) => {
-  console.error('smoke-2585 crashed:', err);
+  console.error('smoke-home-always-visible crashed:', err);
   console.log(`\n${pass} pass / ${fail} fail`);
   process.exit(1);
 });

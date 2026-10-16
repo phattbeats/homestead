@@ -37,7 +37,7 @@ process.env.NODE_ENV = 'production';
 // production-only Secure-cookie transport flag. The bootstrap helper used by
 // the unit-test chain already sets this test-only opt-out; keeping it here
 // makes the standalone `node scripts/smoke-postlogin-screenshot.js` entry
-// point behave the same way after #3200.
+// point behave the same way.
 process.env.HOMESTEAD_INSECURE_TEST_COOKIES = '1';
 
 function formatPageError(error) {

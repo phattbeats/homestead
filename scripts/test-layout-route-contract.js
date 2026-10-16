@@ -134,7 +134,7 @@ async function disable(cookie, key, body) {
 }
 
 async function main() {
-  console.log('=== #2587 layout-route contract — live evidence ===');
+  console.log('=== layout-route contract — live evidence ===');
   console.log(`SHA in main: 23a777e (PR #75)`);
   console.log(`DATA_DIR:   ${DATA_DIR}`);
   await waitForBoot();

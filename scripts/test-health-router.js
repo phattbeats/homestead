@@ -4,7 +4,7 @@
 // were relocated from server.js to routes/health.js (server.js
 // 4846 -> 4825 lines). The miss-risk here is small but non-zero: if
 // the mount is wrong, Watchtower's health poll goes red and stops
-// auto-rolling — same bug class as #2883 but on the most-probed
+// auto-rolling — same bug class as an earlier router-mount miss but on the most-probed
 // route in the system.
 //
 // What this test asserts (10 assertions):
@@ -45,7 +45,7 @@ process.env.PORT = String(port);
 process.env.ADMIN_PASSWORD = '3214-admin-pw-padding-to-meet-min-32-chars';
 // SESSION_SECRET is handled by scripts/_test-bootstrap.js (loaded
 // via `node --require`). Set NODE_ENV here so the production code
-// path is exercised (cookie.secure behavior, #3200 fail-closed).
+// path is exercised (cookie.secure behavior, fail-closed).
 process.env.NODE_ENV = 'production';
 // Lock commit SHA so the version assertion is deterministic.
 process.env.COMMIT_SHA = '3214-test-sha';

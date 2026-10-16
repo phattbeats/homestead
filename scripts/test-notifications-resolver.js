@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // acceptance tests for lib/notifications.js's resolve(): the
 // per-wall level gate, thread-mute override, and quiet-hours composition
-// (level decides IF, quiet hours decide WHEN — see the #2218 design
-// comment §2). Unit-level: calls resolve() directly against a bare DB,
+// (level decides IF, quiet hours decide WHEN — see the notifications design
+// notes). Unit-level: calls resolve() directly against a bare DB,
 // not through walls.createPost(), so these don't depend on wall/post
 // plumbing at all.
 

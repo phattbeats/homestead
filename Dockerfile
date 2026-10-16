@@ -6,7 +6,7 @@
 #
 # install git in the deps stage so npm's `prepare` script
 # (which runs `npm run hooks:install` → `git config core.hooksPath
-# .githooks`, added in #2354) can complete. Without git the
+# .githooks`) can complete. Without git the
 # prepare hook exits 127 and `npm ci` fails — every release from
 # v0.3.0.1 through v0.4.3 was silently broken. Adding git here keeps
 # the prepare hook as the single source of truth for hook setup.

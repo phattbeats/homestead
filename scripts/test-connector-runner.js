@@ -192,7 +192,7 @@ function komgaRoutes() {
 // ---- Tests --------------------------------------------------------------
 
 (async () => {
-  process.stdout.write('\n=== #2445 ConnectorRunner engine ===\n\n');
+  process.stdout.write('\n=== ConnectorRunner engine ===\n\n');
 
   // 1. Komga cycle: full path produces tile/card/entities.
   await testAsync('1. Komga installation runs through one full cycle', async () => {

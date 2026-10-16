@@ -33,7 +33,7 @@ reproduce.
 Self-review does not count as verification. The evidence must be reproducible
 by someone else from what is posted.
 
-## Policy — fresh-install acceptance (#2556 amendment)
+## Policy — fresh-install acceptance
 
 Acceptance criteria must be phrased as a **user-visible outcome from a fresh
 install**: an operator who has just booted the appliance — no manual config,
@@ -41,7 +41,7 @@ no out-of-band DB writes, no human-judged first-time grants — must reach the
 promised state via the documented UI/API surface alone. **If a verification
 script needs a manual DB write to pass, that write is the missing feature.**
 
-This rule closes the #2493 / #2556 class of "closed green, broken in
+This rule closes the class of "closed green, broken in
 the user's hands" defects: a smoke test that open-codes an
 `INSERT INTO user_groups` to grant the test user access to a wall, then
 asserts the wall is visible, proves nothing — it reproduces the manual
@@ -80,7 +80,7 @@ is structurally hard, not just discouraged:
 1. **CI smoke test** (`.github/workflows/test.yml`): headless Chromium loads
    `/`, logs in as a seeded user, fails the build on ANY `pageerror` or
    console error, and saves a screenshot artifact of the post-login home at
-   390px. This alone would have caught #2494.
+   390px. This alone would have caught the duplicate-declaration bug.
 2. **Release gate**: `npm test` includes the smoke test; tags don't get cut
    with it red. The release workflow (`.github/workflows/release.yml`) fires
    on `v*` tags and depends on the test workflow being green.
@@ -113,7 +113,7 @@ file in the PR description.
 ## Re-brief mechanism
 
 Every agent assigned a Homestead issue should be re-briefed on this policy in
-the same shape as the #2352 commit-identity re-brief: a comment on the
+the same shape as the commit-identity re-brief: a comment on the
 agent's most recent issue thread that links here and applies the
 closing-comment template. An issue closed without evidence gets reopened by
 whoever notices — the policy is the authority, no discussion needed.
@@ -128,7 +128,7 @@ only when the smoke test exists in CI (SHA), `verify.sh` runs green
 ### History
 
 - **2026-08-23** — Brandon issued the standing rule after the design review
-  findings. #2501 created as the enforcement vehicle.
+  findings.
 - **2026-08-23 (this commit)** — Initial implementation: CI smoke workflow
   (`.github/workflows/test.yml`), `scripts/verify.sh`, `scripts/smoke-postlogin-screenshot.js`,
   `docs/DEVELOPMENT.md`, this document. Caught and fixed the

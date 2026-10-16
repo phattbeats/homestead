@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// (#2855 phase 2) acceptance test for companion-cli/homestead-companion.js.
+// (phase 2) acceptance test for companion-cli/homestead-companion.js.
 //
 // Drives the CLI as a real subprocess against a live server.js instance,
 // end to end: mint a pairing code (as the browser session would),

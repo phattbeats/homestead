@@ -19,9 +19,9 @@ const os = require('os');
 const path = require('path');
 const { chromium } = require('playwright');
 
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-smoke-2707-'));
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-smoke-invite-welcome-'));
 const port = 3110;
-const adminPassword = 'smoke-2707-admin-pw';
+const adminPassword = 'smoke-invite-welcome-admin-pw';
 const verifyOut = process.env.VERIFY_OUT
   ? path.resolve(process.env.VERIFY_OUT)
   : path.resolve(__dirname, '..', 'verify-out');
@@ -30,7 +30,7 @@ fs.mkdirSync(verifyOut, { recursive: true });
 process.env.DATA_DIR = tmpDir;
 process.env.PORT = String(port);
 process.env.ADMIN_PASSWORD = adminPassword;
-process.env.SESSION_SECRET = 'smoke-2707-secret-padding-to-meet-min-32-chars';
+process.env.SESSION_SECRET = 'smoke-invite-welcome-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 // Scratch smokes use plain HTTP; production Secure cookies would not round-trip.
 process.env.HOMESTEAD_INSECURE_TEST_COOKIES = '1';
@@ -197,7 +197,7 @@ const consoleErrorSink = [];
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
   }
 })().catch((err) => {
-  console.error('smoke-2707 crashed:', err);
+  console.error('smoke-invite-welcome crashed:', err);
   console.log(`\n${pass} pass / ${fail} fail`);
   process.exit(1);
 });

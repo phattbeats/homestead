@@ -7,7 +7,7 @@
 // wire format (already covered by scripts/test-wall-sse.js).
 //
 // Run: node scripts/gate-two-browser-dod.js
-// Output: ./verify-out/gate-2821-{admin,brandon}-{before,after}.png
+// Output: ./verify-out/gate-two-browser-dod-{admin,brandon}-{before,after}.png
 
 'use strict';
 
@@ -17,7 +17,7 @@ const path = require('path');
 const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..');
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-gate-2821-'));
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-gate-two-browser-dod-'));
 const port = 3195;
 const verifyOut = process.env.VERIFY_OUT
   ? path.resolve(process.env.VERIFY_OUT)
@@ -26,9 +26,9 @@ fs.mkdirSync(verifyOut, { recursive: true });
 
 process.env.DATA_DIR = tmpDir;
 process.env.PORT = String(port);
-process.env.ADMIN_PASSWORD = 'gate-2821-admin-pw';
-process.env.BRANDON_PASSWORD = 'gate-2821-brandon-pw';
-process.env.SESSION_SECRET = 'gate-2821-secret';
+process.env.ADMIN_PASSWORD = 'gate-two-browser-dod-admin-pw';
+process.env.BRANDON_PASSWORD = 'gate-two-browser-dod-brandon-pw';
+process.env.SESSION_SECRET = 'gate-two-browser-dod-secret';
 process.env.NODE_ENV = 'production';
 process.env.ALLOW_HEADER_TRUST = '0';
 
@@ -83,8 +83,8 @@ function localRoutableIp() {
       return { name, value, url: base };
     }
 
-    const adminCookie = await loginCookie('admin', 'gate-2821-admin-pw');
-    const brandonCookie = await loginCookie('brandon', 'gate-2821-brandon-pw');
+    const adminCookie = await loginCookie('admin', 'gate-two-browser-dod-admin-pw');
+    const brandonCookie = await loginCookie('brandon', 'gate-two-browser-dod-brandon-pw');
 
     const adminCtx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const brandonCtx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -110,7 +110,7 @@ function localRoutableIp() {
     // Give the SSE connections a beat to establish.
     await new Promise((r) => setTimeout(r, 800));
 
-    await brandonPage.screenshot({ path: path.join(verifyOut, 'gate-2821-brandon-before.png'), fullPage: true });
+    await brandonPage.screenshot({ path: path.join(verifyOut, 'gate-two-browser-dod-brandon-before.png'), fullPage: true });
 
     const postText = `live-update proof ${Date.now()}`;
     await adminPage.fill('#textBody', postText);
@@ -125,8 +125,8 @@ function localRoutableIp() {
     }
     assert(seen, "brandon's open session shows admin's new post without reload");
 
-    await brandonPage.screenshot({ path: path.join(verifyOut, 'gate-2821-brandon-after.png'), fullPage: true });
-    await adminPage.screenshot({ path: path.join(verifyOut, 'gate-2821-admin-after.png'), fullPage: true });
+    await brandonPage.screenshot({ path: path.join(verifyOut, 'gate-two-browser-dod-brandon-after.png'), fullPage: true });
+    await adminPage.screenshot({ path: path.join(verifyOut, 'gate-two-browser-dod-admin-after.png'), fullPage: true });
 
     await adminCtx.close();
     await brandonCtx.close();

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Cascade enable/disable acceptance test.
-// (AC5 from #2200 §7: enable/disable cascades via requires[].)
+// (enable/disable cascades via requires[].)
 //
 // Verifies the cross-cutting cascade behavior at the lib/user-model.js
 // layer (no HTTP needed — same shape the API surface uses):

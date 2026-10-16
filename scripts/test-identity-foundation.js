@@ -193,7 +193,7 @@ console.log('identity foundation tests\n');
 
   // Now rename the username. The identity_links row still points at
   // the same user_id but the username no longer matches the
-  // provider_subject. This simulates the #2703 "link Authentik later"
+  // provider_subject. This simulates the "link Authentik later"
   // scenario where the user changed their display name and the
   // external identity subject is the stable canonical key.
   db.prepare('UPDATE users SET username = ? WHERE id = ?').run('casey-renamed', caseyId);

@@ -6,7 +6,7 @@
 // scripts/test-porch-sweep.js (ephemeral DATA_DIR, migrate the
 // primitives the module sits on top of, then drive it directly).
 //
-// "Foreign harness" is simulated exactly as #2201 models it: an
+// "Foreign harness" is simulated exactly as the app contract models it: an
 // installed_apps row + an app-scoped agent_tokens row carrying
 // read:mailbox/write:mailbox — there is no separate agent registry to
 // fake (same fixture shape as scripts/test-agent-endpoints.js's

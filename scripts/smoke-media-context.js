@@ -10,8 +10,8 @@
 // and the ffmpeg-avi keyframe extraction).
 //
 // Usage: node scripts/smoke-media-context.js
-// Output: verify-out/smoke-2644-{image,video}-context.json plus
-//         verify-out/smoke-2644-frame-001.jpg
+// Output: verify-out/smoke-media-context-{image,video}-context.json plus
+//         verify-out/smoke-media-context-frame-001.jpg
 
 'use strict';
 
@@ -140,7 +140,7 @@ async function loginAsBrandon() {
 }
 
 function multipart(fields) {
-  const boundary = '----smoke-2644-boundary';
+  const boundary = '----smoke-media-context-boundary';
   const parts = [];
   for (const f of fields) {
     const head = f.filename
@@ -177,7 +177,7 @@ async function runSmoke() {
     const imgCtx = await req('GET', `/api/media/${imgRow.id}/context`, { cookies: cookie });
     if (imgCtx.status !== 200) fatal(`image context ${imgCtx.status}: ${imgCtx.body.toString()}`);
     const imgPkg = JSON.parse(imgCtx.body.toString());
-    fs.writeFileSync(path.join(VERIFY_OUT, 'smoke-2644-image-context.json'), imgCtx.body);
+    fs.writeFileSync(path.join(VERIFY_OUT, 'smoke-media-context-image-context.json'), imgCtx.body);
     log('image context kind', imgPkg.kind);
     log('image context caption', imgPkg.caption);
 
@@ -200,7 +200,7 @@ async function runSmoke() {
     const vidCtx = await req('GET', `/api/media/${vidRow.id}/context`, { cookies: cookie });
     if (vidCtx.status !== 200) fatal(`video context ${vidCtx.status}: ${vidCtx.body.toString()}`);
     const vidPkg = JSON.parse(vidCtx.body.toString());
-    fs.writeFileSync(path.join(VERIFY_OUT, 'smoke-2644-video-context.json'), vidCtx.body);
+    fs.writeFileSync(path.join(VERIFY_OUT, 'smoke-media-context-video-context.json'), vidCtx.body);
     log('video context kind', vidPkg.kind);
     log('video frame count', vidPkg.frames.length);
     log('video firstFrame', vidPkg.firstFrame);
@@ -211,7 +211,7 @@ async function runSmoke() {
     if (vidPkg.frames.length > 0) {
       const f = await req('GET', vidPkg.frames[0].url, { cookies: cookie });
       if (f.status === 200) {
-        fs.writeFileSync(path.join(VERIFY_OUT, 'smoke-2644-frame-001.jpg'), f.body);
+        fs.writeFileSync(path.join(VERIFY_OUT, 'smoke-media-context-frame-001.jpg'), f.body);
         log('frame 0 saved', `${f.body.length} bytes`);
       } else {
         log('frame 0 fetch status', f.status);
@@ -224,10 +224,10 @@ async function runSmoke() {
     log('cache hit on second call', vidPkg2.cacheHit);
 
     console.log('\n[smoke] all assertions passed; output:');
-    console.log(`  - ${path.join(VERIFY_OUT, 'smoke-2644-image-context.json')}`);
-    console.log(`  - ${path.join(VERIFY_OUT, 'smoke-2644-video-context.json')}`);
+    console.log(`  - ${path.join(VERIFY_OUT, 'smoke-media-context-image-context.json')}`);
+    console.log(`  - ${path.join(VERIFY_OUT, 'smoke-media-context-video-context.json')}`);
     if (vidPkg.frames.length > 0) {
-      console.log(`  - ${path.join(VERIFY_OUT, 'smoke-2644-frame-001.jpg')}`);
+      console.log(`  - ${path.join(VERIFY_OUT, 'smoke-media-context-frame-001.jpg')}`);
     }
     serverProc.kill('SIGTERM');
     setTimeout(() => process.exit(0), 500);

@@ -98,7 +98,7 @@ async function loginRaw(username, password) {
   const app = require('../server.js');
 
   await new Promise((resolve, reject) => {
-    app.listen(port, '127.0.0.1', () => { console.log(`[test-2708] homestead on :${port}`); resolve(); });
+    app.listen(port, '127.0.0.1', () => { console.log(`[test-owner-recovery] homestead on :${port}`); resolve(); });
     process.on('uncaughtException', reject);
   });
 
@@ -148,7 +148,7 @@ async function loginRaw(username, password) {
   assertEq(unlinkOwner.removed, false, 'owner row NOT removed');
 
   // Non-owner (brandon) with single identity_link and NO local credential
-  // → blocks with `no_login_path` (the pre-#2708 behavior).
+  // → blocks with `no_login_path` (the unchanged non-owner behavior).
   // Make sure brandon has no local_credentials.
   dbDirect.prepare('DELETE FROM local_credentials WHERE user_id = (SELECT id FROM users WHERE username = ?)').run('brandon');
   // Remove all but one of brandon's identity_links.
@@ -353,7 +353,7 @@ async function loginRaw(username, password) {
 
   // Step C: POST /recover with the CORRECT token and ZERO auth headers
   // — no session, no x-authentik-* headers. This is the load-bearing
-  // assertion for #2708: the owner forgot their password AND
+  // assertion for owner recovery: the owner forgot their password AND
   // Authentik is unreachable, so there is nothing to authenticate
   // with except the token itself. If this required a prior admin
   // session it would be unreachable in the exact scenario it exists

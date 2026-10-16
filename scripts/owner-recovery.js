@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-// scripts/owner-recovery.js — #2708 host-side break-glass CLI
-// (ported forward as #2719).
+// scripts/owner-recovery.js — host-side break-glass CLI.
 //
 // Homestead's owner has a single break-glass path: a local password
 // verified against `local_credentials.password_hash`. When Authentik is

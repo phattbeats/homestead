@@ -291,8 +291,8 @@ assert(!badSnapshotOrderBy, 'recentActivity() ORDER BY sorts by created_at only'
   const selfRow = brandonActivity.find((a) => a.tag === `wall_post:household:bundle`);
   assert(!selfRow, 'author does not get an activity row for their own post');
 
-  // ---- Test 9: #2218 default level gates plain activity ----
-  console.log('\nTest 9: #2218 default level (mentions) suppresses a plain post');
+  // ---- Test 9: default level gates plain activity ----
+  console.log('\nTest 9: default level (mentions) suppresses a plain post');
   db.prepare("INSERT OR IGNORE INTO users (username, display, color, pass_hash, is_admin) VALUES ('kevin','Kevin','#111',?,0)").run('x');
   const kevin = db.prepare('SELECT id FROM users WHERE username = ?').get('kevin');
   // Put kevin in the household group so he's a wall member, then

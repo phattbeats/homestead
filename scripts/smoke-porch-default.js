@@ -6,7 +6,7 @@
 // closed green with a smoke test that open-coded an
 // `INSERT INTO user_groups` to grant brandon media-club membership,
 // then asserted the wall was visible. That bypassed exactly the
-// defect #2556 is fixing. This smoke uses NO direct DB writes —
+// defect this smoke guards against. This smoke uses NO direct DB writes —
 // the only mutations are POSTs to /api/* endpoints the product ships
 // with. If the seeded wall isn't visible after a fresh boot, this
 // smoke fails the same way a real user would experience it.
@@ -22,9 +22,9 @@ const os = require('os');
 const path = require('path');
 const { chromium } = require('playwright');
 
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-smoke-2556-'));
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-smoke-porch-default-'));
 const port = 3107;
-const brandonPassword = 'smoke-2556-brandon-pw';
+const brandonPassword = 'smoke-porch-default-brandon-pw';
 const verifyOut = process.env.VERIFY_OUT
   ? path.resolve(process.env.VERIFY_OUT)
   : path.resolve(__dirname, '..', 'verify-out');
@@ -32,9 +32,9 @@ fs.mkdirSync(verifyOut, { recursive: true });
 
 process.env.DATA_DIR = tmpDir;
 process.env.PORT = String(port);
-process.env.ADMIN_PASSWORD = 'smoke-2556-admin-pw';
+process.env.ADMIN_PASSWORD = 'smoke-porch-default-admin-pw';
 process.env.BRANDON_PASSWORD = brandonPassword;
-process.env.SESSION_SECRET = 'smoke-2556-secret-padding-to-meet-min-32-chars';
+process.env.SESSION_SECRET = 'smoke-porch-default-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 
 let pass = 0, fail = 0;

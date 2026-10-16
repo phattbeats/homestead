@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Homestead — tests for lib/connector-surfaces.js.
 //
-// Coverage (mapped to the #2447 acceptance bullets):
+// Coverage:
 //
 //   1. tile — health row updates within one cycle; status transitions
 //      from healthy → degraded → healthy follow the probe value.
@@ -16,7 +16,7 @@
 //      dispatcher (we don't bypass it; the test asserts the wall
 //      post lands in the same shape the dispatcher consumes).
 //   5. spec validator — surfaces with unknown surface types are
-//      rejected by the spec validator (already shipped by #2444;
+//      rejected by the spec validator (already shipped;
 //      covered here to lock the integration).
 //   6. placeholder grammar — closed grammar accepts
 //      `{name}` only; rejects `{{...}}`, `${...}`, nested braces,
@@ -129,7 +129,7 @@ function seedUser(db, username, isAdmin = 0) {
 }
 
 async function main() {
-  console.log('=== #2447 Connector Forge surface adapters ===\n');
+  console.log('=== Connector Forge surface adapters ===\n');
 
   // ----- 1. tile: health row updates within one cycle -----------------
   await testAsync('1. tile — health row upserts with classified status', async () => {
@@ -460,7 +460,7 @@ async function main() {
   });
 
   // ----- 6. placeholder grammar: closed, no general template --------
-  console.log('\n=== #2447 placeholder grammar (closed) ===\n');
+  console.log('\n=== placeholder grammar (closed) ===\n');
 
   // 6a: accepted
   assertEq(placeholder.resolve('{name}', { name: 'Saga' }), 'Saga', 'accepts {name}');

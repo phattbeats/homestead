@@ -10,7 +10,7 @@
 //
 // Behavior parity with the old chain:
 //   - Sequential (matches the `&&` semantics: stop at first failure).
-//   - Each script gets the #3200 bootstrap shim via `--require`.
+//   - Each script gets the bootstrap shim via `--require`.
 //   - Pass/fail exit code matches the script's own `process.exit`.
 //   - Prints the failing script name + exit code, then exits non-zero.
 //
@@ -28,7 +28,7 @@
 // Hard limits:
 //   - One runner for everything. Don't fork, don't add a second path.
 //   - Don't change exit-code semantics — scripts decide pass/fail themselves.
-//   - Don't touch the per-PHA test files. The point is to discover them.
+//   - Don't touch the individual test files. The point is to discover them.
 //   - Don't try to "auto-exclude" hanging scripts. If a script needs to be
 //     skipped, that's a separate fix (test bug, or environment gap), not
 //     something the runner should paper over.
@@ -137,10 +137,10 @@ async function main() {
       failed += 1;
       if (r.killed) {
         console.error(
-          `\n#3206: ${rel} killed after ${SCRIPT_TIMEOUT_MS}ms wall-clock (hang or stuck I/O)`
+          `\n${rel} killed after ${SCRIPT_TIMEOUT_MS}ms wall-clock (hang or stuck I/O)`
         );
       } else {
-        console.error(`\n#3206: ${rel} exited with code ${r.status} in ${r.ms}ms`);
+        console.error(`\n${rel} exited with code ${r.status} in ${r.ms}ms`);
       }
       console.error('Aborting remaining tests (matches `&&` chain semantics).');
       break;
@@ -148,7 +148,7 @@ async function main() {
   }
 
   if (failed > 0) {
-    console.error(`\n#3206: ${failed} test script(s) failed in ${Date.now() - t0}ms`);
+    console.error(`\n${failed} test script(s) failed in ${Date.now() - t0}ms`);
     process.exit(1);
   }
 
@@ -163,7 +163,7 @@ async function main() {
 
     if (mjsFiles.length > 0) {
       console.log(`\n=== porch (node --test, ${mjsFiles.length} files) ===`);
-      // pass --require so the #3200 bootstrap shim
+      // pass --require so the bootstrap shim
       // sets SESSION_SECRET / HOMESTEAD_INSECURE_TEST_COOKIES / NODE_ENV
       // before any test module imports server.js. Without it the
       // fail-closed loadSessionSecret throws "too short" on the porch
@@ -174,13 +174,13 @@ async function main() {
         env: process.env,
       });
       if (r.status !== 0) {
-        console.error(`\n#3206: porch tests exited with code ${r.status}`);
+        console.error(`\nporch tests exited with code ${r.status}`);
         process.exit(1);
       }
     }
   }
 
-  console.log(`\n#3206: all tests passed in ${Date.now() - t0}ms`);
+  console.log(`\nall tests passed in ${Date.now() - t0}ms`);
 }
 
 main().catch((e) => {

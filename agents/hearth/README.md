@@ -10,15 +10,10 @@ The built-in agent that ships with Homestead. Lives in this directory.
 
 ## How Hearth is wired into Homestead
 
-- **Drawer (#1617.6 / `lib/drawer-dispatch.js`)** — Hearth is the default character the drawer invokes when the user enables the Agent module and has no other drawer endpoint configured. The system prompt is sourced from `SOUL.md` at boot.
-- **First-enable flow (#2827.B / `lib/first-enable.js` — shipped by the B child)** — When a user enables the Agent module for the first time, the server seeds a `characters` row from these files and records `intro_source_sha`. The drawer's first-open path uses the intro line from `IDENTITY.md`.
-- **Server-side runtime (#2827.C / `lib/agent-runtime.js` — shipped by the C child)** — The LLM dispatcher short-circuits the external POST for Hearth and calls the model provider directly (BYOK key or server-staged `HEARTH_*_KEY` env).
-- **Porch participation (#2827.D / `lib/porch/participation-contract.js` — shipped by the D child, owner Van Dam)** — Hearth is a registered character in the porch sweep with register weights seeded from `SOUL.md`. Per-wall opt-out (`porch_wall_settings.voteOff`) gates Hearth.
-
-## Spec / parent
-
-- **#2827** — parent issue: "🔥 Hearth: The Homestead Built-In Agent + Personality".
-- **#2828** — this file's issue: "Hearth SOUL.md + IDENTITY.md + GLOSSARY rename".
+- **Drawer (`lib/drawer-dispatch.js`)** — Hearth is the default character the drawer invokes when the user enables the Agent module and has no other drawer endpoint configured. The system prompt is sourced from `SOUL.md` at boot.
+- **First-enable flow (`lib/first-enable.js`)** — When a user enables the Agent module for the first time, the server seeds a `characters` row from these files and records `intro_source_sha`. The drawer's first-open path uses the intro line from `IDENTITY.md`.
+- **Server-side runtime (`lib/agent-runtime.js`)** — The LLM dispatcher short-circuits the external POST for Hearth and calls the model provider directly (BYOK key or server-staged `HEARTH_*_KEY` env).
+- **Porch participation (`lib/porch/participation-contract.js`)** — Hearth is a registered character in the porch sweep with register weights seeded from `SOUL.md`. Per-wall opt-out (`porch_wall_settings.voteOff`) gates Hearth.
 
 ## Authoring rules
 

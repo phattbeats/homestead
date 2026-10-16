@@ -295,16 +295,16 @@ assert(/^\d+\.\d+\.\d+$/.test(pkg.version), 'package.json version is semver');
 
 // -----------------------------------------------------------------------------
 // Test 12: npm test discovery — verify test-analytics-capture.js is wired
-// into the test runner. #3206 replaced the 5,242-char `&&` chain in
+// into the test runner. The runner replaced the 5,242-char `&&` chain in
 // `npm test` with `node scripts/run-tests.js`, which globs
 // `scripts/test-*.js` automatically. So "wired in" now means: the
 // runner script exists, and this file matches its discovery pattern.
 // (No more checking the package.json string — that was the silent-skip
-// bug class #3206 was filed to eliminate.)
+// bug class the runner was built to eliminate.)
 // -----------------------------------------------------------------------------
 console.log('\nTest 12: test-analytics-capture wired into npm test');
 const runnerPath = path.join(__dirname, 'run-tests.js');
-assert(fs.existsSync(runnerPath), 'scripts/run-tests.js exists (#3206 runner)');
+assert(fs.existsSync(runnerPath), 'scripts/run-tests.js exists');
 const runnerSrc = fs.readFileSync(runnerPath, 'utf8');
 assert(/scripts\/test-\*\.js/.test(runnerSrc) || /test-\*\.js/.test(runnerSrc),
   'runner globs scripts/test-*.js');

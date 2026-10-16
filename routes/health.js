@@ -1,7 +1,7 @@
 // split server.js into Express routers.
 //
 // Second domain extracted — the two public probes (/api/health and
-// /api/version). Chosen as PR2 of the #3214 workstream because the
+// /api/version). Chosen as the second extraction because the
 // surface is trivial (2 handlers, no auth, no params, no body) and
 // gives us a smoke-test for the relocation pattern that will be
 // re-used for PR3-PR11 (agent-endpoints, auth, walls, mailbox, …).
@@ -15,7 +15,7 @@
 // (a stand-in listener that returned 200 while the real
 // route was never wired) applies even to a 2-handler module.
 //
-// Pattern (per the #3198 spec):
+// Pattern:
 //   routes/<domain>.js exports a factory that takes the shared deps
 //   (db, secretBox, version, commit) and returns an Express Router with
 //   just this domain's endpoints. server.js mounts it via
@@ -26,7 +26,7 @@
 //   - `db`:        better-sqlite3 instance from server.js. Health probe
 //                  runs a `SELECT 1` to confirm the connection is alive.
 //   - `secretBox`: lib/secret-box.js. Used for CALENDAR_CRED_KEY readiness
-//                  and #3200 sessionSecret readiness; these are
+//                  and sessionSecret readiness; these are
 //                  reported back in the JSON so operators can spot a
 //                  misconfigured box without dumping secrets.
 //   - `version`:   the package.json version (string). Reported on both

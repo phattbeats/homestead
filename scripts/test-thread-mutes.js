@@ -102,7 +102,7 @@ assertEq(emilyRow.delivered, 0, 'muted recipient does not get delivered=1');
 assertEq(emilyRow.skipped_reason, 'thread_muted', 'muted recipient row carries skipped_reason=thread_muted');
 
 const brandonSelfRow = db.prepare(`SELECT 1 FROM notification_log WHERE user_id = ? AND url LIKE '%' || ? || '%'`).get(brandon.id, post2Id);
-assert(!brandonSelfRow, 'the author (who did not mute anything) gets no row for their own post, same as before #2218');
+assert(!brandonSelfRow, 'the author (who did not mute anything) gets no row for their own post, same as before thread mutes');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

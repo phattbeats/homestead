@@ -22,7 +22,7 @@
 // / `gazette_editions` row it writes. This job reuses the most recent
 // tz on record for the user (falling back to `DEFAULT_TZ`) as the best
 // available per-user schedule offset without inventing new storage.
-// Flagged explicitly in the #2853 report as a real limitation, not
+// Flagged explicitly as a real limitation, not
 // a silent guess.
 
 'use strict';

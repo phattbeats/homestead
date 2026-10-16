@@ -6,8 +6,8 @@
 //
 //   1. Pure-helper unit tests via vm.runInContext — runs the inlined
 //      helpers from public/components/feed.js in a Node sandbox with
-//      mocked DOM/window globals. This is the same boundary #2219
-//      used for its inlined install-coach helpers, and matches the
+//      mocked DOM/window globals. This is the same boundary the
+//      install-coach tests use for their inlined helpers, and matches the
 //      "vanilla JS, no build" reality of Homestead's public/ folder.
 //
 //   2. Live end-to-end smoke against a real server.js — the same
@@ -108,8 +108,8 @@ assert(/components\/feed\.js/.test(indexHtml), 'index.html loads /components/fee
 assert(/components\/feed\.js/.test(swSrc), 'sw.js precaches /components/feed.js');
 
 // Size budget — the component must stay small (vanilla JS, no framework).
-// Bumped from 40 KB to 50 KB during #2846 cleanup: #2657 (delete-own-post)
-// tipped it to 40,862 bytes and #2831 (Hearth on the Porch) to 41,248.
+// Bumped from 40 KB to 50 KB: delete-own-post tipped it to 40,862
+// bytes and Hearth on the Porch to 41,248.
 // 50 KB is the next clean plateau; reconfirm when the next 5 KB tier is hit.
 const FEED_COMPONENT_MAX_BYTES = 50 * 1024;
 const componentBytes = componentSrc.length;

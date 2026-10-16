@@ -2,7 +2,7 @@
 // acceptance tests for the ConnectorSpec schema, validator,
 // JSONPath parser, and Komga reference template.
 //
-// Acceptance criteria (from #2444 issue body):
+// Acceptance criteria:
 //   * Schema is versioned (homestead.connector/v1).
 //   * Validator unit tests cover rejection cases:
 //       - POST method

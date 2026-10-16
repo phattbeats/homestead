@@ -2,7 +2,7 @@
 // standalone /forum page and the legacy /porch.html redirect.
 //
 // Extracted from server.js following the routes/health.js pattern, so the
-// forum surface does not re-inflate server.js (scripts/test-3214 guards
+// forum surface does not re-inflate server.js (scripts/test-health-router.js guards
 // its line count). Paths are byte-identical to the inline handlers:
 // server.js mounts this router at the app root.
 //

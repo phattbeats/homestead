@@ -4,7 +4,7 @@
 //
 // Previously the install coach fired as a full-screen sheet on the
 // login transition, covering the feed before the user had seen
-// anything. #2219's decided rule is "situated" — the coach
+// anything. The decided rule is "situated" — the coach
 // arms only after a real signal (first action, 60–90s dwell, or
 // second session), never on login. After the fix
 // maybeShowInstallCoach() arms timers/listeners instead of opening
@@ -93,10 +93,10 @@ async function main() {
     //
     // CRITICAL: do NOT use page.click('#welcomeDismiss') here —
     // clicking ANYWHERE triggers installCoach's capture-phase
-    // `first_action` listener (arm #2 in #2498), which would
+    // `first_action` listener (the second arm), which would
     // open the install coach sheet and make the assertion below
     // fail for the wrong reason. Dismiss via the API the SPA itself
-    // calls (same path as smoke-2556's defensive fallback). Then
+    // calls (same path as smoke-porch-default.js's defensive fallback). Then
     // close the modal in-page WITHOUT triggering a click event.
     try {
       await page.waitForSelector('#welcomeDismiss', { state: 'visible', timeout: 5000 });

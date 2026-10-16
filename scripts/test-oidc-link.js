@@ -113,7 +113,7 @@ async function waitForServer() {
 
   const app = require('../server.js');
   await new Promise((resolve, reject) => {
-    app.listen(3193, '127.0.0.1', () => { console.log('[test-2706] homestead on :3193'); resolve(); });
+    app.listen(3193, '127.0.0.1', () => { console.log('[test-oidc-link] homestead on :3193'); resolve(); });
     process.on('uncaughtException', reject);
   });
   await waitForServer();
@@ -449,4 +449,4 @@ async function waitForServer() {
   mock.stop();
   console.log(`\nResults: ${pass} pass, ${fail} fail`);
   process.exit(fail > 0 ? 1 : 0);
-})().catch(e => { console.error('test-2706 crashed:', e); process.exit(2); });
+})().catch(e => { console.error('test-oidc-link crashed:', e); process.exit(2); });

@@ -7,7 +7,7 @@
 // subprocess. Each test runs migrate() on a fresh DB so they're
 // independent and idempotent.
 //
-// Acceptance covered (per #2203 issue body):
+// Acceptance covered:
 //   * lib/modules.js exports REGISTRY + DEFAULT_ENABLED = ['wall'].
 //   * Six built-in entries present: wall, lists, calendar, chores,
 //     apps, agent.
@@ -20,10 +20,10 @@
 //     drift.
 //   * DEFAULT_ENABLED references are valid registered keys.
 //
-// Out of scope (these are PHAs 2200.3 / 2200.4 / 2201 etc.):
+// Out of scope (covered elsewhere):
 //   * HTTP API routes
 //   * Frontend rendering
-//   * Third-party install flow (#2201 children)
+//   * Third-party install flow
 
 'use strict';
 
@@ -56,7 +56,7 @@ function freshDb() {
   return { db, tmpDir, dbPath };
 }
 
-// The grandfathered six: the pre-modularity modules #2202's
+// The grandfathered six: the pre-modularity modules the
 // one-time backfill grants to users that exist at migration time. This
 // list is HISTORY and does not grow — a module registered after that
 // backfill shipped is never retroactively enabled for anyone.
@@ -95,7 +95,7 @@ console.log('module-registry tests\n');
 }
 
 // -----------------------------------------------------------------------------
-// 2. Required fields per the #2201 manifest contract.
+// 2. Required fields per the manifest contract.
 // -----------------------------------------------------------------------------
 {
   console.log('\nTest 2: every built-in has all 16 required fields with correct types');
@@ -155,7 +155,7 @@ console.log('module-registry tests\n');
   assert(!!brandon, 'brandon user exists after migrate');
 
   let enabled = userModel.getEnabledModules(db, brandon.id);
-  // Backfill from #2202 enables everything. So all six should be enabled, in order.
+  // The backfill enables everything. So all six should be enabled, in order.
   assertEq(enabled.map(e => e.key), SIX, 'brandon has all six modules enabled, in registry order');
   // Each enabled entry must carry the full registry entry + enabled_at.
   for (const e of enabled) {
@@ -180,9 +180,9 @@ console.log('module-registry tests\n');
   const newUser = db.prepare('SELECT id FROM users WHERE username LIKE ? ORDER BY id DESC LIMIT 1').get('test-new-user-%');
   assert(!!newUser, 'test-new-user provisioned');
   // Backfill only runs at migrate() time, so a fresh provisionOrClaim has no rows yet.
-  // getEnabledModules should return []. (The #2202 backfill does run at migrate()
+  // getEnabledModules should return []. (The backfill does run at migrate()
   // for the seeded users; for users created later via provisionOrClaim, the new
-  // DEFAULT_ENABLED provision happens in a later PHA — out of scope here.)
+  // DEFAULT_ENABLED provision happens elsewhere — out of scope here.)
   enabled = userModel.getEnabledModules(db, newUser.id);
   assertEq(enabled, [], 'fresh user with no user_modules rows → getEnabledModules returns []');
 
@@ -289,7 +289,7 @@ console.log('module-registry tests\n');
   // the dispatch rule in public/modules.html + public/index.html). The
   // 16-field contract is preserved: `icon` is still a non-empty
   // string. The registry's wall entry is the source of truth.
-  assert(wall && wall.key === 'wall' && wall.name === 'The Forum' && wall.icon === '/modules/porch.svg', 'default entry is the full wall registry entry (wall icon is /modules/porch.svg per #2846)');
+  assert(wall && wall.key === 'wall' && wall.name === 'The Forum' && wall.icon === '/modules/porch.svg', 'default entry is the full wall registry entry (wall icon is /modules/porch.svg)');
 }
 
 // -----------------------------------------------------------------------------
@@ -317,5 +317,5 @@ console.log('module-registry tests\n');
   assertEq(userModel.USER_MODULE_KEYS, REGISTERED, 'userModel.USER_MODULE_KEYS matches the registry');
 }
 
-console.log(`\n#2203: ${pass} passed, ${fail} failed`);
+console.log(`\nmodules: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

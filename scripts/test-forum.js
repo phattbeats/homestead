@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// (parent #4076) acceptance tests for The Forum: Porch rename,
+// Acceptance tests for The Forum: Porch rename,
 // /forum route + /porch.html redirect, always-/forum default_route, the
 // additive forum schema, seeded starter boards, and the Woodgrain read API
 // (board index, thread list, thread view, who's online, stats/birthdays).

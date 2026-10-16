@@ -26,10 +26,10 @@ const os = require('os');
 const path = require('path');
 const { chromium } = require('playwright');
 
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-smoke-2583-'));
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-smoke-invite-bounce-'));
 const port = 3108;
-const adminPassword = 'smoke-2583-admin-pw';
-const brandonPassword = 'smoke-2583-brandon-pw';
+const adminPassword = 'smoke-invite-bounce-admin-pw';
+const brandonPassword = 'smoke-invite-bounce-brandon-pw';
 const verifyOut = process.env.VERIFY_OUT
   ? path.resolve(process.env.VERIFY_OUT)
   : path.resolve(__dirname, '..', 'verify-out');
@@ -39,7 +39,7 @@ process.env.DATA_DIR = tmpDir;
 process.env.PORT = String(port);
 process.env.ADMIN_PASSWORD = adminPassword;
 process.env.BRANDON_PASSWORD = brandonPassword;
-process.env.SESSION_SECRET = 'smoke-2583-secret-padding-to-meet-min-32-chars';
+process.env.SESSION_SECRET = 'smoke-invite-bounce-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 
 let pass = 0, fail = 0;

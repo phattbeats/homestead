@@ -3,7 +3,7 @@
 // "Adding a new module to the registry does NOT backfill user_modules
 // rows for existing users; new users see {wall} only."
 //
-// Per #2202 (migration discipline) + #2203 (registry), the
+// Per the migration discipline + registry design, the
 // DEFAULT_ENABLED list is the SINGLE source of truth for what a
 // brand-new account sees. Adding a 7th module to the registry (e.g.
 // 'recipes') MUST NOT cause existing users to receive a row in
@@ -27,7 +27,7 @@
 //      module does NOT include an INSERT-backfill for existing
 //      users. We assert this by inspecting the migration text in
 //      lib/user-model.js — no INSERT OR IGNORE INTO user_modules
-//      with the new key should exist outside the v3 #2202
+//      with the new key should exist outside the v3
 //      backfill (which uses INSERT OR IGNORE on the cross-join of
 //      existing users × all current keys, NOT a per-key
 //      INSERT-into-existing-users).
@@ -105,7 +105,7 @@ const SYNTHETIC_ORDER = [...modules.REGISTRY_ORDER, 'recipes'];
   assertEq(r.key, 'recipes', 'recipes.key === "recipes"');
   // Derived, not a frozen count: this test simulates adding ONE more
   // module to whatever the registry currently holds, so it must not
-  // re-break every time a real module lands (#2659 added gazette).
+  // re-break every time a real module lands (gazette was one such).
   assertEq(SYNTHETIC_ORDER.length, modules.REGISTRY_ORDER.length + 1,
     'synthetic order is the live registry plus one');
 }
