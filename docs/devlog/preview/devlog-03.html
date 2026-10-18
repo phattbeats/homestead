@@ -1,0 +1,231 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Homestead devlog, Part 3: The Porch: a feed, then rooms</title><style>body{margin:0;background:#FFFBF5;color:#2B2622;font:20px/1.65 Georgia,serif}
+header.site{background:#2B2622;color:#f6e4c3;padding:14px 4vw;font:600 15px system-ui;letter-spacing:.08em;display:flex;gap:12px;align-items:center}
+header.site b{color:#fff}header.site a{color:inherit;text-decoration:none}.stripe{height:5px;background:linear-gradient(90deg,#6D7B59 0 33%,#d49a40 33% 66%,#C4703C 66%)}
+main{max-width:740px;margin:0 auto;padding:40px 20px 80px}.meta{font:14px system-ui;color:#7a7269;text-transform:uppercase;letter-spacing:.05em}
+h1{font:800 44px/1.15 system-ui;margin:.3em 0}.excerpt{font:22px/1.5 system-ui;color:#4b4624}
+h2{font:700 30px system-ui;margin-top:1.8em;border-bottom:2px solid #4b4624;padding-bottom:.2em}h3{font:700 23px system-ui}
+img{max-width:100%;display:block;margin:1.4em auto 0;border-radius:4px}img[src$=".png"]{max-height:760px}.feature{width:100%;max-height:none!important;margin:1em 0 2em}
+em.cap{display:block;text-align:center;font:14px/1.4 system-ui;color:#7a7269;margin:.5em 0 1em}
+pre{background:#2B2622;color:#f3ece2;padding:18px;border-radius:6px;overflow:auto;font:14px/1.5 ui-monospace,Menlo,monospace;border-left:4px solid #d49a40}
+code{font:0.85em ui-monospace,Menlo,monospace;background:#f1ebe1;padding:1px 4px;border-radius:3px}pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%;font:15px/1.4 system-ui;margin:1.4em 0}th{background:#4b4624;color:#fff;text-align:left}th,td{border:1px solid #d8cfc2;padding:7px 9px}tr:nth-child(even) td{background:#f6efe4}
+blockquote{margin:1.6em 0;padding:14px 18px;background:#fbf1dc;border-left:5px solid #d49a40;font:17px/1.55 system-ui}
+blockquote.warn{background:#fbe9e0;border-color:#C4703C}
+footer{border-top:1px solid #e5ddd0;margin-top:60px;padding-top:20px;font:15px system-ui;color:#7a7269}</style>
+<header class="site"><a href="index.html"><b>Homestead</b> · devlog</a></header><div class="stripe"></div><main>
+<div class="meta">Part 3 · DRAFT PREVIEW, NOT PUBLISHED</div><h1>Homestead devlog, Part 3: The Porch: a feed, then rooms</h1><p class="excerpt">How a complaint about Instagram became a chronological wall, then the front door of the whole app, and how everything else turned into rooms you add one at a time.</p><img class="feature" src="../img/03-porch-feed.png" alt="">
+<p><img src="../img/03-porch-feed.png" alt="The Porch feed on a phone: posts with reactions and comments"></p>
+<em class="cap">FIG 3-1 — The Porch as of v0.5.24, on a demo instance (demo data, users alex and sam). Posts, a reaction row, comments. Newest first, and that&#39;s the only sort there is.</em>
+<p>Part 2 got people through the front door. This part is what they find inside. For three weeks the answer was &quot;everything&quot;. On 2026-08-19 it became &quot;a feed, and nothing else&quot;, and the rest of the app turned into rooms you add yourself. As before, an agent wrote most of the code; I made the calls and filed the complaints.</p>
+<h2>1. The Porch Wall</h2>
+<p>It started with a complaint. Some friends and I wanted to send each other memes, and we hated Instagram for it: you open it to check a DM and get marched through the discovery feed first. The issue that came out of it was titled &quot;Instagram&#39;s one good feature, without the algorithm&quot;, and one line framed the whole thing:</p>
+<blockquote>
+<p>Homestead&#39;s entire thesis is payload without tax.</p>
+</blockquote>
+<p>v0.2.0 shipped the same day, 2026-08-19. Three pieces:</p>
+<ul>
+<li><strong>A media primitive.</strong> Content-addressed uploads under <code>/data/media/</code>, a sharp downscale plus a 320px thumbnail on the server, retention set per upload, and a sweep on the existing 30-minute scheduler.</li>
+<li><strong>Walls.</strong> Group walls (everyone in a group sees them) and direct walls (shared person to person). Posts, flat comment threads, emoji reactions that toggle idempotently.</li>
+<li><strong>The UI.</strong> A composer with drag-drop and paste-from-clipboard, a five-emoji reaction row, and an <strong>Older</strong> button. No infinite scroll.</li>
+</ul>
+<h3>1.1 The constitution</h3>
+<p>The issue had a section headed &quot;Constitutional constraints (non-negotiable, from the founding complaint)&quot;: no ranking, no recommendations, no discovery, no strangers, no unread-pressure mechanics. The code holds each one:</p>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Where it&#39;s enforced</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>No ranking</td>
+<td>Every listing in <code>lib/walls.js</code> is <code>ORDER BY created_at</code>. <code>scripts/test-walls.js</code> greps that file and fails CI if any <code>ORDER BY</code> sorts by anything else.</td>
+</tr>
+<tr>
+<td>No strangers</td>
+<td><code>assertMember(slug, userId)</code> runs before every read and write.</td>
+</tr>
+<tr>
+<td>No discovery</td>
+<td>A wall you&#39;re not in returns 404, not 403. You can&#39;t learn it exists.</td>
+</tr>
+<tr>
+<td>No endless feed</td>
+<td>20 posts per page, hard cap 50, an Older button.</td>
+</tr>
+</tbody></table>
+<p>Why &quot;Porch&quot; and not &quot;Feed&quot;? The glossary answers in one line:</p>
+<blockquote>
+<p>the wall is the data model; the Porch is where you sit with it.</p>
+</blockquote>
+<p>The same glossary admits it exists partly because I once called the Porch &quot;the garden?&quot;.</p>
+<h2>2. The reframe: the feed is the door</h2>
+<p>The same day came the reframe that rearranged the whole app. It opens:</p>
+<blockquote>
+<p>A new user&#39;s first login shows a social feed and essentially nothing else.</p>
+</blockquote>
+<p>The reasoning: nobody joins a platform for someone else&#39;s chore list. The wall is the only surface with value to a stranger. &quot;It is the door; the rest is the house.&quot; You arrive with one room and build the rest.</p>
+<p>My rule for scope was that this is &quot;visibility flags on already-shipped features, NOT a plugin architecture.&quot; A static registry, a per-user table, conditional rendering. No loader, no marketplace.</p>
+<p>Then I added a few rules in the comments:</p>
+<ul>
+<li><strong>One registry for everyone.</strong> Built-ins and third-party apps register through the same shape. No private internal fields.</li>
+<li><strong>New modules ship default-off.</strong> &quot;Nobody logged in today should ever find a feature they did not ask for.&quot;</li>
+<li><strong>Keys are stable.</strong> A module can be renamed in the UI without breaking anyone&#39;s enablement row. (Hold that thought until the end.)</li>
+</ul>
+<p>Two more decisions came from the cold start. Invites go to a wall, not the app, so your first screen has people on it (mechanics in Part 2). And the agent is a module on purpose: it&#39;s bring-your-own-key, and the &quot;paste your key&quot; ask should come after someone already likes the place.</p>
+<h2>3. Modular Homestead (v0.3.0)</h2>
+<p>v0.3.0 shipped on 2026-08-21.</p>
+<h3>3.1 The registry</h3>
+<p><code>lib/modules.js</code> is a frozen JS object. Each entry has 16 fields, the same 16 a third-party manifest has to have. Here&#39;s the Porch entry as it shipped in v0.3.0, trimmed:</p>
+<pre><code class="language-js">const REGISTRY = Object.freeze({
+  wall: {
+    key: &#39;wall&#39;,
+    name: &#39;Porch&#39;,
+    description: &#39;A feed of posts from people you share a wall with.&#39;,
+    room: &#39;porch&#39;,
+    requires: [],
+    tier: &#39;core&#39;,
+    url: &#39;/porch.html&#39;,
+    open_mode: &#39;frame&#39;,
+    scopes: [&#39;read:walls&#39;, &#39;write:walls:post&#39;],
+    ...
+    default_enabled: true, // Amendment 2: only wall is on by default
+  },
+  ...
+});
+const DEFAULT_ENABLED = Object.freeze([&#39;wall&#39;]);
+</code></pre>
+<p><code>lib/registry-validate.js</code> runs at boot and throws on the first drift: a missing or mistyped field, an unknown <code>open_mode</code>, a <code>requires[]</code> pointing at an unregistered key, or a registry key missing from the database&#39;s CHECK constraint. Third-party manifests go through the same <code>validateEntryShape</code> at install. Another test greps the repo for hardcoded module keys like <code>&#39;lists&#39;</code>, so nav and layout can only learn about modules from the registry.</p>
+<h3>3.2 Per-user rooms, and a backfill that did the opposite</h3>
+<p>Enablement lives in <code>user_modules(user_id, module_key, enabled_at)</code>. <code>enabled_at</code> set means on, <code>NULL</code> means off. Rows are never deleted, so turning Chores off doesn&#39;t touch a single task.</p>
+<p>The first backfill would have quietly undone the whole design. It granted all six modules to every user on every boot, so anyone who signed up later got the full house. Its test asserted the buggy behavior as correct. A review caught it before the rest of the release shipped. The fix is two passes: a one-time grandfather pass giving everyone who existed at migration time all six, then an every-boot pass giving users with zero rows only <code>DEFAULT_ENABLED</code>. A separate test adds a pretend seventh module, <code>recipes</code>, and checks nobody gets it for free.</p>
+<h3>3.3 Requires and dependents</h3>
+<p>Chores requires Lists. That&#39;s the only edge in v0.3.0, and it still needs rules both ways:</p>
+<p><img src="../diagrams/devlog-03-requires.svg" alt="Module graph: chores requires lists, gazette requires agent, wall and calendar; side panels show the 409 responses and the cascade flags"></p>
+<em class="cap">FIG 3-2 — The requires graph and the two refusals. Each refusal comes with an opt-in cascade flag.</em>
+<p>Without a flag, <code>enableModule</code> throws <code>requires_unmet</code> with the missing list and the route returns 409. The add-a-room sheet retries with <code>withRequirements: true</code>, which enables both in one transaction. Disabling mirrors it with <code>dependents_active</code> and <code>withDependents</code>. Both walk the graph transitively.</p>
+<h3>3.4 The layout ladder</h3>
+<p><code>GET /api/me/layout</code> runs <code>computeLayout()</code> over the user&#39;s enabled set and picks one of four shapes:</p>
+<pre><code class="language-js">if (tiles.length === 0) {
+  layout = &#39;empty&#39;;
+} else if (tiles.length === 1) {
+  layout = &#39;feed-only&#39;;
+} else if (tiles.length &lt;= 3) {
+  layout = &#39;feed-tabs&#39;;
+} else {
+  layout = &#39;meadow&#39;;
+}
+</code></pre>
+<p><img src="../diagrams/devlog-03-layout-ladder.svg" alt="Four rising steps: empty, feed-only, feed-tabs, meadow, with the chrome each one shows"></p>
+<em class="cap">FIG 3-3 — The ladder. Everyone starts on rung 1. The Meadow is a layout, not a room.</em>
+<p>So one feed could sit on any rung, the agent pulled the Porch out into <code>public/components/feed.js</code> (<code>HomesteadFeed.mount(target, opts)</code>). A feed-only user is redirected to the standalone Porch page; everyone else gets the same component as a tab in the SPA, found by the registry&#39;s <code>room</code> field rather than the string <code>&#39;wall&#39;</code>.</p>
+<p>Honest footnote: v0.3.0 shipped the layout API before the SPA read it. The consumer and the add-a-room sheet at <code>/modules.html</code> landed on 2026-08-23, with a Playwright smoke that checks all four layouts at 390×844.</p>
+<p><img src="../img/03-modules.png" alt="Room settings: a list of modules with toggles"></p>
+<em class="cap">FIG 3-4 — Room settings on a demo instance (demo data, users alex and sam). This is where you turn rooms on.</em>
+<h2>4. Notifications and @mentions (v0.4.0)</h2>
+<p>v0.4.0, also 2026-08-21, made notifications per wall. Each member picks a level per wall:</p>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Wall posts</th>
+<th>@mentions of you</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>all</code></td>
+<td>yes, bundled</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><code>mentions</code></td>
+<td>no</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><code>none</code></td>
+<td>no</td>
+<td>no</td>
+</tr>
+</tbody></table>
+<p>New joins default to <code>mentions</code>; existing members kept their old behavior. The resolver in <code>lib/notifications.js</code> runs in a fixed order, and the order is the policy:</p>
+<pre><code class="language-js">} else if (kind === &#39;wall_post&#39;) {
+  if (level === &#39;none&#39;) return { deliver: false, skippedReason: &#39;level_none&#39; };
+  if (level === &#39;mentions&#39;) return { deliver: false, skippedReason: &#39;level_mentions_no_match&#39; };
+}
+...
+if (isThreadMuted(userId, postId)) return { deliver: false, skippedReason: &#39;thread_muted&#39; };
+if (!force &amp;&amp; isInQuietHours(userId, new Date())) return { deliver: false, skippedReason: &#39;quiet_hours&#39; };
+</code></pre>
+<p>Level decides <em>if</em>. Quiet hours (Part 1) decide <em>when</em>. A muted thread stays muted even when you&#39;re mentioned in it. A quiet-hours skip still writes a log row. Posts within 15 minutes collapse into one push (&quot;3 new posts on Memes&quot;); mentions never bundle. And you can only @mention members of that wall.</p>
+<h2>5. The empty Porch on a fresh install</h2>
+<p>On 2026-08-24 a fresh install showed &quot;No walls yet&quot;. <code>GET /api/walls</code> returned <code>{&quot;walls&quot;:[]}</code>.</p>
+<p>The seeded wall belonged to the <code>media-club</code> group. The user seed put everyone in <code>household</code>. So the one room every new user gets was a room nobody could see. The smoke test had been hiding it, by granting media-club membership with a raw <code>INSERT INTO user_groups</code> first. The fix seeded a <code>household</code> wall and added an admin sheet for managing walls.</p>
+<blockquote class="warn">
+<p><strong>WARNING</strong> The real fix was a rule, added to the Definition of Done: verification scripts may not perform setup the product itself cannot perform. If the test needs a database write that no user could do, the test is testing a different product.</p>
+</blockquote>
+<p>A day later, a cousin: the layout API was advertising routes like <code>/lists.html</code> that hadn&#39;t existed since the SPA took over. Now every entry has an explicit <code>route</code>, and only the Porch advertises one.</p>
+<h2>6. Shared lists (v0.4.4)</h2>
+<p>Lists had been in the registry since v0.3.0 and on for every existing user, but <code>GET /api/lists</code> returned 404. v0.4.4, on 2026-08-28, made it real:</p>
+<pre><code class="language-sql">CREATE TABLE IF NOT EXISTS list_items (
+  id          TEXT PRIMARY KEY,
+  list_id     TEXT NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+  label       TEXT NOT NULL,
+  ...
+  checked     INTEGER NOT NULL DEFAULT 0,
+  checked_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  ...
+  ...
+);
+</code></pre>
+<p>A fresh install gets a &quot;Groceries&quot; list. Lists archive instead of deleting, items keep their order, and a checkbox updates instantly and rolls back if the server says no.</p>
+<p><img src="../img/03-lists.png" alt="The Groceries list with a few items, some checked"></p>
+<em class="cap">FIG 3-5 — The Groceries list on a demo instance (demo data, users alex and sam).</em>
+<h2>7. Two people on one wall</h2>
+<p>Until 2026-08-30, no two people had been on a Homestead wall at the same time. Then the first outside tester and I were, and the bug reports started.</p>
+<h3>7.1 One button in the middle</h3>
+<p>The day before, I&#39;d flagged the phone layout. A bottom bar built for five destinations, holding one, looks broken. My note:</p>
+<blockquote>
+<p>Including just one button in the middle on the phone since there&#39;s no other buttons to hit (except the profile / settings or whatever)</p>
+</blockquote>
+<p>I didn&#39;t want to walk every screen myself, so an agent did: a fresh account through a real invite, 18 screens at 390×844, in a scripted browser. The Porch landing page had a header, a composer and the feed. No nav, no avatar, no settings, no way to add a room, no back button.</p>
+<p>It offered four directions in words. I answered &quot;not familiar enough with these terms. give me an example screenshot of each&quot;, so it drew four comps. I picked A, a compact floating button. What shipped: the composer is collapsed by default, a centered 64px FAB opens it, and a &quot;⋯&quot; chip in the header holds password change and logout. Both are opt-in flags on <code>feed.js</code>, so the SPA layouts didn&#39;t change.</p>
+<p>The comp&#39;s chip also listed &quot;Add rooms&quot;. The shipped one didn&#39;t.</p>
+<h3>7.2 &quot;need a way to navigate the rest of the app&quot;</h3>
+<p>My next report. The add-a-room sheet worked, but the only link to it lived inside the SPA, and a one-module user never reaches the SPA: <code>boot()</code> sends them straight to the standalone Porch page.</p>
+<p>v0.5.6 added a quiet &quot;+ Add a room&quot; pill there, less prominent than the FAB so posting stays the obvious move. Enable a second room and you move up the ladder into the SPA, so the standalone page only ever handles rung 1.</p>
+<h3>7.3 &quot;it didn&#39;t auto refresh&quot;</h3>
+<p>The other report, minus a name: &quot;when [they] posted it didn&#39;t auto refresh.&quot;</p>
+<p>The issue for the fix said to reuse the SSE wire format the agent drawer already used, not add a second realtime system: &quot;Two realtime transports in one app is how you get bugs nobody can reproduce.&quot; v0.5.7 added <code>lib/wall-events.js</code>, which is 30 lines including comments. The core:</p>
+<pre><code class="language-js">const bus = new EventEmitter();
+bus.setMaxListeners(0);
+
+function publish(slug, event, data) {
+  bus.emit(slug, { event, data });
+}
+</code></pre>
+<p>In-memory on purpose: one process, one SQLite file. A multi-process deploy would need something shared, &quot;out of scope until Homestead actually runs more than one process.&quot;</p>
+<p><img src="../diagrams/devlog-03-live-wall.svg" alt="Sequence: tab A posts, server writes then publishes on a per-wall emitter, tab B&#39;s open SSE stream receives the post"></p>
+<em class="cap">FIG 3-6 — The live path. The write happens first, then the publish, then every open tab on that wall gets the post.</em>
+<p>Posts and comments publish after the write succeeds. The stream checks membership, then stays open with a ping every 25 seconds. In <code>feed.js</code>, a hidden tab closes its connection, and after four errors in a row it gives up and reloads posts when the tab comes back, rather than looking live while stale. Reactions don&#39;t push: each viewer&#39;s &quot;did I react&quot; state differs, so they were left out on purpose.</p>
+<blockquote>
+<p><strong>NOTE</strong> The proof was an agent driving two Chrome tabs through browserless, as two seeded accounts on a local instance. One posted, the other updated without a reload. A scripted browser, not two people.</p>
+</blockquote>
+<p>That gate caught a regression too. A new bottom nav sat at <code>z-index: 50</code> over the Porch&#39;s FAB, pill and toast (40 or below) and ate every tap on the compose button. Now the nav publishes its height as <code>--hs-nav-h</code> and the bottom controls add it to their offset.</p>
+<h2>8. End of Part 3</h2>
+<p>Where things stood at v0.5.24:</p>
+<ul>
+<li>A chronological, members-only Porch with a CI guard against anyone sorting by reactions.</li>
+<li>A 16-field module registry that built-ins and third-party apps share, checked at boot.</li>
+<li>Four layouts picked by module count, starting every new account on one room.</li>
+<li>Requires and dependents that refuse with a 409 and an explicit cascade flag, and disable that never deletes.</li>
+<li>Per-wall notification levels, @mentions, mutes, and 15-minute bundles.</li>
+<li>Shared lists with a Groceries list on day one.</li>
+<li>One button in the middle, a door to the next room, and a wall that updates while you&#39;re looking at it.</li>
+</ul>
+<blockquote>
+<p><strong>NOTE</strong> Remember &quot;keys are stable&quot;? In v0.6.0 the Porch became the Forum. The module key is still <code>wall</code>, and nobody&#39;s enablement row noticed. That&#39;s Part 6.</p>
+</blockquote>
+<p>Next, Part 4: calendars and libraries, or what happens when your data lives in someone else&#39;s server.</p>
+
+<footer>Tags: Homestead, devlog, social feed, modules, server-sent events, mobile UX<br>Slug: homestead-devlog-03-the-porch</footer></main>

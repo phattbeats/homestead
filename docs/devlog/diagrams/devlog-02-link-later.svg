@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 540" font-family="monospace" font-size="13" fill="#1b2440">
+  <rect width="800" height="540" fill="#ffffff"/>
+  <text x="20" y="28" font-size="15" font-weight="bold">FIG 2-5  LINK AUTHENTIK LATER (OIDC code + PKCE, five calls)</text>
+  <line x1="20" y1="38" x2="780" y2="38" stroke="#1b2440" stroke-width="1"/>
+  <text x="70" y="65" font-weight="bold">BROWSER</text>
+  <text x="345" y="65" font-weight="bold" fill="#8a6d0f">HOMESTEAD</text>
+  <text x="625" y="65" font-weight="bold">OIDC PROVIDER</text>
+  <g stroke="#1b2440" stroke-width="1" stroke-dasharray="4 4">
+    <line x1="100" y1="75" x2="100" y2="500"/>
+    <line x1="390" y1="75" x2="390" y2="500"/>
+    <line x1="680" y1="75" x2="680" y2="500"/>
+  </g>
+  <g stroke="#1b2440" stroke-width="1.5">
+    <line x1="100" y1="100" x2="390" y2="100"/>
+    <line x1="100" y1="185" x2="680" y2="185"/>
+    <line x1="680" y1="235" x2="100" y2="235"/>
+    <line x1="100" y1="250" x2="390" y2="250"/>
+    <line x1="390" y1="275" x2="680" y2="275"/>
+    <line x1="100" y1="380" x2="390" y2="380"/>
+    <line x1="100" y1="430" x2="390" y2="430"/>
+  </g>
+  <text x="110" y="95">1  POST /link/start {password}</text>
+  <text x="400" y="115" font-size="12">re-check local password (401 if wrong)</text>
+  <text x="400" y="132" font-size="12">mint one-time handle, PKCE pair,</text>
+  <text x="400" y="149" font-size="12">state, nonce; 10 min TTL</text>
+  <text x="400" y="166" font-size="12">-&gt; authorize_url</text>
+  <text x="110" y="180">2  /authorize (code_challenge, state, nonce)</text>
+  <text x="400" y="230">login / MFA happens here</text>
+  <text x="110" y="246">3  /callback?handle&amp;code&amp;state</text>
+  <text x="400" y="270" font-size="12">token exchange with code_verifier</text>
+  <rect x="395" y="285" width="275" height="80" fill="none" stroke="#c9a227" stroke-width="2.5"/>
+  <text x="405" y="304" font-size="12">verify id_token: RS256 only,</text>
+  <text x="405" y="321" font-size="12">iss, aud, nonce, exp, sub</text>
+  <text x="405" y="338" font-size="12">stamp validated sub onto the</text>
+  <text x="405" y="355" font-size="12">pending row (never trust client)</text>
+  <text x="110" y="375">4  GET /link/preview</text>
+  <text x="400" y="395" font-size="12">names both accounts explicitly</text>
+  <text x="110" y="425">5  POST /link/confirm {handle}</text>
+  <text x="400" y="445" font-size="12">insert identity_links from the row</text>
+  <text x="400" y="462" font-size="12">replay -&gt; 410, already linked</text>
+  <text x="400" y="479" font-size="12">to someone else -&gt; 409</text>
+  <text x="20" y="525" font-size="11">NOTE: email is display-only. The link key is (provider, issuer, sub). Nothing is ever auto-linked by email.</text>
+</svg>

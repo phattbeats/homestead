@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 520" font-family="monospace" font-size="13" fill="#1b2440">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1b2440"/>
+    </marker>
+  </defs>
+  <rect width="800" height="520" fill="#ffffff"/>
+  <text x="20" y="28" font-size="15" font-weight="bold">FIG 5-6  THE PERMISSION MODEL (three doors, one user shape)</text>
+  <line x1="20" y1="38" x2="780" y2="38" stroke="#1b2440" stroke-width="1"/>
+
+  <g stroke="#1b2440" stroke-width="2" fill="none">
+    <rect x="20" y="58" width="240" height="72"/>
+    <rect x="280" y="58" width="240" height="72"/>
+    <rect x="540" y="58" width="240" height="72"/>
+    <rect x="120" y="170" width="560" height="64"/>
+    <rect x="250" y="272" width="300" height="52"/>
+    <rect x="30" y="362" width="350" height="96"/>
+    <rect x="420" y="362" width="350" height="96" stroke="#c9a227" stroke-width="3"/>
+  </g>
+
+  <text x="34" y="80" font-weight="bold">[A] SESSION / HEADER-TRUST</text>
+  <text x="34" y="100" font-size="12">cookie, or proxy SSO headers</text>
+  <text x="34" y="118" font-size="12">no token detail</text>
+
+  <text x="294" y="80" font-weight="bold">[B] USER PAT</text>
+  <text x="294" y="100" font-size="12">Bearer homestead_pat_...</text>
+  <text x="294" y="118" font-size="12">scopes = 'user'</text>
+
+  <text x="554" y="80" font-weight="bold">[C] APP PAT</text>
+  <text x="554" y="100" font-size="12">minted at app install</text>
+  <text x="554" y="118" font-size="12">scopes = ["read:me", ...]</text>
+
+  <text x="136" y="194" font-weight="bold">authenticate()  (server.js)</text>
+  <text x="136" y="213" font-size="12">PAT: 16-char prefix lookup, then bcrypt compare, fresh every request</text>
+  <text x="136" y="226" font-size="12">every door ends as the same req.session.user shape</text>
+
+  <text x="266" y="294" font-weight="bold">tokenScopes(req)</text>
+  <text x="266" y="313" font-size="12">A, B: null / C: array</text>
+
+  <text x="46" y="386" font-weight="bold">null: FULL SESSION POWERS</text>
+  <text x="46" y="408" font-size="12">whatever this user can do in the</text>
+  <text x="46" y="424" font-size="12">browser, the token can do</text>
+  <text x="46" y="444" font-size="12">requireScope() lets it straight through</text>
+
+  <text x="436" y="386" font-weight="bold" fill="#8a6d0f">array: requireScope(scope)</text>
+  <text x="436" y="408" font-size="12">exact scope string in list -&gt; next()</text>
+  <text x="436" y="424" font-size="12">otherwise 403 insufficient_scope</text>
+  <text x="436" y="444" font-size="12">every call logged to app_api_log</text>
+
+  <g stroke="#1b2440" stroke-width="1.5" fill="none">
+    <line x1="140" y1="130" x2="260" y2="168" marker-end="url(#arr)"/>
+    <line x1="400" y1="130" x2="400" y2="168" marker-end="url(#arr)"/>
+    <line x1="660" y1="130" x2="540" y2="168" marker-end="url(#arr)"/>
+    <line x1="400" y1="234" x2="400" y2="270" marker-end="url(#arr)"/>
+    <line x1="320" y1="324" x2="205" y2="360" marker-end="url(#arr)"/>
+    <line x1="480" y1="324" x2="595" y2="360" marker-end="url(#arr)"/>
+  </g>
+  <text x="222" y="346" font-size="12">null</text>
+  <text x="548" y="346" font-size="12">array</text>
+
+  <line x1="20" y1="478" x2="780" y2="478" stroke="#1b2440" stroke-width="1"/>
+  <text x="20" y="498" font-size="11">STORED: bcrypt hash + 16-char lookup prefix. PLAINTEXT: shown once. REVOKE: soft delete, 401 next call.</text>
+</svg>

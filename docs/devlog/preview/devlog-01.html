@@ -1,0 +1,264 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Homestead devlog, Part 1: The pitch. One container, two people, take turns.</title><style>body{margin:0;background:#FFFBF5;color:#2B2622;font:20px/1.65 Georgia,serif}
+header.site{background:#2B2622;color:#f6e4c3;padding:14px 4vw;font:600 15px system-ui;letter-spacing:.08em;display:flex;gap:12px;align-items:center}
+header.site b{color:#fff}header.site a{color:inherit;text-decoration:none}.stripe{height:5px;background:linear-gradient(90deg,#6D7B59 0 33%,#d49a40 33% 66%,#C4703C 66%)}
+main{max-width:740px;margin:0 auto;padding:40px 20px 80px}.meta{font:14px system-ui;color:#7a7269;text-transform:uppercase;letter-spacing:.05em}
+h1{font:800 44px/1.15 system-ui;margin:.3em 0}.excerpt{font:22px/1.5 system-ui;color:#4b4624}
+h2{font:700 30px system-ui;margin-top:1.8em;border-bottom:2px solid #4b4624;padding-bottom:.2em}h3{font:700 23px system-ui}
+img{max-width:100%;display:block;margin:1.4em auto 0;border-radius:4px}img[src$=".png"]{max-height:760px}.feature{width:100%;max-height:none!important;margin:1em 0 2em}
+em.cap{display:block;text-align:center;font:14px/1.4 system-ui;color:#7a7269;margin:.5em 0 1em}
+pre{background:#2B2622;color:#f3ece2;padding:18px;border-radius:6px;overflow:auto;font:14px/1.5 ui-monospace,Menlo,monospace;border-left:4px solid #d49a40}
+code{font:0.85em ui-monospace,Menlo,monospace;background:#f1ebe1;padding:1px 4px;border-radius:3px}pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%;font:15px/1.4 system-ui;margin:1.4em 0}th{background:#4b4624;color:#fff;text-align:left}th,td{border:1px solid #d8cfc2;padding:7px 9px}tr:nth-child(even) td{background:#f6efe4}
+blockquote{margin:1.6em 0;padding:14px 18px;background:#fbf1dc;border-left:5px solid #d49a40;font:17px/1.55 system-ui}
+blockquote.warn{background:#fbe9e0;border-color:#C4703C}
+footer{border-top:1px solid #e5ddd0;margin-top:60px;padding-top:20px;font:15px system-ui;color:#7a7269}</style>
+<header class="site"><a href="index.html"><b>Homestead</b> · devlog</a></header><div class="stripe"></div><main>
+<div class="meta">Part 1 · DRAFT PREVIEW, NOT PUBLISHED</div><h1>Homestead devlog, Part 1: The pitch. One container, two people, take turns.</h1><p class="excerpt">How a two-person chores-and-calendar app became a public single-container PWA in July 2026: take-turns chores, an iframe shell with an escape dot, one SQLite file, and the first round of bugs.</p><img class="feature" src="../img/homestead-banner.png" alt="">
+<p><img src="../img/homestead-banner.png" alt="Homestead banner: Your home. Your data. Your apps."></p>
+<em class="cap">FIG 1-0 — The banner we ended up with. It came much later than the code. Part 6 covers the brand.</em>
+<p>This is the first of seven devlogs about <strong>Homestead</strong>, a self-hosted, mobile-first app for the people who share a house. Chores, a calendar, a launcher for the other things you self-host, and later a feed, a newspaper and a house agent.</p>
+<p>Quick honesty up front, because it matters for the whole series: most of the code was written by AI agents, running through my Paperclip setup. I pitched it, made the design calls, used it, pasted the proxy configs onto my own server, and filed the bug reports (one of those is below, stack trace and all). Where &quot;testing&quot; meant an agent driving a browser instead of a person holding a phone, I&#39;ll say so.</p>
+<h2>1. The pitch</h2>
+<p>The first public README said it in one paragraph:</p>
+<blockquote>
+<p>A shared-life app for two people. Tasks and chores with take-turns rotation, a calendar, and a launcher grid that opens your self-hosted services in a full-screen iframe shell inside Homestead.</p>
+</blockquote>
+<p>The code existed before the repo did, as a tarball internally called &quot;Homestead v2&quot; from an earlier Claude session. Public numbering started at 0.0.1 anyway. The release work order&#39;s first step wasn&#39;t &quot;push&quot;, it was sanitize: no secrets, no <code>*.db</code> files, seed URLs replaced with <code>https://example.com</code>, design docs kept off the repo. The agent also dropped an unused <code>playwright</code> dependency worth about 500 MB of image.</p>
+<p><img src="../img/01-home.png" alt="Homestead home screen after login, demo data"></p>
+<em class="cap">FIG 1-1 — Home after login on a demo instance (demo data, users alex and sam). This is v0.6.0; v0.0.1 had fewer rooms but the same bones.</em>
+<h3>1.1 Spec table: v0.0.1, 2026-07-29</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>What v0.0.1 did</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Tasks</td>
+<td>Assign to user A, user B, or both. Due date, repeat daily / weekly / monthly.</td>
+</tr>
+<tr>
+<td>Take turns</td>
+<td>A toggle on recurring chores: checking it off hands it to the other person.</td>
+</tr>
+<tr>
+<td>Calendar</td>
+<td>Month grid with per-person colour pips. Tap a day to see or add events.</td>
+</tr>
+<tr>
+<td>Launcher</td>
+<td>Editable tile grid. Long-press to edit. Each tile has an owner and an open mode.</td>
+</tr>
+<tr>
+<td>Iframe shell</td>
+<td>The service opens full-screen inside Homestead, with an escape dot.</td>
+</tr>
+<tr>
+<td>Auth</td>
+<td>bcrypt-hashed passwords, signed session cookies, 90-day rolling expiry.</td>
+</tr>
+<tr>
+<td>Install</td>
+<td>PWA manifest plus a four-line service worker, &quot;enough for PWA install&quot;.</td>
+</tr>
+</tbody></table>
+<h2>2. The stack: one container, one file</h2>
+<p>Node 22, Express 5, better-sqlite3, plain HTML/CSS/JS, no build step. In v0.0.1 that was <code>server.js</code> at 212 lines and <code>public/index.html</code> at 473. No bundler, no framework, no ORM. The database came first:</p>
+<pre><code class="language-js">// server.js, v0.0.1 (trimmed)
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, &#39;data&#39;);
+fs.mkdirSync(DATA_DIR, { recursive: true });
+const db = new Database(path.join(DATA_DIR, &#39;life.db&#39;));
+db.pragma(&#39;journal_mode = WAL&#39;);
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS tasks (
+  ...
+  recur TEXT DEFAULT &#39;&#39;,            -- &#39;&#39;, &#39;daily&#39;, &#39;weekly&#39;, &#39;monthly&#39;
+  rotate INTEGER DEFAULT 0,         -- chore rotation between the two of you
+  ...
+`);
+// v2 migrations: per-person ownership + open mode (&#39;frame&#39; full-screen shell, &#39;tab&#39; new tab)
+const svcCols = db.prepare(&quot;PRAGMA table_info(services)&quot;).all().map(c =&gt; c.name);
+if (!svcCols.includes(&#39;open_mode&#39;)) db.exec(&quot;ALTER TABLE services ADD COLUMN open_mode TEXT DEFAULT &#39;frame&#39;&quot;);
+</code></pre>
+<p>That last bit is the whole migration system: read the column list, add what&#39;s missing, run it on every boot. It&#39;s still how Homestead migrates. The setup later moved into <code>migrate()</code> in <code>lib/user-model.js</code>, which still opens with <code>db.pragma(&#39;journal_mode = WAL&#39;)</code>.</p>
+<p>better-sqlite3 is synchronous, which is fine for one household. Backup is &quot;copy one file&quot;.</p>
+<p><img src="../diagrams/devlog-01-container.svg" alt="Diagram: phone PWA to reverse proxy to the node container, which holds server.js, index.html and better-sqlite3, writing to /data/life.db"></p>
+<em class="cap">FIG 1-2 — The whole architecture in v0.0.1. The gold box is the only thing you run.</em>
+<h3>2.1 The Dockerfile, and my first bug report</h3>
+<p>The second commit landed four minutes after the first: a multi-stage build, because better-sqlite3&#39;s <code>node-gyp</code> install hook wants python3, make and g++ even with a prebuilt binary. It also switched to the unprivileged <code>node</code> user, which broke my first deploy:</p>
+<pre><code>SqliteError: unable to open database file
+    at new Database (/app/node_modules/better-sqlite3/lib/database.js:58:27)
+    at Object.&lt;anonymous&gt; (/app/server.js:10:12)
+  ...
+  code: &#39;SQLITE_CANTOPEN&#39;
+</code></pre>
+<p>The <code>node</code> user (UID 1000) could read the mounted <code>/data</code> but couldn&#39;t create <code>life.db</code> in it, because the host directory belonged to another user. The agent gave me a <code>chmod</code> workaround the same night, and the next release dropped <code>USER node</code>. The Dockerfile comment explaining why is still there.</p>
+<h2>3. Take turns</h2>
+<p>This is the feature the app was built around. A recurring chore, checked off, doesn&#39;t become &quot;done&quot;. It rolls forward to its next due date and, if take turns is on, changes hands. The v0.0.1 checkbox label: &quot;Take turns (swap between us each time)&quot;.</p>
+<p>In v0.0.1 the swap was a literal string comparison against the two hardcoded usernames. That lasted four days. Since v0.0.2 each task carries its own pair, <code>assignee</code> and <code>alt_assignee</code>, and the toggle swaps them:</p>
+<pre><code class="language-js">// server.js, v0.6.0 (trimmed)
+app.post(&#39;/api/tasks/:id/toggle&#39;, auth, (req, res) =&gt; {
+  const t = db.prepare(&#39;SELECT * FROM tasks WHERE id = ?&#39;).get(req.params.id);
+  ...
+  const wasRotation = !t.done &amp;&amp; t.recur;
+  if (wasRotation) {
+    let assignee = t.assignee;
+    let alt = t.alt_assignee;
+    if (t.rotate &amp;&amp; alt) {
+      const tmp = assignee;
+      assignee = alt;
+      alt = tmp;
+    }
+    db.prepare(&#39;UPDATE tasks SET due_date=?, assignee=?, alt_assignee=?, done=0, done_by=?, done_at=datetime(\&#39;now\&#39;) WHERE id=?&#39;)
+      .run(bumpDate(t.due_date, t.recur), assignee, alt, req.session.user.username, t.id);
+  } else {
+    ...
+</code></pre>
+<p><code>bumpDate()</code> adds a day, seven days or a month, and hasn&#39;t changed since the first commit. There&#39;s no history table: <code>done_by</code> and <code>done_at</code> get overwritten each time. Whose turn it is lives in one column.</p>
+<p><img src="../img/01-chores-take-turns.png" alt="Chores list including a take-turns chore, demo data"></p>
+<em class="cap">FIG 1-3 — The chores list on a demo instance, including a take-turns chore (demo data, users alex and sam).</em>
+<p><img src="../diagrams/devlog-01-take-turns.svg" alt="Diagram: one tasks row before and after a check-off, assignee and alt_assignee swapped and the due date moved a week, then four weeks alternating alex and sam"></p>
+<em class="cap">FIG 1-4 — One check-off, one swap, one bumped date. Over a month it alternates. That&#39;s it.</em>
+<blockquote>
+<p><strong>NOTE</strong> The v0.0.2 changelog says rotation &quot;works for any number of assigned users&quot;. The agent&#39;s own close report was more accurate: &quot;for any two users&quot;. It&#39;s a pair swap. A house of three can rotate any two of them, but there&#39;s no round-robin.</p>
+</blockquote>
+<h2>4. Two hardcoded people, then N</h2>
+<p>v0.0.1 seeded exactly two users from two env vars. On 2026-08-02 I asked whether we needed per-person seed passwords at all, since we&#39;d be linking to Authentik eventually. Maybe just an admin password?</p>
+<p>The agent pointed out the names weren&#39;t only in the seed. They were in the rotation compare, CSS variables, three-button pickers, name and colour maps. So the choice was: keep it a couples app on purpose, or go generic now. My answer:</p>
+<blockquote>
+<p>might as well have a little pain now, to save massive pain later.</p>
+</blockquote>
+<p>v0.0.2 went out that same night. One <code>admin</code> user seeded from <code>ADMIN_PASSWORD</code>, who creates everyone else from Settings → Users. Pickers list every user plus &quot;Everyone&quot;. The container runs as root. And v0.0.1 was retired: release deleted, tag removed. The migration shows the other half of the boot-time rule, reshaping old data in place:</p>
+<pre><code class="language-js">// v0.0.2 migration: tasks.alt_assignee + shift legacy &quot;both&quot; → &quot;all&quot;
+const taskCols = db.prepare(&quot;PRAGMA table_info(tasks)&quot;).all().map(c =&gt; c.name);
+if (!taskCols.includes(&#39;alt_assignee&#39;)) db.exec(&quot;ALTER TABLE tasks ADD COLUMN alt_assignee TEXT DEFAULT NULL&quot;);
+db.exec(&quot;UPDATE tasks SET assignee = &#39;all&#39; WHERE assignee = &#39;both&#39;&quot;);
+db.exec(&quot;UPDATE events SET owner = &#39;all&#39; WHERE owner = &#39;both&#39;&quot;);
+db.exec(&quot;UPDATE services SET owner = &#39;all&#39; WHERE owner = &#39;both&#39;&quot;);
+</code></pre>
+<p><img src="../img/01-login.png" alt="Homestead login screen, demo instance"></p>
+<em class="cap">FIG 1-5 — The login screen on a demo instance. Since v0.0.2, the first login on a fresh install is <code>admin</code>.</em>
+<blockquote>
+<p><strong>NOTE</strong> The v0.0.2 close report flagged its own gap: <code>POST /api/users</code> looked up the caller and never checked <code>is_admin</code>, so any logged-in user could create accounts. The endpoint went away a week later in v0.0.5, when users started coming from the identity provider. That&#39;s Part 2.</p>
+</blockquote>
+<h2>5. The launcher and the escape dot</h2>
+<p>The launcher is a grid of tiles: name, URL, emoji, owner, and an open mode of &quot;New tab&quot; or &quot;Full screen&quot;.</p>
+<p><img src="../img/01-launcher.png" alt="Apps launcher tile grid, demo data"></p>
+<em class="cap">FIG 1-6 — The Apps launcher on a demo instance (demo data, users alex and sam).</em>
+<p>A full-screen iframe in an installed PWA has no browser chrome, so getting out is the problem. The answer was the escape dot: a 46 px 🏡 circle over everything. Tap it to go home. Drag it and it snaps to the nearest side. After 2.5 seconds it fades. Same code in v0.6.0 as in v0.0.1:</p>
+<pre><code class="language-js">// public/index.html
+dot.addEventListener(&#39;pointermove&#39;,e=&gt;{
+  if(!drag)return;
+  const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+  if(Math.abs(dx)+Math.abs(dy)&gt;6)drag.moved=true;
+  ...
+});
+dot.addEventListener(&#39;pointerup&#39;,e=&gt;{
+  const wasTap=drag&amp;&amp;!drag.moved;drag=null;
+  if(wasTap){closeShell();return}
+  const snapLeft=dot.offsetLeft+23&lt;innerWidth/2;
+  dot.style.left=snapLeft?&#39;8px&#39;:(innerWidth-54)+&#39;px&#39;;
+  dotIdleTimer=setTimeout(()=&gt;dot.classList.add(&#39;idle&#39;),2500);
+});
+</code></pre>
+<p>Six pixels is the line between a tap and a drag. Closing sets the frame back to <code>about:blank</code>, so whatever was playing stops.</p>
+<p><img src="../img/01-iframe-shell.png" alt="A service open full-screen in the iframe shell with the escape dot visible"></p>
+<em class="cap">FIG 1-7 — A service open full-screen in the iframe shell on a demo instance, escape dot visible.</em>
+<p>In September an agent added an 8-second fallback overlay: &quot;This app didn&#39;t load. It may be unreachable or blocking embedding.&quot;</p>
+<h3>5.1 The frame-header gotcha</h3>
+<p>Here&#39;s the catch: most self-hosted apps tell browsers not to let anyone embed them, with <code>X-Frame-Options: SAMEORIGIN</code> or a CSP <code>frame-ancestors &#39;self&#39;</code>. Homestead is a different origin, so you get a white rectangle. The fix lives in your reverse proxy. The README has had this since v0.0.1:</p>
+<pre><code class="language-nginx">location / {
+    proxy_hide_header X-Frame-Options;
+    proxy_hide_header Content-Security-Policy;
+    add_header Content-Security-Policy &quot;frame-ancestors &#39;self&#39; https://your-hostname&quot;;
+    # ...your usual proxy_pass / proxy_set_header lines...
+}
+</code></pre>
+<p>I made it part of the deploy&#39;s definition of done. Not done until the tile the household cared about most opened full-screen on a phone, escape dot working, session surviving. If it still refused to frame after the header strip:</p>
+<blockquote>
+<p>that is a BLOCKER to report, not a fall-back-to-tab shrug</p>
+</blockquote>
+<p>Homestead came up on my server on 2026-08-03. My comment, minus the address: &quot;HOMESTEAD IS LIVEEEEEEEEEEEEE&quot;. I asked whether the strip would break normal access to those apps. It doesn&#39;t; those headers only govern embedding. On 2026-08-09 I pasted it into the proxy config for four apps.</p>
+<p><img src="../diagrams/devlog-01-frame-headers.svg" alt="Diagram: browser on the Homestead origin frames a self-hosted app; the app&#39;s X-Frame-Options and CSP headers pass through the proxy and the browser refuses; the fix strips and replaces them at the proxy"></p>
+<em class="cap">FIG 1-8 — Why a tile opens to a white screen, and the per-app proxy fix. The red herring at the bottom cost a month.</em>
+<p>The coda: in September I reported that the same tile &quot;either errors out or doesn&#39;t load correctly&quot;. The leading theory, for weeks, was the app&#39;s <code>Cross-Origin-Resource-Policy: same-origin</code> header, which the strip never touched. In October an agent finally pointed real browsers at it from Homestead&#39;s real origin: Chromium at phone size loaded the frame in 1.4 s on fast 4G, zero console errors, and WebKit with an iPhone 15 profile rendered it too. Nobody was holding a phone. Browsers only enforce CORP on a frame when the embedder sends <code>Cross-Origin-Embedder-Policy: require-corp</code>, and Homestead sends none. The September symptom lined up with Homestead itself having outages (Part 7).</p>
+<h2>6. Small fixes: 404s, health, a crash</h2>
+<p><strong>v0.0.3 (2026-08-04).</strong> The SPA fallback served the 39 KB <code>index.html</code> for every unknown path, including <code>/api/*</code>, <code>/favicon.ico</code> and <code>/robots.txt</code>. Now those get a JSON 404, the SVG icon and a real <code>Disallow: /</code>. <code>GET /api/logout</code> returns 405, so an <code>&lt;img src=&quot;/api/logout&quot;&gt;</code> can&#39;t log you out, and <code>/api/health</code> runs a live <code>SELECT 1</code>.</p>
+<p><strong>v0.0.4.</strong> <code>/api/version</code> reads <code>package.json</code> at load time, and the Dockerfile&#39;s runtime stage didn&#39;t copy it. Every container since v0.0.3 crashed on boot with <code>MODULE_NOT_FOUND</code>. My reverse proxy then couldn&#39;t resolve Homestead&#39;s upstream, refused to start, and took every other site behind it down too. One <code>COPY</code> line. Not the last missing <code>COPY</code> (Part 7).</p>
+<p><strong>v0.1.1, per-service health checks.</strong> The changelog&#39;s reason: someone taps a tile, gets a white iframe from a crashed backend, and decides all of Homestead is broken. Now each tile is polled, and a down tile shows a red dot and &quot;down since HH:MM&quot;:</p>
+<table>
+<thead>
+<tr>
+<th>Probe result</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>2xx / 3xx</td>
+<td>up</td>
+</tr>
+<tr>
+<td>401 / 403</td>
+<td>up (an auth wall is a healthy app)</td>
+</tr>
+<tr>
+<td>5xx, 5 s timeout, connection refused</td>
+<td>fail</td>
+</tr>
+<tr>
+<td>1 fail</td>
+<td>still up, no flapping</td>
+</tr>
+<tr>
+<td>2 consecutive fails</td>
+<td>down, <code>down_since</code> stamped</td>
+</tr>
+<tr>
+<td>any up after down</td>
+<td>recovered, <code>down_since</code> cleared</td>
+</tr>
+</tbody></table>
+<p><code>HEAD</code> first, <code>GET</code> on 405 or 501. One <code>setInterval</code> per tile, default 60 seconds, 0 to opt out.</p>
+<blockquote class="warn">
+<p><strong>WARNING</strong> While pulling excerpts for this post, an agent found a small bug. <code>nextState()</code> sets <code>transitioned: true</code> on recovery as well as on failure (the tests assert both). But the hook that fires is <code>onDownTransition</code>, and the server&#39;s handler always sends &quot;<em>name</em> is down&quot;. As far as I can read it, when a service comes back, admins get another &quot;is down&quot; push reading <code>Down since null</code>. Not fixed as of v0.6.0.</p>
+</blockquote>
+<h2>7. Push reminders and quiet hours</h2>
+<p>v0.1.0 (2026-08-09) added web push: standard VAPID, no Firebase. On iPhone it needs iOS 16.4+ and the app on the home screen. One <code>notify(userId, payload)</code> primitive, three categories (<code>chore_due</code>, <code>take_turns</code>, <code>system</code>), and per-user quiet hours defaulting to 21:00–08:00, including the window that wraps past midnight:</p>
+<pre><code class="language-js">// server.js, v0.6.0
+function isInQuietHours(prefs, now) {
+  const h = now.getHours();
+  const s = prefs.quiet_start_hour, e = prefs.quiet_end_hour;
+  if (s === e) return false;
+  if (s &lt; e) return h &gt;= s &amp;&amp; h &lt; e;
+  return h &gt;= s || h &lt; e;
+}
+</code></pre>
+<p><code>getHours()</code> is server-local, so the container&#39;s timezone is the household&#39;s.</p>
+<p>Reminders run on a 30-minute tick: &quot;Due today&quot;, &quot;Overdue&quot;, and for take-turns chores due today:</p>
+<pre><code class="language-js">await notify(u.id, {
+  title: `Your turn: ${t.title}`,
+  body: `${t.title} is up today. Tap to mark done and pass it on.`,
+  ...
+  category: &#39;take_turns&#39;,
+});
+</code></pre>
+<p>At most one push per user per category per day, and the dedupe only counts pushes actually delivered. So a reminder held back by quiet hours isn&#39;t dropped; a later tick sends it. Take-turns pushes are sticky on the phone (<code>requireInteraction</code>). <code>force: true</code> skips quiet hours, and inside the server only the health checker uses it, pushing every admin when a tile goes down. The comment above it:</p>
+<blockquote>
+<p>an outage is worth waking up for.</p>
+</blockquote>
+<h2>8. End of Part 1</h2>
+<p>Where things stood after the first two weeks:</p>
+<ul>
+<li>A public repo and a GHCR image, <code>ghcr.io/phattbeats/homestead</code>, built from tags.</li>
+<li>One container, one SQLite file in WAL mode, migrations on every boot, no build step.</li>
+<li>Take-turns chores: a recurring task that rolls forward and swaps hands.</li>
+<li>A generic user model with an <code>admin</code> seed, after &quot;a little pain now&quot;.</li>
+<li>A launcher with a full-screen iframe shell, a draggable escape dot, and a README section on the proxy headers that make or break it.</li>
+<li>Health checks on every tile, push reminders, and quiet hours that delay pushes instead of dropping them.</li>
+<li>First bugs: a database the container couldn&#39;t create, a 39 KB favicon, and a missing <code>COPY</code> that took down the proxy.</li>
+</ul>
+<p>Next, Part 2: the front door. Logins, invites, a session secret the server refuses to boot without, and Authentik single sign-on for a house that wanted one login for everything.</p>
+
+<footer>Tags: Homestead, devlog, self-hosting, SQLite, PWA, AI agents<br>Slug: homestead-devlog-01-the-pitch</footer></main>

@@ -1,0 +1,294 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Homestead devlog, Part 2: The front door: logins, invites, and SSO</title><style>body{margin:0;background:#FFFBF5;color:#2B2622;font:20px/1.65 Georgia,serif}
+header.site{background:#2B2622;color:#f6e4c3;padding:14px 4vw;font:600 15px system-ui;letter-spacing:.08em;display:flex;gap:12px;align-items:center}
+header.site b{color:#fff}header.site a{color:inherit;text-decoration:none}.stripe{height:5px;background:linear-gradient(90deg,#6D7B59 0 33%,#d49a40 33% 66%,#C4703C 66%)}
+main{max-width:740px;margin:0 auto;padding:40px 20px 80px}.meta{font:14px system-ui;color:#7a7269;text-transform:uppercase;letter-spacing:.05em}
+h1{font:800 44px/1.15 system-ui;margin:.3em 0}.excerpt{font:22px/1.5 system-ui;color:#4b4624}
+h2{font:700 30px system-ui;margin-top:1.8em;border-bottom:2px solid #4b4624;padding-bottom:.2em}h3{font:700 23px system-ui}
+img{max-width:100%;display:block;margin:1.4em auto 0;border-radius:4px}img[src$=".png"]{max-height:760px}.feature{width:100%;max-height:none!important;margin:1em 0 2em}
+em.cap{display:block;text-align:center;font:14px/1.4 system-ui;color:#7a7269;margin:.5em 0 1em}
+pre{background:#2B2622;color:#f3ece2;padding:18px;border-radius:6px;overflow:auto;font:14px/1.5 ui-monospace,Menlo,monospace;border-left:4px solid #d49a40}
+code{font:0.85em ui-monospace,Menlo,monospace;background:#f1ebe1;padding:1px 4px;border-radius:3px}pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%;font:15px/1.4 system-ui;margin:1.4em 0}th{background:#4b4624;color:#fff;text-align:left}th,td{border:1px solid #d8cfc2;padding:7px 9px}tr:nth-child(even) td{background:#f6efe4}
+blockquote{margin:1.6em 0;padding:14px 18px;background:#fbf1dc;border-left:5px solid #d49a40;font:17px/1.55 system-ui}
+blockquote.warn{background:#fbe9e0;border-color:#C4703C}
+footer{border-top:1px solid #e5ddd0;margin-top:60px;padding-top:20px;font:15px system-ui;color:#7a7269}</style>
+<header class="site"><a href="index.html"><b>Homestead</b> · devlog</a></header><div class="stripe"></div><main>
+<div class="meta">Part 2 · DRAFT PREVIEW, NOT PUBLISHED</div><h1>Homestead devlog, Part 2: The front door: logins, invites, and SSO</h1><p class="excerpt">How Homestead went from one password per person to invite links that create real accounts, Authentik sign-in you can link later, and a break-glass path for the owner, plus the cookie and secret rules that keep the door shut.</p><img class="feature" src="../img/02-invite.png" alt="">
+<p><img src="../img/01-login.png" alt="Homestead login screen on a phone"></p>
+<em class="cap">FIG 2-0 — The login screen, from a local demo instance (demo data, users alex and sam). Username, password, one button. Everything in this post is about what sits behind it.</em>
+<p>Part 1 was about what&#39;s inside the house. This one is about the front door: who gets in, how they get their first key, and how the owner gets back in when the fancy lock breaks. As before, an agent wrote most of the code. Where &quot;tested&quot; means an agent driving a browser, I&#39;ll say so.</p>
+<h2>1. One password each</h2>
+<p>v0.0.2 (2026-08-03) had the simplest auth that could work: a <code>users</code> table, one <code>admin</code> seeded from an <code>ADMIN_PASSWORD</code> env var, everyone else created from Settings, bcrypt passwords, and an <code>express-session</code> cookie. The session setup, verbatim:</p>
+<pre><code class="language-js">app.use(session({
+  secret: process.env.SESSION_SECRET || &#39;life-app-secret-change-me&#39;,
+  ...
+  cookie: { httpOnly: true, sameSite: &#39;lax&#39;, maxAge: 1000 * 60 * 60 * 24 * 90 }
+</code></pre>
+<p>Remember that <code>||</code>. It comes back in section 7.</p>
+<h2>2. The everything-app idea</h2>
+<p>Two days before v0.0.1 there was already an epic called &quot;Everything-app rollout: Homestead + authentik SSO&quot;. I run Authentik in front of other self-hosted apps. If Homestead sits behind the same login, it becomes the front page for all of them. Sign in once, everything opens.</p>
+<h3>2.1 Forward-auth: the proxy vouches for you</h3>
+<p>The reverse proxy asks Authentik whether the request is signed in. If it is, the proxy forwards it with <code>X-authentik-username</code> and <code>X-authentik-groups</code>. Homestead never sees a password.</p>
+<p>v0.0.5 (2026-08-09) built the user model around that. Authentik became the directory of record and <code>users</code> a profile cache. On a request with the header, <code>provisionOrClaim()</code> claims a seeded row by case-insensitive username or creates one. Groups get replaced, not merged, every request, so there&#39;s no managing them in two places. The built-in <code>/api/login</code> stayed as the local-network fallback. By the time later parts land there are four ways in, checked in order:</p>
+<p><img src="../diagrams/devlog-02-auth-layers.svg" alt="Four stacked boxes: bearer token, header-trust, session cookie, 401"></p>
+<em class="cap">FIG 2-1 — The auth middleware&#39;s order. Bearer tokens are Part 5. This post is about layers 2 and 3.</em>
+<pre><code class="language-js">function authenticate(req, res, next) {
+  ...
+  const headerUser = req.get(&#39;x-authentik-username&#39;);
+  if (headerUser) {
+    ...
+    const u = userModel.provisionOrClaim(db, headerUser, &#39;header_trust&#39;, headerUser, mergedGroups);
+    ...
+    return next();
+  }
+  if (req.session.user) return next();
+  return res.status(401).json({ error: &#39;unauthorized&#39; });
+}
+</code></pre>
+<blockquote class="warn">
+<p><strong>WARNING</strong> Header-trust is only as safe as the network path. The code believes <code>X-authentik-username</code> whenever it&#39;s present. If the container is reachable around your proxy, or the proxy passes that header through from the client, anyone can be anyone.</p>
+</blockquote>
+<h3>2.2 Forward-auth vs OIDC</h3>
+<p>OIDC came at the end of August as a second option (section 5):</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Forward-auth (header-trust)</th>
+<th>OIDC &quot;link later&quot;</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Who checks the login</td>
+<td>the reverse proxy, via Authentik</td>
+<td>Homestead, against the provider&#39;s signed ID token</td>
+</tr>
+<tr>
+<td>What Homestead trusts</td>
+<td>a header</td>
+<td>an RS256 signature, plus <code>iss</code>, <code>aud</code>, <code>nonce</code>, <code>exp</code></td>
+</tr>
+<tr>
+<td>Account match</td>
+<td>username</td>
+<td><code>(provider, issuer, subject)</code> in <code>identity_links</code></td>
+</tr>
+<tr>
+<td>Needs an Authentik account</td>
+<td>yes, before first visit</td>
+<td>no, you add it whenever</td>
+</tr>
+</tbody></table>
+<h2>3. Invites, take one</h2>
+<p>v0.3.0 (2026-08-21) added the first invite flow. The <code>invites</code> row id <em>is</em> the code: 32 hex characters from <code>crypto.randomUUID()</code> minus the dashes. Admins mint them, 7 days by default, 90 max. Each points at a wall (Part 3), and redeeming adds you to it in one transaction.</p>
+<p>One subtle trap: some walls grant access through a group. Redeeming adds you to the group, then your next header-trust request replaces your groups with Authentik&#39;s list, and the new one is gone. So the middleware unions in the groups your wall memberships imply.</p>
+<p>Three more pieces landed over the next week:</p>
+<ul>
+<li><strong>2026-08-24:</strong> a signed-out person opening <code>/invite/:code</code> got bounced to <code>/api/login</code>, which had no GET handler, so they got a JSON 404. Now it 302s to the login page with <code>?next=</code> preserved, checked against an allow-list of same-origin paths so it can&#39;t become an open redirect.</li>
+<li><strong>2026-08-28:</strong> multi-use &quot;porch code&quot; invites, up to 25 redemptions each, with an <code>invite_redemptions</code> table recording every one.</li>
+<li><strong>2026-08-28:</strong> an admin page to mint, list and revoke invites and see who redeemed them.</li>
+</ul>
+<p>All of that was tested. None of it was the actual problem.</p>
+<h2>4. Stop-ship: the invite that stranded people</h2>
+<p>The actual problem was in plain view: an invite bounced you to a login form, and if you had no account you couldn&#39;t make one. On 2026-08-29 it was reopened as a P0:</p>
+<blockquote>
+<p>The shipped invite flow [...] redirects an unauthenticated recipient to a generic local login. A new recipient cannot create an account, and the owner can be locked out when Authentik is absent. That is a failed acceptance criterion, not intentional UX.</p>
+</blockquote>
+<p>The new contract: an invite can create a standalone user with no Authentik. Two buttons, <strong>Create my account</strong> and <strong>I already have an account</strong>. Homestead owns the person, external logins link to that person, and the owner always keeps a local way in.</p>
+<h3>4.1 The identity foundation</h3>
+<p>The old model kept identity on the <code>users</code> row: one <code>pass_hash</code>, one <code>auth_provider</code>, one <code>provider_subject</code>. One external identity per person, ever. That morning&#39;s change split it out:</p>
+<p><img src="../diagrams/devlog-02-identity-model.svg" alt="Three tables: local_credentials, users, identity_links, with all product data pointing at users.id"></p>
+<em class="cap">FIG 2-2 — The identity model. The person is <code>users.id</code>. Passwords and provider subjects are keys that point at it.</em>
+<p>The migration is additive and runs once. It copies existing bcrypt hashes into <code>local_credentials</code> verbatim (re-hashing a hash would break every password). <code>identity_links</code> is <code>UNIQUE (provider, issuer, provider_subject)</code>, so linking a subject that already belongs to someone else throws <code>identity_collision</code> (HTTP 409). Unlinking the last identity of someone with no password is refused with <code>no_login_path</code>.</p>
+<h3>4.2 Standalone signup</h3>
+<p>An hour later the invite page could make accounts. The public endpoints, no auth:</p>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>GET /api/public/invites/:code</code></td>
+<td>peek: inviter, wall, spots left</td>
+</tr>
+<tr>
+<td><code>POST /api/public/invites/:code/signup</code></td>
+<td>new local account + redemption</td>
+</tr>
+<tr>
+<td><code>POST /api/public/invites/:code/signin</code></td>
+<td>existing account claims the invite</td>
+</tr>
+</tbody></table>
+<p>Signup is one transaction. Any failure rolls back, so a dead invite can&#39;t leave a half-made account behind:</p>
+<pre><code class="language-js">result = db.transaction(() =&gt; {
+  const recheck = db.prepare(`SELECT uses_count, max_uses FROM invites WHERE id = ?`).get(code);
+  ...
+  if (recheck.uses_count &gt;= recheck.max_uses) { ... 410 invite_already_redeemed ... }
+  const userId = identity.createUser(db, { username: cleanUser, display: cleanDisplay, plaintext: password, isAdmin: 0 });
+  wallMembers.ensureMember(db, invite.wall_slug, userId, &#39;member&#39;);
+  ...
+})();
+</code></pre>
+<p>Sign-in gives the same 401 for a wrong password and an unknown username, so you can&#39;t probe names. Neither path auto-links by email or username.</p>
+<p><img src="../img/02-invite.png" alt="The invite landing page on a phone"></p>
+<em class="cap">FIG 2-3 — The invite landing page at <code>/invite/:code</code>, demo instance (demo data, users alex and sam).</em>
+<p>The page says who invited you and to which wall, then offers the two choices.</p>
+<h3>4.3 The welcome</h3>
+<p>Redeeming drops you on <code>/welcome.html</code>, which explains the Porch, the wall you joined and what that grants, then gives one first action. If you&#39;re the first one there the button says &quot;Post the first thing on the Porch →&quot;. Otherwise, &quot;Say hi on the Porch →&quot;.</p>
+<p><img src="../img/02-welcome.png" alt="The first-run welcome screen after redeeming an invite"></p>
+<em class="cap">FIG 2-4 — First-run welcome after redeeming an invite, demo instance (demo data, users alex and sam).</em>
+<p>Password accounts get one extra line saying Authentik can be linked later &quot;without losing this account.&quot; Escape dismisses it, and returning users skip it. The checks were a Playwright smoke in CI at a mobile viewport (mint, sign up, dismiss, return) and a release gate where an agent drove a fresh Chrome through browserless. Agent-driven browsers, not a person with a phone.</p>
+<h3>4.4 Eleven issues, three hours</h3>
+<p>Identity foundation, signup, welcome, recovery and linking all hit one surface in one morning, some on branches stacked on branches that hadn&#39;t merged. An audit got opened to read the whole auth surface, and I put the owner-recovery work on hold until it reported:</p>
+<blockquote>
+<p>Eleven issues landing on one surface in three hours is how we got here; adding a twelfth mid-audit is not the fix.</p>
+</blockquote>
+<p>The audit found overlap with what was already on main, and two scripts with the same filename doing different things. The fix was a careful merge the next day.</p>
+<h2>5. Link Authentik later</h2>
+<p>The design doc&#39;s heading for this: &quot;LINK AUTHENTIK LATER — ADD A KEY, DO NOT MIGRATE THE HOUSE&quot;. A password user can add Authentik (or any standards-compliant OIDC provider) as a second way in. Nothing moves. One row gets added to <code>identity_links</code>.</p>
+<p><img src="../diagrams/devlog-02-link-later.svg" alt="Sequence diagram: browser, Homestead and the OIDC provider across five calls"></p>
+<em class="cap">FIG 2-5 — The link flow. The validated subject is written to the pending row at callback time, so confirm never takes it from the browser.</em>
+<p>The rules, from the changelog&#39;s security section:</p>
+<ul>
+<li><strong>Re-auth first.</strong> <code>/link/start</code> wants your local password again, so a stolen session can&#39;t quietly attach the thief&#39;s account.</li>
+<li><strong>One-time handle.</strong> Each attempt gets a handle, a PKCE pair, <code>state</code> and <code>nonce</code>, valid 10 minutes by default (15 max). Confirm burns it, and a replay gets <code>410</code>.</li>
+<li><strong>The subject is the key.</strong> Email is shown so you know which account you&#39;re linking, and that&#39;s all it&#39;s for.</li>
+<li><strong>Collisions stop.</strong> If that subject is already linked to another person, you get <code>409</code> and &quot;contact an admin&quot;. It never merges.</li>
+</ul>
+<p>The ID token check refuses anything but RS256 before it even checks the signature:</p>
+<pre><code class="language-js">if (header.alg !== &#39;RS256&#39;) {
+  const e = new Error(`id_token alg ${header.alg} rejected (only RS256)`); e.code = &#39;id_token_invalid_signature&#39;; throw e;
+}
+...
+if (claims.nonce !== expectedNonce) {
+  const e = new Error(&#39;id_token nonce mismatch (replay or substitution)&#39;); e.code = &#39;id_token_nonce_mismatch&#39;; throw e;
+}
+</code></pre>
+<p><code>HS256</code> would let anyone holding the client secret forge a token. Tests never touch a real Authentik: <code>lib/oidc-link-test-helper.js</code> is an in-process mock provider that signs with a fresh RSA key. The suite had 77 assertions, including algorithm downgrade, collision, replay, and one user trying another user&#39;s handle. Configuration is four env vars (<code>OIDC_ISSUER</code>, <code>OIDC_CLIENT_ID</code>, <code>OIDC_CLIENT_SECRET</code>, <code>OIDC_REDIRECT_URI</code>). Without them, <code>/link/start</code> returns <code>503 oidc_not_configured</code>.</p>
+<h2>6. Break glass</h2>
+<p>The owner-recovery issue opened with one line: &quot;Prevent another owner lockout.&quot; The runbook names three ways the owner (the <code>is_admin = 1</code> row) loses access:</p>
+<ol>
+<li>Authentik is unreachable, so no header arrives.</li>
+<li>The owner forgot the local password.</li>
+<li>Every identity link got removed and the password was rotated away.</li>
+</ol>
+<h3>6.1 The fix</h3>
+<p>A host-side CLI, <code>scripts/owner-recovery.js</code>, opens the SQLite file directly and mints a one-shot token: 32 random bytes, stored only as a sha256 hash, good for 60 minutes (<code>--revoke</code> cancels it). No HTTP calls. It doesn&#39;t need Homestead running, Authentik reachable or anyone signed in.</p>
+<p>Consuming it is <code>POST /api/admin/owner/recover</code> with the token and a new password of 8+ characters. Wrong, expired and replayed tokens all get the same <code>401 invalid_or_expired_token</code>. The comparison is constant-time, and a successful consume wipes the hash:</p>
+<pre><code class="language-js">const presentedHash = crypto.createHash(&#39;sha256&#39;).update(token).digest(&#39;hex&#39;);
+const a = Buffer.from(presentedHash, &#39;hex&#39;);
+const b = Buffer.from(row.h, &#39;hex&#39;);
+if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+  return { ok: false, code: &#39;invalid_or_expired_token&#39; };
+}
+setLocalPassword(db, ownerId, newPassword);
+...
+</code></pre>
+<p><code>unlinkIdentity</code> also got stricter for the owner. Removing their last way in returns <code>would_lock_out_owner</code> instead of the generic <code>no_login_path</code>. Every step writes an audit row, with no tokens or passwords in it:</p>
+<table>
+<thead>
+<tr>
+<th>Event kind</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>owner_recovery_minted</code></td>
+<td>CLI issued a token</td>
+</tr>
+<tr>
+<td><code>owner_recovery_consumed</code></td>
+<td>token used, password rotated</td>
+</tr>
+<tr>
+<td><code>owner_recovery_revoked</code></td>
+<td>CLI <code>--revoke</code></td>
+</tr>
+<tr>
+<td><code>owner_recovery_rejected</code></td>
+<td>bad, expired or replayed token</td>
+</tr>
+</tbody></table>
+<h3>6.2 The recovery endpoint you couldn&#39;t reach</h3>
+<p>The first version had 92 of 92 assertions green and a hole in the middle. <code>/api/admin/owner/recover</code> sat behind <code>auth</code> and <code>requireAdmin</code>. The endpoint for &quot;Authentik is down and the owner forgot their password&quot; required an admin session. Every test called it with simulated Authentik headers, so nothing failed. The runbook even described it as intended.</p>
+<p>The agent I&#39;d told to &quot;review, analyze, and merge&quot; caught it. The route lost its auth middleware, and the tests were rewritten to call it with zero headers, the real outage case. The runbook now calls it &quot;deliberately unauthenticated&quot;: the one-shot token is the credential, the same way a password is the credential for <code>/api/login</code>.</p>
+<blockquote>
+<p><strong>NOTE</strong> The other half of outage resilience was already true: <code>/api/login</code> never needed the header. It just didn&#39;t have a test saying so. Now it does.</p>
+</blockquote>
+<h2>7. Cookies, secrets and the proxy</h2>
+<h3>7.1 admin / changeme</h3>
+<p>On 2026-08-23 a design review found that the seeded <code>admin</code> account used <code>ADMIN_PASSWORD || &#39;changeme&#39;</code>, and that <code>ADMIN_PASSWORD</code> appeared in none of the deploy docs. So anyone who followed the docs got an admin whose password was the word &quot;changeme&quot;. <code>ADMIN_PASSWORD</code> is now in the README&#39;s quick start.</p>
+<blockquote class="warn">
+<p><strong>WARNING</strong> A startup guard that refuses a <code>changeme</code> admin was written but never merged. As of v0.6.0 the first-boot seed still falls back to <code>changeme</code> when <code>ADMIN_PASSWORD</code> is unset. Set it before first boot.</p>
+</blockquote>
+<h3>7.2 SESSION_SECRET fails closed</h3>
+<p>The <code>||</code> from section 1 lasted until 2026-09-06. A box with no <code>SESSION_SECRET</code> signed cookies with a string anyone could read in the repo, which means anyone could forge an <code>admin</code> session. Now the server refuses to start:</p>
+<pre><code class="language-js">function loadSessionSecret() {
+  const raw = process.env.SESSION_SECRET;
+  if (typeof raw !== &#39;string&#39; || raw.length === 0) {
+    throw new Error(
+      &#39;SESSION_SECRET is not set. Homestead refuses to sign session cookies &#39; +
+      &#39;without one. Generate one with: `openssl rand -hex 32`.&#39; + ...
+  if (SESSION_SECRET_PLACEHOLDERS.has(raw)) { ... }
+  if (raw.length &lt; SESSION_SECRET_MIN) { ... }   // 32
+  return raw;
+}
+</code></pre>
+<p>The placeholders include the old fallback and the old docker-compose example. <code>/api/health</code> reports <code>sessionSecretReady</code> so a probe can spot a bad config without seeing the secret. In October every refusal also started saying <em>where</em> to set the value.</p>
+<p>The same change made cookies <code>Secure</code> in production and cut their life from 90 days to 14. That broke CI right away: the browser smokes boot a production-mode server over plain HTTP, the browser dropped the Secure cookie, and the post-login screenshot test failed. Each smoke now sets a test-only <code>HOMESTEAD_INSECURE_TEST_COOKIES=1</code>.</p>
+<h3>7.3 The cookie, as of v0.6.0</h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Value</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>httpOnly</code></td>
+<td>true</td>
+<td>page scripts can&#39;t read it</td>
+</tr>
+<tr>
+<td><code>sameSite</code></td>
+<td><code>lax</code></td>
+<td>survives top-level navigation, not cross-site POSTs</td>
+</tr>
+<tr>
+<td><code>secure</code></td>
+<td>true when <code>NODE_ENV=production</code></td>
+<td>never sent over a plain-HTTP hop</td>
+</tr>
+<tr>
+<td><code>maxAge</code></td>
+<td>14 days</td>
+<td>was 90</td>
+</tr>
+<tr>
+<td><code>trust proxy</code></td>
+<td><code>1</code></td>
+<td>one TLS-terminating proxy; Express reads <code>X-Forwarded-Proto</code> from it</td>
+</tr>
+<tr>
+<td>secret</td>
+<td><code>SESSION_SECRET</code>, 32+ chars</td>
+<td>no fallback; won&#39;t boot without it</td>
+</tr>
+</tbody></table>
+<h2>8. End of Part 2</h2>
+<p>Where things stood:</p>
+<ul>
+<li>Four ways in, checked in order: bearer token, forward-auth header from the proxy, session cookie, then 401.</li>
+<li>A person is a <code>users.id</code>. Passwords and provider subjects are keys pointing at it, so adding Authentik later doesn&#39;t move anyone&#39;s data.</li>
+<li>Invite links that can actually create an account, in one transaction, with a welcome screen that says what to do first.</li>
+<li>Self-service OIDC linking with re-auth, PKCE, nonce, RS256 only, and no merging by email.</li>
+<li>A break-glass path for the owner that works with Authentik down and the password forgotten, after fixing the version that needed you signed in first.</li>
+<li>A session secret that refuses to boot instead of falling back. And one admin default that still needs the same treatment.</li>
+</ul>
+<p>Next, Part 3: the Porch. A feed, then walls, then a house that only turns on the rooms you want.</p>
+
+<footer>Tags: Homestead, devlog, authentication, Authentik, OIDC, self-hosting<br>Slug: homestead-devlog-02-the-front-door</footer></main>

@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" font-family="monospace" font-size="12" fill="#1b2440">
+  <rect width="800" height="600" fill="#ffffff"/>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1b2440"/>
+    </marker>
+  </defs>
+  <text x="20" y="28" font-size="15" font-weight="bold">FIG 6-2  HOW A GAZETTE ISSUE GETS MADE (v0.5.19 on)</text>
+  <line x1="20" y1="38" x2="780" y2="38" stroke="#1b2440" stroke-width="1"/>
+
+  <!-- sources -->
+  <g stroke="#1b2440" stroke-width="1.5" fill="none">
+    <rect x="30" y="56" width="170" height="44"/>
+    <rect x="220" y="56" width="170" height="44"/>
+    <rect x="410" y="56" width="170" height="44"/>
+    <rect x="600" y="56" width="170" height="44"/>
+  </g>
+  <text x="44" y="75" font-weight="bold">tasks + chores</text>
+  <text x="44" y="92">due / overdue / week</text>
+  <text x="234" y="75" font-weight="bold">media arrivals</text>
+  <text x="234" y="92">Plex, Kavita sync</text>
+  <text x="424" y="75" font-weight="bold">Porch overnight</text>
+  <text x="424" y="92">posts + comments</text>
+  <text x="614" y="75" font-weight="bold">today's events</text>
+  <text x="614" y="92">+ house_rooms label</text>
+
+  <g stroke="#1b2440" stroke-width="1.5" marker-end="url(#a)">
+    <line x1="115" y1="100" x2="330" y2="128"/>
+    <line x1="305" y1="100" x2="370" y2="128"/>
+    <line x1="495" y1="100" x2="430" y2="128"/>
+    <line x1="685" y1="100" x2="470" y2="128"/>
+  </g>
+
+  <rect x="250" y="130" width="300" height="34" stroke="#1b2440" stroke-width="2" fill="none"/>
+  <text x="400" y="152" text-anchor="middle" font-weight="bold">assembleContext(db, user, { tz })</text>
+  <line x1="400" y1="164" x2="400" y2="186" stroke="#1b2440" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- sections -->
+  <rect x="120" y="188" width="560" height="104" stroke="#1b2440" stroke-width="2" fill="none"/>
+  <text x="136" y="208" font-weight="bold">SECTIONS  (order here = print order)</text>
+  <text x="136" y="230">1. Rotation Desk ....... lede: whose turn, what's due, what slipped</text>
+  <text x="136" y="248">2. Arts &amp; Media ........ what arrived in the library, by title</text>
+  <text x="136" y="266">3. From the Porch ...... who posted what, by display name</text>
+  <text x="136" y="284">4. Today's Listings .... calendar, keyed by house room if set</text>
+  <line x1="400" y1="292" x2="400" y2="314" stroke="#1b2440" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- the gate -->
+  <rect x="210" y="316" width="380" height="44" stroke="#c9a227" stroke-width="3" fill="none"/>
+  <text x="400" y="335" text-anchor="middle" font-weight="bold" fill="#8a6d0f">availableSections(ctx)</text>
+  <text x="400" y="352" text-anchor="middle">a section with an empty slice is dropped</text>
+
+  <g stroke="#1b2440" stroke-width="1.5" marker-end="url(#a)">
+    <line x1="260" y1="360" x2="160" y2="392"/>
+    <line x1="540" y1="360" x2="620" y2="392"/>
+  </g>
+  <text x="150" y="384" text-anchor="end" font-size="11">none left</text>
+  <text x="640" y="384" font-size="11">some left</text>
+
+  <rect x="30" y="394" width="300" height="58" stroke="#1b2440" stroke-width="1.5" fill="none"/>
+  <text x="44" y="414" font-weight="bold">THIN_NOTE, one line</text>
+  <text x="44" y="431">"A quiet night. Nothing came in..."</text>
+  <text x="44" y="446">provider is never called</text>
+
+  <rect x="400" y="394" width="370" height="58" stroke="#1b2440" stroke-width="1.5" fill="none"/>
+  <text x="414" y="414" font-weight="bold">buildPrompt (VOICE.md rules)</text>
+  <text x="414" y="431">-&gt; composeGazette (same provider wire)</text>
+  <text x="414" y="446">-&gt; parseEdition: JSON, unknown sections cut</text>
+
+  <g stroke="#1b2440" stroke-width="1.5" marker-end="url(#a)">
+    <line x1="180" y1="452" x2="180" y2="484"/>
+    <line x1="585" y1="452" x2="585" y2="484"/>
+    <line x1="300" y1="452" x2="500" y2="484"/>
+    <line x1="500" y1="452" x2="300" y2="484"/>
+  </g>
+
+  <!-- stores -->
+  <rect x="30" y="486" width="350" height="86" stroke="#1b2440" stroke-width="2" fill="none"/>
+  <text x="44" y="506" font-weight="bold">gazette_editions  (the sheet)</text>
+  <text x="44" y="524">GET /api/me/gazette/today</text>
+  <text x="44" y="541">lazy: minted on first open of the day</text>
+  <text x="44" y="558">published | thin | unavailable</text>
+
+  <rect x="420" y="486" width="350" height="86" stroke="#1b2440" stroke-width="2" fill="none"/>
+  <text x="434" y="506" font-weight="bold">gazette_issues  (typed page, v0.5.19)</text>
+  <text x="434" y="524">GET /api/gazette/today, /:date</text>
+  <text x="434" y="541">POST /api/gazette/ask (actions: false)</text>
+  <text x="434" y="558">cron: 04:00 local, 15-min tick</text>
+
+  <text x="30" y="592" font-size="11">NOTE: each route runs this same gate and writes its own store. Typed cards print even if prose fails.</text>
+</svg>

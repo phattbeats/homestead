@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 510" font-family="monospace" font-size="12" fill="#1b2440">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1b2440"/>
+    </marker>
+  </defs>
+  <rect width="800" height="510" fill="#ffffff"/>
+  <text x="20" y="28" font-size="15" font-weight="bold">FIG 4-3  THE DUNE WALKTHROUGH (scripts/seed-dune.js)</text>
+  <line x1="20" y1="38" x2="780" y2="38" stroke="#1b2440" stroke-width="1"/>
+
+  <!-- concept node -->
+  <rect x="290" y="56" width="220" height="56" fill="none" stroke="#c9a227" stroke-width="3"/>
+  <text x="305" y="78" font-weight="bold" fill="#8a6d0f">Dune franchise</text>
+  <text x="305" y="98">concept · manual link</text>
+
+  <!-- works -->
+  <g stroke="#1b2440" stroke-width="2" fill="none">
+    <rect x="40" y="200" width="190" height="62"/>
+    <rect x="305" y="200" width="190" height="62"/>
+    <rect x="570" y="200" width="190" height="62"/>
+  </g>
+  <text x="52" y="222" font-weight="bold">Dune  (book, 1965)</text>
+  <text x="52" y="240">work · kavita</text>
+  <text x="52" y="256" font-size="11">isbn</text>
+  <text x="317" y="222" font-weight="bold">Dune  (audiobook)</text>
+  <text x="317" y="240">work · audiobookshelf</text>
+  <text x="317" y="256" font-size="11">audible_id</text>
+  <text x="582" y="222" font-weight="bold">Dune  (film, 1984)</text>
+  <text x="582" y="240">work · plex</text>
+  <text x="582" y="256" font-size="11">tmdb_id</text>
+
+  <!-- concept -> works: available_as -->
+  <g stroke="#1b2440" stroke-width="1.5" fill="none" marker-end="url(#ah)">
+    <line x1="330" y1="112" x2="150" y2="198"/>
+    <line x1="400" y1="112" x2="400" y2="198"/>
+    <line x1="470" y1="112" x2="650" y2="198"/>
+  </g>
+  <text x="96" y="146">available_as</text>
+  <text x="96" y="162" font-size="11">format: ebook</text>
+  <text x="408" y="146">available_as</text>
+  <text x="408" y="162" font-size="11">format: audiobook</text>
+  <text x="600" y="146">available_as</text>
+  <text x="600" y="162" font-size="11">format: video</text>
+
+  <!-- persons -->
+  <g stroke="#1b2440" stroke-width="2" fill="none">
+    <rect x="170" y="350" width="200" height="50"/>
+    <rect x="570" y="350" width="190" height="50"/>
+  </g>
+  <text x="182" y="372" font-weight="bold">Frank Herbert</text>
+  <text x="182" y="390">person</text>
+  <text x="582" y="372" font-weight="bold">David Lynch</text>
+  <text x="582" y="390">person</text>
+
+  <g stroke="#1b2440" stroke-width="1.5" fill="none" marker-end="url(#ah)">
+    <line x1="135" y1="262" x2="225" y2="348"/>
+    <line x1="400" y1="262" x2="320" y2="348"/>
+    <line x1="665" y1="262" x2="665" y2="348"/>
+  </g>
+  <text x="80" y="310">authored_by</text>
+  <text x="372" y="310">authored_by</text>
+  <text x="674" y="310">directed_by</text>
+
+  <!-- adaptation_of: film -> book, routed around the bottom -->
+  <path d="M760,231 L785,231 L785,440 L18,440 L18,231 L38,231" fill="none" stroke="#1b2440" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah)"/>
+  <text x="250" y="434">adaptation_of  (film -&gt; book, medium: film)</text>
+
+  <text x="20" y="472" font-size="11">Each work also has a tagged_with edge back to the concept. 6 entities, 10 edges, 5 aliases, idempotent.</text>
+  <text x="20" y="490" font-size="11">Audiobookshelf has no sync worker in the repo: the seed writes that node directly.</text>
+</svg>

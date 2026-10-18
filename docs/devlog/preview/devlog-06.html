@@ -1,0 +1,332 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Homestead devlog, Part 6: The Gazette, the brand, and the Forum</title><style>body{margin:0;background:#FFFBF5;color:#2B2622;font:20px/1.65 Georgia,serif}
+header.site{background:#2B2622;color:#f6e4c3;padding:14px 4vw;font:600 15px system-ui;letter-spacing:.08em;display:flex;gap:12px;align-items:center}
+header.site b{color:#fff}header.site a{color:inherit;text-decoration:none}.stripe{height:5px;background:linear-gradient(90deg,#6D7B59 0 33%,#d49a40 33% 66%,#C4703C 66%)}
+main{max-width:740px;margin:0 auto;padding:40px 20px 80px}.meta{font:14px system-ui;color:#7a7269;text-transform:uppercase;letter-spacing:.05em}
+h1{font:800 44px/1.15 system-ui;margin:.3em 0}.excerpt{font:22px/1.5 system-ui;color:#4b4624}
+h2{font:700 30px system-ui;margin-top:1.8em;border-bottom:2px solid #4b4624;padding-bottom:.2em}h3{font:700 23px system-ui}
+img{max-width:100%;display:block;margin:1.4em auto 0;border-radius:4px}img[src$=".png"]{max-height:760px}.feature{width:100%;max-height:none!important;margin:1em 0 2em}
+em.cap{display:block;text-align:center;font:14px/1.4 system-ui;color:#7a7269;margin:.5em 0 1em}
+pre{background:#2B2622;color:#f3ece2;padding:18px;border-radius:6px;overflow:auto;font:14px/1.5 ui-monospace,Menlo,monospace;border-left:4px solid #d49a40}
+code{font:0.85em ui-monospace,Menlo,monospace;background:#f1ebe1;padding:1px 4px;border-radius:3px}pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%;font:15px/1.4 system-ui;margin:1.4em 0}th{background:#4b4624;color:#fff;text-align:left}th,td{border:1px solid #d8cfc2;padding:7px 9px}tr:nth-child(even) td{background:#f6efe4}
+blockquote{margin:1.6em 0;padding:14px 18px;background:#fbf1dc;border-left:5px solid #d49a40;font:17px/1.55 system-ui}
+blockquote.warn{background:#fbe9e0;border-color:#C4703C}
+footer{border-top:1px solid #e5ddd0;margin-top:60px;padding-top:20px;font:15px system-ui;color:#7a7269}</style>
+<header class="site"><a href="index.html"><b>Homestead</b> · devlog</a></header><div class="stripe"></div><main>
+<div class="meta">Part 6 · DRAFT PREVIEW, NOT PUBLISHED</div><h1>Homestead devlog, Part 6: The Gazette, the brand, and the Forum</h1><p class="excerpt">A morning paper that refuses to pad a quiet day, a front door that finally opens, and the October call to make the Porch look like a 2006 message board.</p><img class="feature" src="../img/06-forum-index.png" alt="">
+<p><img src="../img/06-forum-index.png" alt="The Forum page on a demo instance"></p>
+<em class="cap">FIG 6-0 — The Forum at <code>/forum</code> on v0.6.0. Demo data, users alex and sam.</em>
+<p>Part 5 ended with agents living in the house. This part is the softer stuff: what the house reads in the morning, what it looks like, and the week in October when I decided the Porch should feel like a message board from 2006.</p>
+<h2>1. The Gazette</h2>
+<h3>1.1 A module, not a perk</h3>
+<p>The Gazette, a morning newspaper about your own house, was in the July design mockups long before it had code. When an agent picked it up at the end of August, its design note was blunt:</p>
+<blockquote>
+<p>This issue is the first line of Gazette code, full stop — treat it as new, not as finishing a wire-up.</p>
+</blockquote>
+<p>The original plan made the Gazette a perk of the agent module. I overruled that: &quot;users can add / remove it as a module just like everything else.&quot; So it got its own registry key and its own toggle in the add-a-room sheet. It declares <code>requires: [&#39;agent&#39;]</code> (no model, no edition), so switching the agent off while the Gazette is on hits the existing <code>dependents_active</code> 409. One new edge in the dependency graph, no new cascade logic.</p>
+<p>Two things did have to change. None of the <code>open_mode</code> values (<code>frame</code>, <code>drawer</code>, <code>tab</code>) fit &quot;full-screen, opened on demand&quot;, so there&#39;s a fourth, <code>sheet</code>. And <code>user_modules</code> had a hardcoded <code>CHECK</code> listing the six original keys, which SQLite can&#39;t alter in place. Instead of a one-off migration, <code>migrate()</code> now generates the CHECK from the registry, compares it to the stored DDL on every boot, and rebuilds the table when they disagree. As the changelog put it, the hardcoded list &quot;was itself the drift that constraint existed to prevent.&quot;</p>
+<h3>1.2 Quiet days print small</h3>
+<p>This is the Gazette&#39;s most important rule. An empty section is never offered to the model, a section the model invents anyway is dropped on parse, and if nothing happened at all, the model is never called:</p>
+<pre><code class="language-js">// Thin-edition floor: nothing happened at all. Print the one line
+// Homestead itself owns rather than paying the harness to say
+// &quot;nothing happened&quot; in more words.
+const sections = gazette.availableSections(ctx);
+if (sections.length === 0) {
+  const thin = gazette.putEdition(db, me.id, ctx.date, {
+    tz,
+    status: &#39;thin&#39;,
+    edition: { lede: { headline: &#39;Quiet&#39;, body: gazette.THIN_NOTE }, briefs: [], editors_note: null },
+  });
+  return res.json({ ...thin, cached: false, retryable: false });
+}
+</code></pre>
+<p>That <code>THIN_NOTE</code> is the only sentence of the Gazette that Homestead writes itself:</p>
+<blockquote>
+<p>A quiet night. Nothing came in, nothing came due, and the house kept to itself.</p>
+</blockquote>
+<p>Other decisions from the first version (2026-08-31):</p>
+<ul>
+<li><strong>Lazy.</strong> Generated on the first open of the day. A user who never opens it never spends a token.</li>
+<li><strong>JSON, not HTML.</strong> Rendered through <code>esc()</code>, so model prose never reaches <code>innerHTML</code>.</li>
+<li><strong>Failures are cached too</strong>, but served <code>retryable</code> so the sheet can offer a re-run.</li>
+<li><strong>No character prompt.</strong> The model gets the rules from <code>docs/VOICE.md</code> directly (&quot;One voice, no shifts across modules&quot;). The register is &quot;warm, dry, slightly amused&quot;, same as the empty Tasks list (&quot;Nothing to do. Suspicious.&quot;).</li>
+</ul>
+<h3>1.3 The typed rework: a cron, back issues, and Ask</h3>
+<p>On 2026-09-05 (v0.5.19) the Gazette grew a second surface: a standalone page with a masthead, card sections and back issues.</p>
+<p><img src="../img/06-gazette.png" alt="The Homestead Gazette page on a demo instance"></p>
+<em class="cap">FIG 6-1 — The Gazette page. Demo data, users alex and sam.</em>
+<p>The four sections, in print order:</p>
+<table>
+<thead>
+<tr>
+<th>Section</th>
+<th>What feeds it</th>
+<th>Brief to the model</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Rotation Desk (lede)</td>
+<td>tasks due today, overdue, chores due this week</td>
+<td>&quot;Whose turn it is, what is due, what slipped.&quot; Gets the most words.</td>
+</tr>
+<tr>
+<td>Arts &amp; Media</td>
+<td>new arrivals from the Plex/Kavita entity sync</td>
+<td>&quot;Name the actual titles.&quot;</td>
+</tr>
+<tr>
+<td>From the Porch</td>
+<td>overnight posts and comments on your walls</td>
+<td>&quot;Attribute by display name.&quot;</td>
+</tr>
+<tr>
+<td>Today&#39;s Listings</td>
+<td>today&#39;s calendar events</td>
+<td>&quot;Terse — this is a listings column, not prose.&quot;</td>
+</tr>
+</tbody></table>
+<p><img src="../diagrams/devlog-06-gazette-pipeline.svg" alt="Pipeline diagram from data sources through assembleContext, SECTIONS and the empty-section gate to the two stores"></p>
+<em class="cap">FIG 6-2 — One set of sections, one gate, two stores. The sheet and the typed page coexist; neither replaced the other.</em>
+<ul>
+<li><strong><code>gazette_issues</code></strong>, one typed row per user per day. The sheet&#39;s old table stayed, and both read the same <code>SECTIONS</code>, so there&#39;s one answer to &quot;what&#39;s newsworthy&quot;.</li>
+<li><strong>A cron with no cron library.</strong> <code>jobs/gazette-daily.js</code> ticks every 15 minutes and asks, per user, &quot;is it past 04:00 where you are, and is today&#39;s issue missing?&quot; The page still generates on demand, so turning the module on at lunch works.</li>
+<li><strong>Back issues.</strong> <code>GET /api/gazette/:date</code> returns the stored issue or a 404, no synthetic backfill. A seed script writes 28 for a demo user, thin days included.</li>
+<li><strong>Ask the editor.</strong> <code>POST /api/gazette/ask</code> goes through the drawer&#39;s Hearth dispatch, grounded in today&#39;s issue, with <code>actions: false</code>. A question to your newspaper should never queue a film as a side effect.</li>
+</ul>
+<blockquote class="warn">
+<p><strong>WARNING</strong> Homestead doesn&#39;t store a timezone per user. The cron uses the timezone recorded with the user&#39;s most recent edition, falling back to UTC. The job&#39;s header comment calls this &quot;a real limitation, not a silent guess&quot;, which is the correct amount of shame.</p>
+</blockquote>
+<blockquote>
+<p><strong>NOTE</strong> The masthead weather is fake. <code>lib/weather.js</code> derives plausible weather from a hash of the date and tags it <code>source: &#39;mock&#39;</code>, so a real provider is a one-function swap later.</p>
+</blockquote>
+<p>The typed rework also shipped a <code>require(&#39;./jobs/gazette-daily&#39;)</code> and a Dockerfile that didn&#39;t copy <code>jobs/</code>. That&#39;s Part 7.</p>
+<h2>2. Two kinds of room</h2>
+<p>Homestead already used &quot;room&quot; for screens in the nav. The Gazette needed the other meaning: a listing like &quot;Kitchen: 6pm dinner&quot; needs to know where in the house something happens. The comment in <code>lib/house-rooms.js</code> admits the Gazette &quot;until now was inventing those names out of nothing.&quot;</p>
+<p>So on 2026-08-31 house rooms became their own concept:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Nav room</th>
+<th>House room</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Answers</td>
+<td>&quot;which screen am I on?&quot;</td>
+<td>&quot;where in the house did this happen?&quot;</td>
+</tr>
+<tr>
+<td>Stored as</td>
+<td>the <code>room</code> field on a registry entry</td>
+<td><code>house_rooms</code> rows owned by a user</td>
+</tr>
+<tr>
+<td>Examples</td>
+<td><code>porch</code>, <code>r-lists</code>, <code>r-calendar</code></td>
+<td>Hall, Den, Kitchen</td>
+</tr>
+<tr>
+<td>Registry hook</td>
+<td>required field</td>
+<td>optional <code>room_kinds: [&#39;house_room&#39;]</code> (lists, calendar, chores)</td>
+</tr>
+</tbody></table>
+<p>Each user owns their rooms; others can be granted read access. Hall, Den and Kitchen are offered as proposals, and nothing is written until you accept. <code>proposals</code> is a reserved slug, because <code>GET /api/me/rooms/proposals</code> is declared before <code>/api/me/rooms/:slug</code> and a room by that name would be unreachable forever.</p>
+<p>On 2026-09-05 the calendar merge started joining <code>house_rooms</code>, and the Listings section learned to use it. The whole integration is one sentence in its brief to the model:</p>
+<pre><code class="language-js">hint: &#39;Today\&#39;s calendar, in time order. Terse — this is a listings column, not prose. &#39; +
+  &#39;Each event may carry a `room` (a house location like Kitchen or Den) — &#39; +
+  &#39;when present, key the listing by it (e.g. &quot;Kitchen: 6pm dinner&quot;); when absent, list plain.&#39;,
+</code></pre>
+<h2>3. The brand: a door that opens</h2>
+<h3>3.1 The brand system (v0.5.5)</h3>
+<p>The brand pass landed on 2026-08-30. The canonical logo makes the carved-wood lettering itself the wordmark (&quot;vectorize THIS lettering&quot;), so headers render <code>/wordmark.svg</code> as an image and never a typeset substitute.</p>
+<p>It took three tries to use the right files. The first pass rebuilt the lockup from a spec and a Fraunces font. My correction was &quot;USE THE CANONICAL LOGO AND BANNER&quot;. Half an hour later: &quot;STILL NOT THE RIGHT ASSETS&quot;. The third pass used the canonical files as supplied.</p>
+<p>The locked palette, from <code>docs/brand/ASSETS.md</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th>Hex</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--brand-olive</code></td>
+<td><code>#4b4624</code></td>
+<td>door frame, dark wood</td>
+</tr>
+<tr>
+<td><code>--brand-sage</code></td>
+<td><code>#6d7b59</code></td>
+<td>door panel</td>
+</tr>
+<tr>
+<td><code>--brand-paper</code></td>
+<td><code>#f6e4c3</code></td>
+<td>parchment ground</td>
+</tr>
+<tr>
+<td><code>--brand-hearth</code></td>
+<td><code>#ad5c05</code></td>
+<td>hearth glow</td>
+</tr>
+<tr>
+<td><code>--brand-brass</code></td>
+<td><code>#d49a40</code></td>
+<td>door knob, hinge pins</td>
+</tr>
+<tr>
+<td><code>--ink</code></td>
+<td><code>#2B2622</code></td>
+<td>text</td>
+</tr>
+</tbody></table>
+<p>Body text stays Plus Jakarta Sans, Fraunces Italic is only for the tagline (&quot;Your home. Your data. Your apps.&quot;), and painterly art stays off feeds and settings. Muted text went from 3.71:1 to 4.59:1 contrast to pass WCAG AA.</p>
+<h3>3.2 The door was closed</h3>
+<p>The same day, I pointed out that the icon in the live header was a flat, closed arch. The brand is an <em>opening</em> door. v0.5.9 rebuilt every icon from one SVG, <code>public/icon.svg</code>, whose header comment reads like a stage direction: &quot;Door slab has swung OPEN outward toward viewer-right.&quot; Favicon and PWA icons all derive from it. The same release added six module icons in the same palette (the agent&#39;s is a lantern), Hearth&#39;s avatar and two teasers.</p>
+<p><img src="../img/teaser-out-now.png" alt="Homestead &quot;Out now&quot; teaser poster"></p>
+<em class="cap">FIG 6-3 — The OUT NOW teaser. The canonical opening-door mark is derived from this poster.</em>
+<p>Then I reopened the issue: first &quot;live on prod?&quot;, then &quot;its not fixed everywehre&quot;. The bottom nav on <code>/</code> and the Porch was still six emoji. v0.5.10 swapped them for the icon and module SVGs and bumped the service worker cache from <code>homestead-v5</code> to <code>homestead-v6</code> so installed copies wouldn&#39;t keep the emoji offline.</p>
+<p>That&#39;s where the asset index got its opening rule:</p>
+<blockquote>
+<p>If you change any of these paths, update both the path here AND the consumer in the same PR — out-of-sync assets have shipped twice.</p>
+</blockquote>
+<blockquote>
+<p><strong>NOTE</strong> As of v0.6.0, that same file still lists the cache key as <code>homestead-v5</code>. <code>sw.js</code> opens <code>homestead-v6</code>. The rule applies to the index too.</p>
+</blockquote>
+<h2>4. The Forum</h2>
+<h3>4.1 Three mockups</h3>
+<p>In October I asked for the Porch to be the first thing anyone sees after logging in, to look like an old forum, and to be called the Forum. In my words: &quot;This is a pure nostalgia and pure enjoyment shift in my eyes. Do 3 design proposals to me.&quot;</p>
+<p>An agent came back on 2026-10-08 with three, each with desktop and mobile mockups:</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Era</th>
+<th>Pitch</th>
+<th>Trade-off</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>A: Classic Board</td>
+<td>phpBB2 / subSilver, ~2003</td>
+<td>blue-grey gradient tables, Verdana 11px, rank stars</td>
+<td>drops the Homestead brand entirely</td>
+</tr>
+<tr>
+<td>B: Woodgrain Board</td>
+<td>vBulletin 3 in Homestead colors</td>
+<td>carved-wood header, olive table heads, parchment rows, &quot;What&#39;s Going On?&quot; panel</td>
+<td>the recommendation</td>
+</tr>
+<tr>
+<td>C: Night Owl Clubhouse</td>
+<td>ProBoards / Geocities</td>
+<td>starfield, Comic Sans, hit counter, marquee, shoutbox</td>
+<td>loud</td>
+</tr>
+</tbody></table>
+<p>All three shared the same mapping (walls become boards, posts become threads, comments become replies) and the same furniture: Who&#39;s Online, post counts, ranks, signatures, &quot;posts since last visit&quot;. The pitch for B was &quot;a 2006 forum that someone in the family actually built.&quot;</p>
+<p>I picked B, with short notes: few boards for now, because I don&#39;t know the shape yet, but keep Who&#39;s Online, the shoutbox and all the nostalgia. Two days later I added: &quot;I want to be able to switch between the three different skins.&quot; So the frontend plan is one markup, three stylesheets, Woodgrain by default. The build was split in three: data model, shoutbox, frontend.</p>
+<h3>4.2 A costume, not a second store</h3>
+<p>v0.6.0 (2026-10-16) shipped the first build. The key decision is in <code>lib/forum.js</code>: there is &quot;deliberately no second content store.&quot; Membership, opt-outs, notifications and live updates keep working because nothing moved.</p>
+<p><img src="../diagrams/devlog-06-forum-mapping.svg" alt="Mapping diagram: forum words on the left, Homestead tables on the right, and a box of derived values"></p>
+<em class="cap">FIG 6-4 — Everything the Forum needs is either an additive column or computed on read.</em>
+<p>The migrations are all idempotent <code>ADD COLUMN</code>s. Birthdays are stored as <code>MM-DD</code>; the year is deliberately not kept. Three starter boards are seeded once: Announcements, Introduce Yourself, and General Chit-Chat, which is the old Porch wall with every post still in it. The rename is polite:</p>
+<pre><code class="language-js">// Only the legacy seed name is rewritten; anything custom is kept.
+const name = existing.name === &#39;Household Porch&#39; ? b.name : existing.name;
+</code></pre>
+<p>If an admin deletes a starter board, it stays deleted: the seed only runs while no wall has a category.</p>
+<h3>4.3 Ranks are derived</h3>
+<p>Post counts are never stored. They&#39;re threads plus replies, counted on read, and ranks come from a ladder the code comment calls &quot;vBulletin-flavoured on purpose — the nostalgia is the feature&quot;:</p>
+<pre><code class="language-js">const RANKS = Object.freeze([
+  { min: 0, name: &#39;Newcomer&#39; },
+  { min: 5, name: &#39;Junior Member&#39; },
+  { min: 25, name: &#39;Member&#39; },
+  { min: 100, name: &#39;Senior Member&#39; },
+  { min: 300, name: &#39;Elite Member&#39; },
+]);
+
+function rankFor(userRow, postCount) {
+  if (hearthCharacters.isBuiltinAgentUserId(_db, userRow.id)) return &#39;Moderator · House Agent&#39;;
+  if (walls.isAgentUserId(userRow.id)) return &#39;House Agent&#39;;
+  if (userRow.is_admin) return &#39;Administrator&#39;;
+  ...
+}
+</code></pre>
+<p>Hearth outranks everyone, by title at least.</p>
+<h3>4.4 Who&#39;s online, and since when</h3>
+<p>Who&#39;s Online is anyone active in the last 15 minutes (Hearth excluded: it has no session). &quot;New since your last visit&quot; needs the end of your <em>previous</em> visit, and gets it from one UPDATE that leans on how SQLite evaluates SET:</p>
+<pre><code class="language-js">// SQLite evaluates every SET expression against the pre-update row, so
+// last_visit_at sees the OLD last_active_at — that is the point.
+function touchActivity(userId) {
+  _db.prepare(`
+    UPDATE users SET
+      last_visit_at = CASE
+        WHEN last_active_at IS NULL THEN last_visit_at
+        WHEN last_active_at &lt; datetime(&#39;now&#39;, &#39;-${VISIT_GAP_MIN} minutes&#39;) THEN last_active_at
+        ELSE last_visit_at END,
+      last_active_at = datetime(&#39;now&#39;)
+    WHERE id = ? AND (last_active_at IS NULL OR last_active_at &lt; datetime(&#39;now&#39;, &#39;-${ACTIVITY_THROTTLE_SEC} seconds&#39;))
+  `).run(userId);
+}
+</code></pre>
+<p>Thirty minutes idle ends a visit, and the <code>WHERE</code> throttles writes to one a minute.</p>
+<h3>4.5 The API and the landing</h3>
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>GET /api/forum/index</code></td>
+<td>boards by category, counts, last post, new since last visit</td>
+</tr>
+<tr>
+<td><code>GET /api/forum/boards/:slug/threads</code></td>
+<td>stickies first, then last activity</td>
+</tr>
+<tr>
+<td><code>GET /api/forum/threads/:postId</code></td>
+<td>posts with rank, post count, signature</td>
+</tr>
+<tr>
+<td><code>PATCH /api/forum/threads/:postId</code></td>
+<td>admin: sticky on/off</td>
+</tr>
+<tr>
+<td><code>GET /api/forum/online</code>, <code>/stats</code></td>
+<td>Who&#39;s Online; totals, birthdays today</td>
+</tr>
+<tr>
+<td><code>PATCH /api/forum/me</code></td>
+<td>your signature and birthday</td>
+</tr>
+</tbody></table>
+<p>A board you can&#39;t see is a 404, not a 403. Views only count when someone other than the author opens a thread. Everyone lands on <code>/forum</code> once per browser session after login (<code>/?home=1</code> skips it), and <code>/porch.html</code> 301-redirects there with its query string, so old notification links still work.</p>
+<blockquote>
+<p><strong>NOTE</strong> Being honest about what v0.6.0 is: the rename, the landing, the data model and the read API. The <code>/forum</code> page itself still mounts the Porch&#39;s feed component under the new name. The Woodgrain frontend, with its index, board and thread pages, is the third build and hasn&#39;t been written yet.</p>
+</blockquote>
+<p><img src="../img/06-forum-desktop.png" alt="The Forum page at desktop width on a demo instance"></p>
+<em class="cap">FIG 6-5 — The same page at 1280px. Demo data, users alex and sam.</em>
+<h2>5. In flight: the shoutbox</h2>
+<p>The second build is an open pull request, &quot;Shoutbox backend + Hearth chiming in&quot;, on the <code>shoutbox</code> branch. It&#39;s the chat strip every old forum had in its sidebar: 280 characters, <code>/me waves</code> actions, classic smilies, a <code>shouts</code> table pruned to 200 rows and 7 days, the Porch&#39;s banned-phrase list, 5 shouts per 30 seconds, and live updates over the existing SSE bus.</p>
+<p>And Hearth chimes in, rarely. Only when a human has shouted in the last 30 minutes, never when Hearth was the last voice, at least two hours apart, at most four times a day, and then only on a 35% roll. In the comment&#39;s words, &quot;it answers a room, it doesn&#39;t fill one.&quot; The words come from the agent runtime. With no model key, Hearth falls back to a small canned pool:</p>
+<blockquote>
+<p>reminder: the fridge door is not a filing system</p>
+</blockquote>
+<p>The frontend is waiting on it. Its instructions say not to build against an unmerged branch, and the agent took that literally.</p>
+<h2>6. End of Part 6</h2>
+<p>Where things stood:</p>
+<ul>
+<li>A Gazette that&#39;s its own module: four sections, a 04:00 local cron, back issues, Ask the editor, fake weather honestly labelled, and a hard rule against padding a quiet day.</li>
+<li>House rooms, separate from nav rooms, with Hall, Den and Kitchen offered but not imposed.</li>
+<li>One opening-door SVG behind every icon, a wordmark nobody may retype, and an asset index slightly out of sync with itself.</li>
+<li>The Porch renamed to the Forum and landing first, with boards, stickies, derived ranks, signatures, birthdays and Who&#39;s Online in the data model and API. The Woodgrain frontend and the shoutbox are next.</li>
+</ul>
+<p>Next, Part 7: how a pile of agents built a house app. Issues as units of work, a test chain that silently skipped four tests, two production crash-loops from a Dockerfile that didn&#39;t copy new directories, and the October fresh start.</p>
+
+<footer>Tags: Homestead, devlog, design, branding, forums, nostalgia<br>Slug: homestead-devlog-06-gazette-brand-forum</footer></main>

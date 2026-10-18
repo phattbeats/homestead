@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 470" font-family="monospace" font-size="12" fill="#1b2440">
+  <rect width="800" height="470" fill="#ffffff"/>
+  <text x="20" y="28" font-size="15" font-weight="bold">FIG 3-3  THE LAYOUT LADDER (computeLayout, by enabled-module count)</text>
+  <line x1="20" y1="38" x2="780" y2="38" stroke="#1b2440" stroke-width="1"/>
+
+  <!-- step baseline -->
+  <g stroke="#1b2440" stroke-width="1.5" fill="none">
+    <polyline points="15,400 195,400 195,340 395,340 395,280 585,280 585,220 785,220" stroke-dasharray="4 3"/>
+  </g>
+
+  <!-- boxes -->
+  <g stroke="#1b2440" stroke-width="2" fill="none">
+    <rect x="20" y="250" width="170" height="140"/>
+    <rect x="200" y="190" width="190" height="146" stroke="#c9a227" stroke-width="3"/>
+    <rect x="400" y="130" width="180" height="140"/>
+    <rect x="590" y="70" width="190" height="140"/>
+  </g>
+
+  <text x="32" y="274" font-weight="bold">[0] empty</text>
+  <text x="32" y="292">0 modules</text>
+  <text x="32" y="316">no rooms at all</text>
+  <text x="32" y="334">defaultRoute: null</text>
+  <text x="32" y="352">bottom nav hidden</text>
+
+  <text x="212" y="214" font-weight="bold" fill="#8a6d0f">[1] feed-only</text>
+  <text x="212" y="232">1 module (wall, the</text>
+  <text x="212" y="248">default for new users)</text>
+  <text x="212" y="270">standalone Porch shell</text>
+  <text x="212" y="288">no bottom nav</text>
+  <text x="212" y="306">compose FAB + ⋯ chip</text>
+  <text x="212" y="324">"+ Add a room" pill</text>
+
+  <text x="412" y="154" font-weight="bold">[2] feed-tabs</text>
+  <text x="412" y="172">2-3 modules</text>
+  <text x="412" y="196">in-SPA, tab strip</text>
+  <text x="412" y="214">Porch mounts as a tab</text>
+  <text x="412" y="232">(same feed.js)</text>
+  <text x="412" y="250">"+ Add rooms" pill</text>
+
+  <text x="602" y="94" font-weight="bold">[3] meadow</text>
+  <text x="602" y="112">4+ modules</text>
+  <text x="602" y="136">full tile grid</text>
+  <text x="602" y="154">drawer FAB if agent on</text>
+  <text x="602" y="172">"+ Add rooms" pill,</text>
+  <text x="602" y="190">until nothing's left</text>
+
+  <text x="20" y="428" font-size="11">addRoomVisible = enabled count &lt; registered count.   agentDrawer = 'agent' is in the enabled set.</text>
+  <text x="20" y="446" font-size="11">tabs[] and pages[] carry the same tiles, so the SPA can draw any rung from one payload.</text>
+  <text x="20" y="464" font-size="11">Gold = where every brand-new account starts.</text>
+</svg>

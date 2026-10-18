@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 620" font-family="monospace" font-size="13" fill="#1b2440">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1b2440"/>
+    </marker>
+  </defs>
+  <rect width="800" height="620" fill="#ffffff"/>
+  <text x="20" y="28" font-size="15" font-weight="bold">FIG 5-3  HEARTH'S TOOL LOOP (bounded by construction)</text>
+  <line x1="20" y1="38" x2="780" y2="38" stroke="#1b2440" stroke-width="1"/>
+
+  <g stroke="#1b2440" stroke-width="2" fill="none">
+    <rect x="250" y="56" width="300" height="44"/>
+    <rect x="250" y="126" width="300" height="56"/>
+    <rect x="20" y="126" width="200" height="56"/>
+    <rect x="580" y="126" width="200" height="56"/>
+    <rect x="250" y="214" width="300" height="60"/>
+    <rect x="580" y="214" width="200" height="60"/>
+    <rect x="250" y="306" width="300" height="76"/>
+    <rect x="250" y="414" width="300" height="60" stroke="#c9a227" stroke-width="3"/>
+    <rect x="250" y="506" width="300" height="48"/>
+  </g>
+
+  <text x="266" y="76" font-weight="bold">POST /api/drawer</text>
+  <text x="266" y="92" font-size="12">"queue Part Two"</text>
+
+  <text x="266" y="148" font-weight="bold">dispatchDrawer()</text>
+  <text x="266" y="168" font-size="12">character = hearth? model key?</text>
+
+  <text x="32" y="148" font-weight="bold">not Hearth</text>
+  <text x="32" y="164" font-size="12">HMAC-signed POST</text>
+  <text x="32" y="178" font-size="12">to your own harness</text>
+
+  <text x="592" y="148" font-weight="bold">no key</text>
+  <text x="592" y="164" font-size="12">"Hearth needs a</text>
+  <text x="592" y="178" font-size="12">model key" reply</text>
+
+  <text x="266" y="236" font-weight="bold">ROUND 0: provider + tools</text>
+  <text x="266" y="256" font-size="12">enqueue_media, mention_user</text>
+
+  <text x="592" y="236" font-weight="bold">no tool_calls</text>
+  <text x="592" y="256" font-size="12">reply with the text, done</text>
+
+  <text x="266" y="328" font-weight="bold">execute each call, in order</text>
+  <text x="266" y="348" font-size="12">hearth-actions.execute(db, me, ...)</text>
+  <text x="266" y="364" font-size="12">permission checks, typed errors</text>
+  <text x="266" y="378" font-size="12">results pushed as role: 'tool'</text>
+
+  <text x="266" y="436" font-weight="bold" fill="#8a6d0f">ROUND 1: provider, NO tool block</text>
+  <text x="266" y="456" font-size="12">narrate what actually happened</text>
+
+  <text x="266" y="528" font-weight="bold">reply + chips</text>
+  <text x="266" y="546" font-size="12">(✓ queued Part Two)</text>
+
+  <g stroke="#1b2440" stroke-width="1.5" fill="none">
+    <line x1="400" y1="100" x2="400" y2="124" marker-end="url(#arr)"/>
+    <line x1="250" y1="154" x2="222" y2="154" marker-end="url(#arr)"/>
+    <line x1="550" y1="154" x2="578" y2="154" marker-end="url(#arr)"/>
+    <line x1="400" y1="182" x2="400" y2="212" marker-end="url(#arr)"/>
+    <line x1="550" y1="244" x2="578" y2="244" marker-end="url(#arr)"/>
+    <line x1="400" y1="274" x2="400" y2="304" marker-end="url(#arr)"/>
+    <line x1="400" y1="382" x2="400" y2="412" marker-end="url(#arr)"/>
+    <line x1="400" y1="474" x2="400" y2="504" marker-end="url(#arr)"/>
+  </g>
+  <text x="410" y="296" font-size="11">tool_calls</text>
+
+  <line x1="20" y1="574" x2="780" y2="574" stroke="#1b2440" stroke-width="1"/>
+  <text x="20" y="594" font-size="11">MAX_TOOL_ROUNDS = 2. Round 1 is built without tools, so a model that wants to keep going has nothing to call.</text>
+  <text x="20" y="610" font-size="11">Actions that already ran are still reported if round 1 fails.</text>
+</svg>

@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 530" font-family="monospace" font-size="12" fill="#1b2440">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1b2440"/>
+    </marker>
+  </defs>
+  <rect width="800" height="530" fill="#ffffff"/>
+  <text x="20" y="28" font-size="15" font-weight="bold">FIG 4-1  CALENDAR SOURCES -&gt; MERGE LAYER -&gt; API (v0.6.0)</text>
+  <line x1="20" y1="38" x2="780" y2="38" stroke="#1b2440" stroke-width="1"/>
+
+  <!-- column labels -->
+  <text x="20" y="54" font-size="11">PROVIDERS</text>
+  <text x="215" y="54" font-size="11">ADAPTERS (registerAdapter)</text>
+  <text x="425" y="54" font-size="11">SQLITE</text>
+  <text x="620" y="54" font-size="11">API</text>
+
+  <!-- providers -->
+  <g stroke="#1b2440" stroke-width="2" fill="none">
+    <rect x="20" y="60" width="160" height="48"/>
+    <rect x="20" y="120" width="160" height="48"/>
+    <rect x="20" y="180" width="160" height="48"/>
+    <rect x="20" y="240" width="160" height="48" stroke-dasharray="5 4"/>
+  </g>
+  <text x="30" y="80" font-weight="bold">Nextcloud</text>
+  <text x="30" y="98">CalDAV, app pw</text>
+  <text x="30" y="140" font-weight="bold">Apple iCloud</text>
+  <text x="30" y="158">CalDAV, app pw</text>
+  <text x="30" y="200" font-weight="bold">Microsoft 365</text>
+  <text x="30" y="218">Graph, OAuth2</text>
+  <text x="30" y="260" font-weight="bold">Google</text>
+  <text x="30" y="278">reserved: 501</text>
+
+  <!-- adapters -->
+  <g stroke="#1b2440" stroke-width="2" fill="none">
+    <rect x="215" y="60" width="175" height="108"/>
+    <rect x="215" y="180" width="175" height="48"/>
+    <rect x="215" y="240" width="175" height="48" stroke-dasharray="5 4"/>
+    <rect x="215" y="330" width="175" height="62"/>
+  </g>
+  <text x="225" y="82" font-weight="bold">CalDAVSource</text>
+  <text x="225" y="102">PROPFIND, REPORT</text>
+  <text x="225" y="120">PUT, DELETE</text>
+  <text x="225" y="138">hand-rolled XML</text>
+  <text x="225" y="156">+ iCal parser</text>
+  <text x="225" y="200" font-weight="bold">GraphSource</text>
+  <text x="225" y="218">calendarView, 401</text>
+  <text x="225" y="266">(no adapter yet)</text>
+  <text x="225" y="352" font-weight="bold">secret-box.js</text>
+  <text x="225" y="370">AES-256-GCM</text>
+  <text x="225" y="386">decrypts cred_blob</text>
+
+  <!-- sqlite column -->
+  <g stroke="#1b2440" stroke-width="2" fill="none">
+    <rect x="425" y="60" width="160" height="70"/>
+    <rect x="425" y="160" width="160" height="56"/>
+    <rect x="425" y="240" width="160" height="48"/>
+    <rect x="425" y="330" width="160" height="62"/>
+  </g>
+  <text x="435" y="82" font-weight="bold">syncSource()</text>
+  <text x="435" y="100">-60d .. +365d</text>
+  <text x="435" y="118">replace, 1 txn</text>
+  <text x="435" y="182" font-weight="bold">calendar_event_</text>
+  <text x="435" y="200" font-weight="bold">cache</text>
+  <text x="435" y="260" font-weight="bold">events</text>
+  <text x="435" y="278">native, by owner</text>
+  <text x="435" y="352" font-weight="bold">lib/snapshot.js</text>
+  <text x="435" y="370">same merge,</text>
+  <text x="435" y="386">its own copy</text>
+
+  <!-- api column -->
+  <rect x="620" y="60" width="160" height="190" fill="none" stroke="#c9a227" stroke-width="3"/>
+  <text x="630" y="82" font-weight="bold" fill="#8a6d0f">GET /api/events/</text>
+  <text x="630" y="98" font-weight="bold" fill="#8a6d0f">merged?from&amp;to</text>
+  <text x="630" y="124">origin: native |</text>
+  <text x="630" y="140">  provider:&lt;kind&gt;</text>
+  <text x="630" y="162">color per source</text>
+  <text x="630" y="184">stale: &gt; 5 min</text>
+  <text x="630" y="206">enabled = 1 only</text>
+  <text x="630" y="228">secret-name scan</text>
+  <text x="630" y="244">  hit -&gt; HTTP 500</text>
+  <g stroke="#1b2440" stroke-width="2" fill="none">
+    <rect x="620" y="280" width="160" height="44"/>
+    <rect x="620" y="348" width="160" height="44"/>
+  </g>
+  <text x="630" y="300" font-weight="bold">month grid</text>
+  <text x="630" y="316">up to 3 pips/day</text>
+  <text x="630" y="368" font-weight="bold">/api/me/snapshot</text>
+  <text x="630" y="384">today + next 7d</text>
+
+  <!-- arrows -->
+  <g stroke="#1b2440" stroke-width="1.5" fill="none" marker-end="url(#ah)">
+    <line x1="180" y1="84" x2="213" y2="84"/>
+    <line x1="180" y1="144" x2="213" y2="144"/>
+    <line x1="180" y1="204" x2="213" y2="204"/>
+    <line x1="302" y1="330" x2="302" y2="292"/>
+    <line x1="390" y1="95" x2="423" y2="95"/>
+    <line x1="390" y1="204" x2="423" y2="118"/>
+    <line x1="505" y1="130" x2="505" y2="158"/>
+    <line x1="585" y1="188" x2="618" y2="150"/>
+    <line x1="585" y1="264" x2="618" y2="210"/>
+    <line x1="700" y1="250" x2="700" y2="278"/>
+    <line x1="505" y1="288" x2="505" y2="328"/>
+    <line x1="620" y1="370" x2="587" y2="370"/>
+  </g>
+  <line x1="180" y1="264" x2="213" y2="264" stroke="#1b2440" stroke-width="1.5" stroke-dasharray="4 3"/>
+
+  <!-- write-back lane -->
+  <rect x="20" y="420" width="760" height="56" fill="none" stroke="#1b2440" stroke-width="2"/>
+  <text x="30" y="442" font-weight="bold">WRITE-BACK  POST | PUT | DELETE /api/calendar-sources/:id/events[/:externalId]</text>
+  <text x="30" y="462">CalDAVSource only (Graph throws "not implemented") -&gt; 502 on provider error -&gt; kickSync()</text>
+
+  <text x="20" y="504" font-size="11">NOTE: isStale() exists and is tested, but nothing calls it. A sync runs on Refresh and after a write.</text>
+  <text x="20" y="520" font-size="11">Dashed = reserved in the API, not built.</text>
+</svg>

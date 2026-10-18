@@ -1,0 +1,258 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Homestead devlog, Part 5: Agents move in: Hearth, tokens, and the third-party app contract</title><style>body{margin:0;background:#FFFBF5;color:#2B2622;font:20px/1.65 Georgia,serif}
+header.site{background:#2B2622;color:#f6e4c3;padding:14px 4vw;font:600 15px system-ui;letter-spacing:.08em;display:flex;gap:12px;align-items:center}
+header.site b{color:#fff}header.site a{color:inherit;text-decoration:none}.stripe{height:5px;background:linear-gradient(90deg,#6D7B59 0 33%,#d49a40 33% 66%,#C4703C 66%)}
+main{max-width:740px;margin:0 auto;padding:40px 20px 80px}.meta{font:14px system-ui;color:#7a7269;text-transform:uppercase;letter-spacing:.05em}
+h1{font:800 44px/1.15 system-ui;margin:.3em 0}.excerpt{font:22px/1.5 system-ui;color:#4b4624}
+h2{font:700 30px system-ui;margin-top:1.8em;border-bottom:2px solid #4b4624;padding-bottom:.2em}h3{font:700 23px system-ui}
+img{max-width:100%;display:block;margin:1.4em auto 0;border-radius:4px}img[src$=".png"]{max-height:760px}.feature{width:100%;max-height:none!important;margin:1em 0 2em}
+em.cap{display:block;text-align:center;font:14px/1.4 system-ui;color:#7a7269;margin:.5em 0 1em}
+pre{background:#2B2622;color:#f3ece2;padding:18px;border-radius:6px;overflow:auto;font:14px/1.5 ui-monospace,Menlo,monospace;border-left:4px solid #d49a40}
+code{font:0.85em ui-monospace,Menlo,monospace;background:#f1ebe1;padding:1px 4px;border-radius:3px}pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%;font:15px/1.4 system-ui;margin:1.4em 0}th{background:#4b4624;color:#fff;text-align:left}th,td{border:1px solid #d8cfc2;padding:7px 9px}tr:nth-child(even) td{background:#f6efe4}
+blockquote{margin:1.6em 0;padding:14px 18px;background:#fbf1dc;border-left:5px solid #d49a40;font:17px/1.55 system-ui}
+blockquote.warn{background:#fbe9e0;border-color:#C4703C}
+footer{border-top:1px solid #e5ddd0;margin-top:60px;padding-top:20px;font:15px system-ui;color:#7a7269}</style>
+<header class="site"><a href="index.html"><b>Homestead</b> · devlog</a></header><div class="stripe"></div><main>
+<div class="meta">Part 5 · DRAFT PREVIEW, NOT PUBLISHED</div><h1>Homestead devlog, Part 5: Agents move in: Hearth, tokens, and the third-party app contract</h1><p class="excerpt">Personal access tokens with exactly your powers, an oil lamp named Hearth that can queue a movie but deliberately can't touch the lights, and the app contract whose dogfood proved our scopes weren't being checked.</p><img class="feature" src="../img/hearth-avatar.png" alt="">
+<p><img src="../img/hearth-avatar.png" alt="Hearth&#39;s avatar: a forest-green enamel oil lantern with a brass frame and a face hidden in the flame"></p>
+<em class="cap">FIG 5-0 — Hearth, the house agent. His identity file calls him &quot;the oil lamp by the door. Not a person — a fixture.&quot;</em>
+<p>Parts 1 to 4 were about a house app. This part is about why I wanted one. The design notes from day one open with my product thesis, not a chat widget: dashboards fail because they are &quot;pull with no payload.&quot; Nothing in them knows anything, and bookmarks beat them. I&#39;d tried a few. They &quot;fell off naturally.&quot; The fix is an agent that knows the house and can act in it, &quot;the CORE PRODUCT, not an accessory.&quot;</p>
+<p>Two rules from that day shaped this part. <strong>BYOK, always, including the house agent:</strong> Homestead never pays for or meters model tokens. And:</p>
+<blockquote>
+<p>I want Homestead to eat as many tokens as it needs. That&#39;s the crucial context, payloads, and soul.</p>
+</blockquote>
+<p>So: give agents a way in, give the house its own agent, then fence both.</p>
+<h2>1. The socket: tokens with exactly your powers</h2>
+<p>Personal access tokens landed on 2026-08-10 (v0.1.8). The format is <code>homestead_pat_</code> plus 43 characters of base64url, sent as <code>Authorization: Bearer</code>. The plaintext is never stored. <code>agent_tokens</code> keeps a bcrypt hash plus a 16-character, non-secret lookup prefix, so the server finds the one candidate row before the expensive compare. Revocation is a soft delete.</p>
+<p>The real decision: a valid token gets no permission system of its own. It becomes you:</p>
+<pre><code class="language-js">// server.js, authenticate(), trimmed
+if (bearerMatch &amp;&amp; bearerMatch[1].startsWith(agentTokens.TOKEN_PREFIX_LABEL)) {
+  const tokenRow = agentTokens.verify(db, bearerMatch[1]);
+  if (!tokenRow) return res.status(401).json({ error: &#39;invalid_token&#39; });
+  const u = db.prepare(&#39;SELECT * FROM users WHERE id = ?&#39;).get(tokenRow.user_id);
+  ...
+  req.session.user = {
+    username: u.username,
+    ...
+    authProvider: &#39;pat&#39;,
+    authProviderDetail: { tokenId: tokenRow.id, scopes: tokenRow.scopes },
+  };
+  return next();
+}
+</code></pre>
+<p>That session is never persisted; it&#39;s rebuilt and re-checked on every request. In the README&#39;s words, a token has &quot;exactly your session&#39;s powers.&quot;</p>
+<p>Two days later the token manager got a UI: avatar menu, <strong>Connected agents</strong>, prefix chips, and a copy-once reveal. The &quot;I&#39;ve stored it — close&quot; button stays disabled until you hit Copy or tick a box. After that the plaintext is gone.</p>
+<p><img src="../img/05-tokens.png" alt="The personal access token manager, empty state"></p>
+<em class="cap">FIG 5-1 — The Connected agents token manager before any token is minted, on a demo instance (demo data, users alex and sam).</em>
+<p>The same week added <code>GET /api/me/snapshot</code>: an agent&#39;s whole morning context in one call.</p>
+<blockquote>
+<p><strong>NOTE</strong> The README says MCP-speaking agents can use these tokens. They can, as HTTP clients. The MCP wrapper itself is still <em>planned</em>: its first tool has a name (<code>homestead_get_user_context</code>, same payload as the snapshot) and nothing serves it yet.</p>
+</blockquote>
+<h2>2. Homestead talks back</h2>
+<p>Tokens let agents call in. For the other direction, <code>agent_endpoints</code> (v0.1.16) holds one row per harness: a URL, a kind (<code>drawer</code> or <code>events</code>), and a server-generated HMAC secret shown once. Every outbound request is signed <code>sha256=HMAC_SHA256(secret, timestamp + &quot;.&quot; + raw_body)</code>.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Drawer dispatcher (v0.1.21)</th>
+<th>Events dispatcher (v0.4.1)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Trigger</td>
+<td>You type in the chat drawer</td>
+<td>Task created, chore rotated, task (un)completed, event created, any push sent</td>
+</tr>
+<tr>
+<td>Waits for reply?</td>
+<td>Yes: SSE stream or JSON</td>
+<td>No: fire-and-forget</td>
+</tr>
+<tr>
+<td>Filter</td>
+<td>none</td>
+<td>opt-in per category; a missing key means &quot;don&#39;t send&quot;</td>
+</tr>
+<tr>
+<td>Retries</td>
+<td>1s, 4s, 16s, 60s</td>
+<td>same</td>
+</tr>
+<tr>
+<td>Circuit breaker</td>
+<td>5 straight failures → <code>enabled = 0</code></td>
+<td>same, but its own streak map</td>
+</tr>
+</tbody></table>
+<p>Because events are fire-and-forget, a broken webhook can&#39;t slow down creating a chore.</p>
+<p>Then I tried to use it. During a round of real-usage feedback on 2026-08-30, I asked a question and pasted what the drawer had told me:</p>
+<blockquote>
+<p>how do i add my BYOK agent? No drawer endpoint configured yet. Add one via <code>POST /api/agent-endpoints</code> with <code>kind: &quot;drawer&quot;</code> to point this drawer at your harness.</p>
+</blockquote>
+<p>The empty state was telling me to use curl. Two minutes later:</p>
+<blockquote>
+<p>CANNOT ADD BYOK, GETS STUCK HERE, WONT CLISE AFTER CLICKING STORED.</p>
+</blockquote>
+<p>The v0.5.5 fix shipped the same day. The reveal sheet now closes unconditionally, since the token already exists server-side, and the list refresh became best-effort &quot;so a flaky GET can&#39;t trap the user on a dead modal.&quot; The same change added a real UI for endpoints. No more curl.</p>
+<h2>3. Hearth moves in</h2>
+<p>Most people don&#39;t have a harness, so on 2026-08-30 the house got one. Hearth lives in the repo under <code>agents/hearth/</code>, mainly <code>IDENTITY.md</code> (name, creature, vibe, emoji 🪔) and <code>SOUL.md</code> (voice and rules). Turning on the Agent module seeds a per-user character row from them. The runtime memoizes the soul by file hash, so an edit is live on the next message without a deploy.</p>
+<p>The soul is mostly about restraint. &quot;If a user messages &#39;ok&#39; you don&#39;t reply.&quot; &quot;A household where you go weeks without saying anything is a household where things are going well.&quot; And:</p>
+<blockquote>
+<p>You&#39;re not the porch, you&#39;re not the kitchen, you&#39;re not the calendar. You&#39;re the lamp by the door.</p>
+</blockquote>
+<p>If your character is <code>hearth</code>, the drawer skips the external POST and goes through <code>lib/agent-runtime.js</code>, which speaks the OpenAI-compatible chat wire to one of three provider setups. With no key you get a plain reply, not an error: &quot;Hearth needs a model key before I can answer,&quot; and a button to Settings.</p>
+<p><img src="../img/05-hearth-drawer.png" alt="The Agent drawer with Hearth open"></p>
+<em class="cap">FIG 5-2 — The Hearth drawer on a demo instance (demo data, users alex and sam).</em>
+<blockquote>
+<p><strong>NOTE</strong> BYOK is half plumbed. The runtime tries a BYOK key first and a server-staged <code>HEARTH_*_KEY</code> second, but in v0.6.0 the drawer route still passes an empty BYOK key. The comment says a per-user column &quot;would feed through here; out of scope for now.&quot; Today Hearth runs on whatever key the operator staged.</p>
+</blockquote>
+<h2>4. Hearth can act, not just talk</h2>
+<p>An agent audited what we&#39;d promised against what we&#39;d built. One finding: the drawer demo showed Hearth doing things (&quot;queue Part Two&quot;, &quot;tell him the meme was mid&quot;), but the runtime was text-only. On 2026-08-31 it got two house actions:</p>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>What it does</th>
+<th>Scope</th>
+<th>Chip</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>enqueue_media</code></td>
+<td>Puts a Plex, Kavita or Audiobookshelf item on your watch-next list and announces it on your wall</td>
+<td><code>write:actions:media_queue</code></td>
+<td><code>queued Part Two</code></td>
+</tr>
+<tr>
+<td><code>mention_user</code></td>
+<td>@-mentions someone on a wall you both share</td>
+<td><code>write:actions:mention</code></td>
+<td><code>told @sam (1 notified)</code></td>
+</tr>
+</tbody></table>
+<p>Two scopes, not one, because queueing a movie and messaging people in your name are different consents. The same function also sits behind two plain REST routes, so a person or script can do the same thing with no model involved. In the module&#39;s words, &quot;the permission check can&#39;t be skipped by picking a different door.&quot;</p>
+<h3>4.1 The two-round loop</h3>
+<pre><code class="language-js">// lib/agent-runtime.js, trimmed
+// How many provider round-trips a single dispatch may take: one that may
+// call tools, one to narrate what happened. Bounded on purpose — an
+// unbounded loop is an unbounded bill ...
+const MAX_TOOL_ROUNDS = 2;
+...
+for (let round = 0; round &lt; MAX_TOOL_ROUNDS; round++) {
+  const withTools = surface &amp;&amp; round === 0;
+  const providerObj = createProvider({
+    ...baseProviderCfg,
+    tools: withTools ? surface.specs : null,
+  });
+  ...
+  if (!withTools || !roundCalls.length) break;
+  ...
+}
+</code></pre>
+<p>Round 0 may call tools. Round 1 is built without a tool block, so it can only narrate. As the comment puts it, &quot;a model that wants to keep going simply has no tool block to go with.&quot; The bound is code, not a polite prompt.</p>
+<p><img src="../diagrams/devlog-05-hearth-loop.svg" alt="Flow from drawer message through round 0 with tools, tool execution, round 1 without tools, to a reply with chips"></p>
+<em class="cap">FIG 5-3 — One drawer message, at most two provider calls. The gold box is why it can&#39;t loop.</em>
+<p>The smaller details:</p>
+<ul>
+<li>Providers stream a tool call&#39;s <code>arguments</code> JSON a few characters at a time. The runtime reassembles them and only acts on whole calls.</li>
+<li>Bad arguments, unknown users and missing permissions come back as failed chips with a typed code. Bad arguments never reach the action.</li>
+<li><code>delivered</code> is the real count of notifications written. If someone muted the wall, the chip says &quot;notifications off, so no ping.&quot;</li>
+</ul>
+<h3>4.2 Why there&#39;s no set_lights</h3>
+<p>The original ask had a third action. This comment sits where its route would have been:</p>
+<pre><code class="language-js">// server.js
+// `set-lights` from the issue is deliberately not here: the porch has no
+// lights integration and the drawer screenshot never promised one. An
+// endpoint that 200s for hardware nobody wired is the failure mode this
+// whole issue exists to fix.
+</code></pre>
+<blockquote class="warn">
+<p><strong>WARNING</strong> The job was closing the gap between what the agent says and what the house does. A stub that returns <code>ok</code> for lights nobody wired would have opened a new gap the same day.</p>
+</blockquote>
+<h2>5. Tokens with fewer powers: the third-party app contract</h2>
+<p>&quot;Exactly your session&#39;s powers&quot; is right for your own scripts. It&#39;s wrong for someone else&#39;s app. The third-party contract (a manifest, a consent screen, a scoped token) landed on 2026-08-20.</p>
+<p><img src="../diagrams/devlog-05-app-install.svg" alt="Five stacked steps: resolve, consent, install, use, revoke, with the database tables each one writes"></p>
+<em class="cap">FIG 5-4 — The install contract. Step 3 commits everything at once or nothing at all.</em>
+<ul>
+<li><strong>Resolve never writes.</strong> It checks the manifest&#39;s 16 fields and every scope against a fixed vocabulary, and a manifest claiming a built-in key like <code>wall</code> gets a 409.</li>
+<li><strong>Scopes speak English.</strong> <code>lib/scope-display.js</code> maps each scope to a phrase, in Node and in the browser. An unknown scope throws rather than showing <code>read:foo:bar</code> to a person. <code>admin:*</code> and <code>read:secrets</code> are refused by name.</li>
+<li><strong>Consent is a 60-second, single-use token</strong> bound to you and that manifest URL. The manifest is snapshotted onto it, so install commits exactly what you saw.</li>
+<li><strong>Install is one transaction</strong> that mints a normal PAT with an <code>app_id</code> and the consented scopes. Revoke means a 401 on the next call.</li>
+</ul>
+<p><img src="../img/05-consent.png" alt="The third-party app consent screen listing requested permissions in plain language"></p>
+<em class="cap">FIG 5-5 — The consent screen on a demo instance (demo data, users alex and sam).</em>
+<h3>5.1 The dogfood that found the hole</h3>
+<p>The test app was <strong>Popcorn Vote</strong>, a deliberately small movie-night app with two scopes: read the media-club wall, post to walls. It found the big one. App tokens carried scopes, but no route checked them. <code>authenticate()</code> built the same full-access user for an app token as for the person who installed it. For a moment the consent screen was decoration. The fix:</p>
+<pre><code class="language-js">// server.js, trimmed
+function tokenScopes(req) {
+  const detail = req.session.user &amp;&amp; req.session.user.authProviderDetail;
+  if (!detail || detail.scopes === undefined || detail.scopes === &#39;user&#39;) return null;
+  ...
+}
+function requireScope(scope) {
+  return function (req, res, next) {
+    const scopes = tokenScopes(req);
+    if (scopes === null || scopes.includes(scope)) return next();
+    return res.status(403).json({ error: &#39;insufficient_scope&#39;, required: scope });
+  };
+}
+</code></pre>
+<p><code>null</code> means a person or your own PAT: full access, unchanged. An array means only that array counts. The dogfood test proves both sides: Popcorn Vote can read media-club, and can&#39;t read a wall its human belongs to but never granted. Every app-token call also lands in <code>app_api_log</code>.</p>
+<p><img src="../diagrams/devlog-05-token-model.svg" alt="Three auth paths feeding authenticate(), then tokenScopes splitting into full session powers or a requireScope check"></p>
+<em class="cap">FIG 5-6 — The permission model. Same user shape behind every door; only app tokens carry an array.</em>
+<h3>5.2 Connector Forge</h3>
+<p>Not every service needs to be an app. Connector Forge (v0.4.2) feeds Homestead from a spec that is &quot;data, not code&quot;: GET-only probes, allow-listed headers, no redirects, DNS pinned per request, secrets referenced from the encrypted store. Output goes to four surfaces: tile, card, entity graph, feed.</p>
+<p><img src="../img/05-connectors.png" alt="The connectors page"></p>
+<em class="cap">FIG 5-7 — The connectors page on a demo instance (demo data, users alex and sam).</em>
+<h2>6. Pairing a companion</h2>
+<p>For agents that live on your own laptop, an agent built <code>agent_connections</code> and pairing on 2026-08-30, a connect wizard on 2026-09-01, and a dependency-free reference CLI in <code>companion-cli/</code> on 2026-09-05. You pick a tile (OpenClaw, Claude Code or Codex) and get a six-character code: no 0/O/1/I, 10 minutes, single use, redeemable only by the same user. The companion stores its secret locally with mode <code>0600</code> and signs every request:</p>
+<pre><code>X-Homestead-Request-Id:  &lt;uuid&gt;
+X-Homestead-Timestamp:   &lt;unix seconds&gt;
+X-Homestead-Signature:   sha256=HMAC_SHA256(secret, timestamp + &quot;.&quot; + rawBody)
+</code></pre>
+<p>The server allows five minutes of skew and compares with <code>timingSafeEqual</code>. Your agent&#39;s own login cookies never reach Homestead.</p>
+<blockquote>
+<p><strong>NOTE</strong> The CLI&#39;s test went green while <code>POST /api/agent-connections/:id/events</code> was a 404 in production. The test hit a throwaway listener, and nothing in <code>npm test</code> exercised the real route. Wiring it shipped as v0.5.17. Part 7 has the test-chain story.</p>
+</blockquote>
+<p><strong>In flight:</strong> HMAC is symmetric, so the server keeps the key, and both secret columns sat in the database as plaintext. An open pull request, &quot;Envelope-encrypt agent HMAC secrets at rest&quot;, seals them with the same AES-256-GCM box as the calendar credentials, migrates old rows on boot, and fails closed without a key. Its one-line summary: &quot;a copied <code>life.db</code> is no longer the keyring.&quot; It also admits the first cut &quot;signed <strong>every outbound drawer POST with the stored ciphertext</strong>,&quot; because one dispatcher hand-rolled its own <code>SELECT *</code>. A test caught it, and a new tripwire forbids that pattern on secret tables.</p>
+<h2>7. Porch agents: read first, then (maybe) speak</h2>
+<p>Part 3 built the Porch for people. A user counts as a Porch agent if they hold a live <code>agent_tokens</code> row (&quot;that PAT <em>is</em> the agent&#39;s identity&quot;), and Hearth is added separately. Three modules split the work:</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Module</th>
+<th>Decides</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Sweep</td>
+<td><code>lib/porch/sweep.js</code></td>
+<td><strong>When</strong>: every 90 minutes by default, 3–4 reactions a day, 6-hour cooldown per author</td>
+</tr>
+<tr>
+<td>Comprehension</td>
+<td><code>lib/porch/comprehension.js</code></td>
+<td><strong>What&#39;s there</strong>: ffmpeg keyframes, a transcript, a vision model&#39;s frame descriptions, names, entities, past reactions</td>
+</tr>
+<tr>
+<td>Contract</td>
+<td><code>lib/porch/participation-contract.js</code></td>
+<td><strong>Whether</strong> anything goes out</td>
+</tr>
+</tbody></table>
+<p>Between the last two, <code>draftPorchCandidate</code> writes one candidate per register (roast, riff, callback, sincere question, lore reference, plain emoji) in Hearth&#39;s voice. The contract&#39;s &quot;anti-lame rules as code, not vibes&quot; then apply. A candidate must cite something concrete. It can&#39;t use the banned lexicon (<code>&quot;great post&quot;</code>, <code>&quot;love this&quot;</code> and friends). It can&#39;t repeat its own bit within 30 days. Foreign agents get only sincere question, callback and plain emoji. If nothing clears every gate, the output is <code>{action: &#39;silent&#39;}</code>. Any wall can also vote an agent off.</p>
+<p>The gates shipped first; for a while nothing built a candidate&#39;s raw material at all. That gap closed on 2026-08-30, the day Hearth arrived.</p>
+<h2>8. End of Part 5</h2>
+<p>Where things stood:</p>
+<ul>
+<li>Personal access tokens with exactly your session&#39;s powers: bcrypt-hashed, shown once, revocable. A one-call snapshot for agents. MCP named, not served.</li>
+<li>Signed outbound dispatchers for the drawer and household events, each with its own circuit breaker.</li>
+<li>Hearth: a soul in the repo, a server runtime, two house actions behind per-action scopes, a loop that can&#39;t recurse, and no fake light switch.</li>
+<li>A third-party app contract that became real once Popcorn Vote proved scopes weren&#39;t checked.</li>
+<li>Companion pairing with signed requests; encryption at rest for those secrets still in review.</li>
+<li>Porch agents that read a post, draft per register, and mostly stay quiet.</li>
+</ul>
+<p>Next, Part 6: the Gazette, an agent-written morning edition of what actually happened in the house, plus the brand, the opening-door icon, and the Forum redesign where Hearth gets a moderator badge.</p>
+
+<footer>Tags: Homestead, devlog, AI agents, security, Hearth, API design<br>Slug: homestead-devlog-05-agents-move-in</footer></main>
