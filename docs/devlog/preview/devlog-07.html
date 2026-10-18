@@ -1,0 +1,317 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Homestead devlog, Part 7: How a pile of agents built a house app (and the fresh start)</title><style>body{margin:0;background:#FFFBF5;color:#2B2622;font:20px/1.65 Georgia,serif}
+header.site{background:#2B2622;color:#f6e4c3;padding:14px 4vw;font:600 15px system-ui;letter-spacing:.08em;display:flex;gap:12px;align-items:center}
+header.site b{color:#fff}header.site a{color:inherit;text-decoration:none}.stripe{height:5px;background:linear-gradient(90deg,#6D7B59 0 33%,#d49a40 33% 66%,#C4703C 66%)}
+main{max-width:740px;margin:0 auto;padding:40px 20px 80px}.meta{font:14px system-ui;color:#7a7269;text-transform:uppercase;letter-spacing:.05em}
+h1{font:800 44px/1.15 system-ui;margin:.3em 0}.excerpt{font:22px/1.5 system-ui;color:#4b4624}
+h2{font:700 30px system-ui;margin-top:1.8em;border-bottom:2px solid #4b4624;padding-bottom:.2em}h3{font:700 23px system-ui}
+img{max-width:100%;display:block;margin:1.4em auto 0;border-radius:4px}img[src$=".png"]{max-height:760px}.feature{width:100%;max-height:none!important;margin:1em 0 2em}
+em.cap{display:block;text-align:center;font:14px/1.4 system-ui;color:#7a7269;margin:.5em 0 1em}
+pre{background:#2B2622;color:#f3ece2;padding:18px;border-radius:6px;overflow:auto;font:14px/1.5 ui-monospace,Menlo,monospace;border-left:4px solid #d49a40}
+code{font:0.85em ui-monospace,Menlo,monospace;background:#f1ebe1;padding:1px 4px;border-radius:3px}pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%;font:15px/1.4 system-ui;margin:1.4em 0}th{background:#4b4624;color:#fff;text-align:left}th,td{border:1px solid #d8cfc2;padding:7px 9px}tr:nth-child(even) td{background:#f6efe4}
+blockquote{margin:1.6em 0;padding:14px 18px;background:#fbf1dc;border-left:5px solid #d49a40;font:17px/1.55 system-ui}
+blockquote.warn{background:#fbe9e0;border-color:#C4703C}
+footer{border-top:1px solid #e5ddd0;margin-top:60px;padding-top:20px;font:15px system-ui;color:#7a7269}</style>
+<header class="site"><a href="index.html"><b>Homestead</b> · devlog</a></header><div class="stripe"></div><main>
+<div class="meta">Part 7 · DRAFT PREVIEW, NOT PUBLISHED</div><h1>Homestead devlog, Part 7: How a pile of agents built a house app (and the fresh start)</h1><p class="excerpt">The last part: issues as units of work, a Definition of Done that wants a screenshot, a test chain that quietly skipped tests, a Dockerfile that kept forgetting folders, and why the repo now has exactly one commit.</p><img class="feature" src="../img/06-forum-desktop.png" alt="">
+<p><img src="../img/06-forum-desktop.png" alt="The Forum page at desktop width"></p>
+<em class="cap">FIG 7-0 — The Forum at 1280px desktop width, v0.6.0. Demo data, users alex and sam.</em>
+<p>Six parts of features. This one is about the factory. Most of Homestead was written by AI agents running through Paperclip, between v0.0.1 on 2026-07-29 and v0.6.0 on 2026-10-16. I filed the issues, made the calls, used the thing and complained. This part covers what kept that honest, what broke anyway, and why the public repo now starts with a single commit called &quot;Homestead v0.6.0&quot;.</p>
+<h2>1. Issues as units of work</h2>
+<p>Every change started as a Paperclip issue. An agent picked it up, read it, branched, built, opened a PR, merged, and closed the issue with a comment. The repo&#39;s <code>docs/DEVELOPMENT.md</code> spells out the routine in eight steps. The first two are my favorite:</p>
+<blockquote>
+<p><strong>Read the issue twice.</strong> Look at <code>parentId</code>, <code>ancestors</code>, prior <code>comments</code>. The body usually has the WHY; the comments usually have the edge cases that bit the prior agent.</p>
+</blockquote>
+<blockquote>
+<p><strong>Check existing code.</strong> ... The horror of rebuilding something that&#39;s already there is one you will not experience twice.</p>
+</blockquote>
+<p>The rest: branch, comment the <em>why</em>, run <code>./scripts/verify.sh</code>, squash-merge on green, and only then move the issue to done.</p>
+<p>The old history shows the pace. 251 commits across all branches, 37 tags, about 150 PR heads. The busiest day was 2026-08-30 with 47 commits. 206 of those 251 commit subjects carried a ticket ID, which is the whole reason section 7 exists.</p>
+<p><img src="../diagrams/devlog-07-issue-loop.svg" alt="The issue to agent to PR to DoD gate loop"></p>
+<em class="cap">FIG 7-1 — The loop every change went through. The gold box is the gate added on 2026-08-23. Without it, steps 1 to 3 happily closed work that wasn&#39;t there.</em>
+<h2>2. The Definition of Done</h2>
+<p>On 2026-08-23 a design review of the project found, in the words of the doc it produced:</p>
+<blockquote>
+<p>four closed <code>done</code> issues with no code in <code>main</code>, an acceptance suite that &quot;passed&quot; against endpoints returning 404, a repo head that bricks the SPA login, and a flagship feature unreachable by any user.</p>
+</blockquote>
+<p>Every one of those had closed green. The doc&#39;s summary is the best line in the repo:</p>
+<blockquote>
+<p>Reports about work are not work.</p>
+</blockquote>
+<p>My rule after that, same day: &quot;Nothing&#39;s done without a screenshot or other type of REAL verification.&quot; The agent turned it into <code>docs/DEFINITION-OF-DONE.md</code>, with a table of what counts:</p>
+<table>
+<thead>
+<tr>
+<th>Work type</th>
+<th>Required evidence</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>UI work</td>
+<td>A screenshot at a 390px-class mobile viewport, from a real running instance booted from the branch</td>
+</tr>
+<tr>
+<td>API work</td>
+<td>The actual curl transcript: request and response body</td>
+</tr>
+<tr>
+<td>All code work</td>
+<td>The commit SHA(s) in <code>main</code>, or the merged PR link</td>
+</tr>
+<tr>
+<td>Migrations</td>
+<td>A boot over a real copied database, with row counts before and after</td>
+</tr>
+<tr>
+<td>Deploys / infra</td>
+<td>A verification curl from outside, against the public URL</td>
+</tr>
+</tbody></table>
+<p>Two more rules sit under it. Self-review doesn&#39;t count. And acceptance has to be a user-visible outcome from a fresh install:</p>
+<blockquote>
+<p><strong>If a verification script needs a manual DB write to pass, that write is the missing feature.</strong></p>
+</blockquote>
+<p>That one closed a whole class of fake passes, where a smoke test did <code>INSERT INTO user_groups</code> to grant itself access to a wall, then asserted the wall was visible. It proved the test could write SQL.</p>
+<h3>2.1 The mechanical witness</h3>
+<p>The policy is enforced three ways: CI runs browser smokes on every PR, tags aren&#39;t cut with them red, and <code>scripts/verify.sh</code> boots a scratch instance and drops screenshots into <code>./verify-out/</code> in one command. The doc&#39;s phrase for that last one is &quot;The lazy path IS the honest path.&quot;</p>
+<p>The template is <code>scripts/smoke-postlogin-screenshot.js</code>. It boots the real <code>server.js</code> on a fresh temp DB, logs in, takes the picture, and then fails on anything the browser complained about. Trimmed:</p>
+<pre><code class="language-js">const context = await browser.newContext({
+  viewport: { width: 390, height: 844 },
+  deviceScaleFactor: 2,
+  isMobile: true,
+  ...
+});
+page.on(&#39;pageerror&#39;, (error) =&gt; pageErrors.push(error));
+...
+await page.screenshot({ path: outPath, fullPage: false });
+...
+if (pageErrors.length) {
+  throw new Error(`browser pageerror(s) on post-login render: ${details.join(&#39;\n&#39;)}`);
+}
+</code></pre>
+<p>It caught a real bug on its first run. The SPA catch-all in <code>server.js</code> was returning 404 for <code>/</code>, <code>/lib/scope-display.js</code> and <code>/favicon.ico</code> on Node 22 with send 1.2.x, because of how <code>sendFile</code> was called with a <code>root</code> option. The front page of the app was a 404.</p>
+<p>CI now runs nine browser smokes on this pattern after <code>npm test</code>, from the page-error guard to the invite welcome screen. Screenshots go up as a build artifact.</p>
+<blockquote>
+<p><strong>NOTE</strong> — &quot;Testing&quot; here nearly always means an agent driving headless Chromium (Playwright) or real Chrome through browserless against a scratch instance with seeded users. Not a person with a phone. The closest it gets is <code>scripts/gate-two-browser-dod.js</code>: two browser sessions, two accounts, one wall, one posts and the other has to update untouched. The screenshots in this series come from a local demo instance.</p>
+</blockquote>
+<h2>3. The test chain that skipped tests</h2>
+<p>For most of the project, <code>npm test</code> was one line in <code>package.json</code>. Here&#39;s how it started:</p>
+<pre><code class="language-sh">node --require ./scripts/_test-bootstrap.js scripts/test-user-model.js &amp;&amp; \
+node --require ./scripts/_test-bootstrap.js scripts/test-user-modules.js &amp;&amp; \
+node --require ./scripts/_test-bootstrap.js scripts/test-modules.js &amp;&amp; \
+...
+</code></pre>
+<p>By September it was 5,242 characters with 66 <code>&amp;&amp;</code>s. Every new test file had to be spliced into that string by hand. If nobody did, the file sat in <code>scripts/</code>, never ran, and never failed.</p>
+<p>That bit us properly once. The companion CLI&#39;s test went green against a throwaway listener, while on the live instance <code>POST /api/agent-connections/:id/events</code> returned 404. The route got its own test later, and the changelog entry for it says the new test was &quot;wired into <code>npm test</code> immediately after <code>test-agent-connections.js</code>&quot;. Which is to say, it ran because someone remembered.</p>
+<p>The fix is <code>scripts/run-tests.js</code>. It asks the filesystem instead of a person:</p>
+<pre><code class="language-js">const testFiles = entries
+  .filter((e) =&gt; e.isFile() &amp;&amp; /^test-.*\.js$/.test(e.name))
+  .map((e) =&gt; path.join(&#39;scripts&#39;, e.name))
+  .sort();
+...
+const MIN_EXPECTED = 50;
+if (testFiles.length &lt; MIN_EXPECTED) {
+  console.error(
+    `glob matched ${testFiles.length} files, expected &gt;= ${MIN_EXPECTED}. ` + ...
+  );
+  process.exit(2);
+}
+</code></pre>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Old <code>&amp;&amp;</code> chain</th>
+<th><code>run-tests.js</code></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Who decides what runs</td>
+<td>whoever edits <code>package.json</code></td>
+<td><code>readdir(scripts/)</code></td>
+</tr>
+<tr>
+<td><code>scripts/test-*.js</code> that ran</td>
+<td>66</td>
+<td>70</td>
+</tr>
+<tr>
+<td><code>test/porch/*.test.mjs</code> that ran</td>
+<td>1</td>
+<td>2</td>
+</tr>
+<tr>
+<td>Empty or typo&#39;d match</td>
+<td>n/a</td>
+<td>hard failure, plus a 50-file floor</td>
+</tr>
+<tr>
+<td>A test that hangs</td>
+<td>burns the 6-hour CI window</td>
+<td>killed after 120 s, counted as a failure</td>
+</tr>
+<tr>
+<td>Adding a test</td>
+<td>edit the string</td>
+<td>add the file</td>
+</tr>
+</tbody></table>
+<p><img src="../diagrams/devlog-07-test-runner.svg" alt="The &amp;&amp; chain versus filesystem discovery"></p>
+<em class="cap">FIG 7-2 — Same semantics (sequential, stop at first failure), different source of truth. The four gold squares are the scripts that had been sitting on disk unrun.</em>
+<p>The runner&#39;s first CI run found what you&#39;d expect from tests that had never been executed:</p>
+<ul>
+<li>The companion CLI test hung forever on <code>execFileSync</code>. Switched to <code>spawn</code> with an explicit exit.</li>
+<li>An install test assumed a wall row that the seed never creates.</li>
+<li>The porch tests weren&#39;t getting the bootstrap shim, so the fail-closed <code>SESSION_SECRET</code> loader (Part 2) threw &quot;too short&quot;.</li>
+<li>The porch vote-off smoke used the wrong button class and hit an admin-only endpoint as a non-admin.</li>
+</ul>
+<p>All fixed in the same PR. None of them were product bugs, but all of them meant a test had been reporting nothing.</p>
+<blockquote class="warn">
+<p><strong>WARNING</strong> — <code>npm run test:smoke</code> is still a hand-typed <code>&amp;&amp;</code> chain in <code>package.json</code>. Those smokes need a booted instance, so they stayed out of the runner. Same class of hole, smaller.</p>
+</blockquote>
+<h2>4. Shipping it</h2>
+<h3>4.1 The Dockerfile that kept forgetting folders</h3>
+<p>The production image is two-stage. The runtime stage copies an explicit list of things into a slim Node image. That list is the bug. Each time <code>server.js</code> started requiring something new, the image built fine and then died at boot.</p>
+<table>
+<thead>
+<tr>
+<th>Release</th>
+<th>Missing from the runtime stage</th>
+<th>Boot error</th>
+<th>What happened</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>v0.0.4 (2026-08-06)</td>
+<td><code>package.json</code></td>
+<td><code>MODULE_NOT_FOUND</code></td>
+<td>Every container since v0.0.3 crashed. The reverse proxy in front of it then refused to start and took every other site on the box down too.</td>
+</tr>
+<tr>
+<td>v0.1.20 (2026-08-15)</td>
+<td><code>lib/</code></td>
+<td><code>Cannot find module &#39;./lib/user-model&#39;</code></td>
+<td>Broken since <code>lib/</code> was introduced; found when the live app went 502</td>
+</tr>
+<tr>
+<td>v0.5.20 (2026-09-05)</td>
+<td><code>jobs/</code></td>
+<td><code>Cannot find module &#39;./jobs/gazette-daily&#39;</code></td>
+<td>Caught while getting the live screenshot the Gazette issue required</td>
+</tr>
+<tr>
+<td>v0.5.24 (2026-09-07)</td>
+<td><code>routes/</code></td>
+<td><code>Cannot find module &#39;./routes/agent-connections&#39;</code></td>
+<td>Router extraction moved code out of <code>server.js</code>. Took the live instance down that morning.</td>
+</tr>
+</tbody></table>
+<p>The same bug four times, the last two two days apart. The <code>jobs/</code> one was at least caught fast, because the Gazette issue couldn&#39;t close without a screenshot from the live instance, so it got deployed straight away.</p>
+<p>After <code>routes/</code>, it finally got a guard test, <code>scripts/test-dockerfile-runtime-routes.js</code>:</p>
+<pre><code class="language-js">const dockerfile = fs.readFileSync(path.join(__dirname, &#39;..&#39;, &#39;Dockerfile&#39;), &#39;utf8&#39;);
+
+assert.match(
+  dockerfile,
+  /^COPY\s+routes\s+\.\/routes\s*$/m,
+  &#39;runtime Dockerfile must copy routes/ for server.js router factories&#39;,
+);
+</code></pre>
+<p>It&#39;s discovered by the runner from section 3 with no extra wiring, which is the point. It checks <code>routes/</code> only.</p>
+<p>There was a fifth Docker bug, quieter. The commit-identity hooks (section 5) are installed by an npm <code>prepare</code> script that runs <code>git config</code>. The deps stage had no <code>git</code>, so <code>npm ci</code> exited 127. From the commit that fixed it: &quot;every release from v0.3.0.1 through v0.4.3 has been silently broken — no GHCR image was published.&quot; Tags were cut, and nothing came out the other end.</p>
+<h3>4.2 Tag it yourself</h3>
+<p>My rule on 2026-09-02 was that every merge to <code>main</code> should reach the live instance as a new version. The first cut was an <code>auto-tag.yml</code> workflow. It hit a GitHub rule: a tag pushed with the default <code>GITHUB_TOKEN</code> doesn&#39;t trigger other workflows. So the agent added an API dispatch. Then two runs three minutes apart both reported success, GitHub started only one release, and v0.5.12 sat unpublished. So it added polling and a retry.</p>
+<p>That was two extra Actions runs with polling loops per merge, and I called it overengineered for a repo with no paid Actions budget. v0.5.18 dropped it. The recipe now:</p>
+<pre><code class="language-bash">git fetch --tags
+latest=$(git tag --list &#39;v*&#39; --sort=-v:refname | head -n1)
+# bump PATCH, e.g. v0.5.14 -&gt; v0.5.15
+git tag -a vX.Y.Z -m &quot;vX.Y.Z&quot;
+git push origin vX.Y.Z
+</code></pre>
+<p>A tag pushed with real credentials fires <code>release.yml</code> normally. It builds the image, pushes <code>ghcr.io/phattbeats/homestead:&lt;tag&gt;</code> and <code>:latest</code>, bakes the short SHA in as <code>COMMIT_SHA</code> so <code>/api/version</code> reports the real commit, and cuts a GitHub release. Tag by hand, image builds itself.</p>
+<h2>5. The commit identity rule</h2>
+<p>The rule: one author identity on every commit, zero <code>Co-authored-by</code> trailers. <code>CONTRIBUTING.md</code> says it to humans and agents alike, and adds &quot;No tool or session trailers of any kind&quot;. A local hook enforces it. Trimmed, address elided:</p>
+<pre><code class="language-sh"># .githooks/commit-msg
+expected_ident=&#39;&lt;maintainer&gt; &lt;noreply address&gt;&#39;
+author_ident=$(git var GIT_AUTHOR_IDENT | sed -E &#39;s/ [0-9]+ [+-][0-9]{4}$//&#39;)
+
+if [ &quot;$author_ident&quot; != &quot;$expected_ident&quot; ]; then
+  ...
+  exit 1
+fi
+
+if grep -Eiq &#39;^co-authored-by:&#39; &quot;$message_file&quot;; then
+  printf &#39;%s\n&#39; &#39;Rejected commit: Co-authored-by trailers are forbidden.&#39; &gt;&amp;2
+  exit 1
+fi
+</code></pre>
+<p>CI checks it again: <code>.github/workflows/authorship-check.yml</code> walks every commit in a PR or push and fails on a wrong author or any trailer. For Claude Code, that means <code>includeCoAuthoredBy: false</code>.</p>
+<p>That&#39;s repo hygiene, not a claim about who typed it. The disclosure lives in a required <strong>Model used</strong> line in every PR body, and in this series.</p>
+<p>A small, funny footnote: the expected address in both the hook and the CI check was missing <code>@users</code>. From the fix: &quot;No real commit could ever match it, so the CI check failed on every push and every PR.&quot; That fix is one of the open PRs at the fresh start.</p>
+<h2>6. GitHub gotchas</h2>
+<p>Found the hard way, by agents doing reasonable things:</p>
+<table>
+<thead>
+<tr>
+<th>You do this</th>
+<th>GitHub does this</th>
+<th>Recovery</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Merge the bottom of a stacked PR and delete its branch</td>
+<td>Auto-closes the next PR in the stack (its base is gone). A closed PR&#39;s base can&#39;t be changed.</td>
+<td>Recreate the branch at its old tip, reopen, retarget to <code>main</code>, merge</td>
+</tr>
+<tr>
+<td>Rename a branch</td>
+<td>Closes every open PR whose head is that branch</td>
+<td>Restore the branch at the same commit, reopen the PR</td>
+</tr>
+<tr>
+<td>Force-push unrelated history to <code>main</code></td>
+<td>Closes every open PR, permanently. They can&#39;t be reopened.</td>
+<td>Rebase each onto the new root and open it as a new PR</td>
+</tr>
+<tr>
+<td>Delete commits from all your branches</td>
+<td>Keeps old PR commits reachable by SHA in hidden refs</td>
+<td>Only GitHub Support can purge those</td>
+</tr>
+</tbody></table>
+<blockquote class="warn">
+<p><strong>WARNING</strong> — The last row matters if you&#39;re scrubbing a repo. Deleting branches, tags and history doesn&#39;t delete what GitHub kept for old pull requests. Assume anything that was ever in a PR is still fetchable by SHA until Support says otherwise.</p>
+</blockquote>
+<h2>7. The fresh start</h2>
+<p>By October the repo was public and full of the factory. Ticket IDs in commit subjects, branch names, test file names, code comments and PR titles. Personal details in docs. My instruction was short: &quot;i want all but 1 tag/release gone. start on a new foot.&quot;</p>
+<p>The order things happened in:</p>
+<ol>
+<li>The README was rewritten as a generic public README.</li>
+<li>59 merged or closed branches were deleted, with a name-to-SHA list kept.</li>
+<li>Every PR title and description was cleaned of ticket IDs: 142 titles and 130 descriptions rewritten, out of 147.</li>
+<li>36 tags and 33 releases were deleted, leaving only v0.5.24, the build the house was running.</li>
+<li>Old branches named after tickets were renamed. That closed two open PRs (row 2 of the table). Both branches were restored at the same commits and the PRs reopened.</li>
+<li>The tree itself was scrubbed of every ID.</li>
+<li>The full old history (all branches, PR heads and 37 tags) went into an offline git bundle, verified, before step 8.</li>
+<li><code>main</code> was replaced with one root commit, &quot;Homestead v0.6.0&quot;. v0.6.0 became the only tag and the only release, and its image built.</li>
+<li>Force-pushing unrelated history closed every open PR for good (row 3). They were rebased onto the new root and reopened as new PRs.</li>
+<li>The last six old branches were deleted, each tip checked against the bundle first.</li>
+</ol>
+<p><img src="../diagrams/devlog-07-history-reset.svg" alt="Repository history before and after the fresh start"></p>
+<em class="cap">FIG 7-3 — Before: eleven weeks of commits, tags and PR heads. After: one root, one tag, open work rebased on top. The old history lives in an offline bundle, and partly in GitHub&#39;s hidden refs.</em>
+<p>The new <code>CHANGELOG.md</code> starts with &quot;First release on a fresh history: earlier tags, releases and changelog entries were retired.&quot; This devlog is the story it no longer tells, written from that bundle with the IDs left out.</p>
+<blockquote>
+<p><strong>NOTE</strong> — The live instance wasn&#39;t touched during any of this. It was still on the v0.5.24 image when v0.6.0 was published.</p>
+</blockquote>
+<h2>8. End of Part 7</h2>
+<p>Where things stood after the fresh start:</p>
+<ul>
+<li><code>main</code> is one commit, &quot;Homestead v0.6.0&quot;. One tag, one release, image at <code>ghcr.io/phattbeats/homestead:v0.6.0</code>.</li>
+<li>The DoD is enforced by nine browser smokes in CI and <code>scripts/verify.sh</code> locally. UI work isn&#39;t done without a 390px screenshot from a real instance and zero page errors.</li>
+<li><code>npm test</code> discovers 73 <code>scripts/test-*.js</code> files and 2 porch files. <code>test:smoke</code> is still a hand-typed chain.</li>
+<li>The Dockerfile guard covers <code>routes/</code>. Nothing asserts <code>lib/</code> or <code>jobs/</code> yet.</li>
+<li>CI was red on <code>main</code> at the fresh start, both the authorship check and the unit suite.</li>
+<li>Open PRs: the authorship address fix, the shoutbox with Hearth chiming in, envelope-encrypting agent HMAC secrets at rest, and a scrub of the public invite note.</li>
+</ul>
+<p>What&#39;s next is what&#39;s already open, starting with the authorship fix and a green <code>main</code>. Same loop as FIG 7-1. Issue, agent, PR, screenshot. Thanks for reading all seven.</p>
+
+<footer>Tags: Homestead, devlog, AI agents, Paperclip, CI, git<br>Slug: homestead-devlog-07-how-agents-built-it</footer></main>

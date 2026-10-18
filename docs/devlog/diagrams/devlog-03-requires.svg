@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 480" font-family="monospace" font-size="12" fill="#1b2440">
+  <rect width="800" height="480" fill="#ffffff"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1b2440"/>
+    </marker>
+  </defs>
+  <text x="20" y="28" font-size="15" font-weight="bold">FIG 3-2  REQUIRES AND DEPENDENTS (the module graph, v0.6.0)</text>
+  <line x1="20" y1="38" x2="780" y2="38" stroke="#1b2440" stroke-width="1"/>
+
+  <!-- nodes -->
+  <g stroke="#1b2440" stroke-width="2" fill="none">
+    <rect x="40" y="70" width="110" height="34" stroke="#c9a227" stroke-width="3"/>
+    <rect x="170" y="70" width="110" height="34"/>
+    <rect x="300" y="70" width="110" height="34"/>
+    <rect x="40" y="200" width="110" height="34"/>
+    <rect x="170" y="200" width="110" height="34"/>
+    <rect x="300" y="200" width="110" height="34"/>
+    <rect x="235" y="300" width="110" height="34"/>
+  </g>
+  <text x="58" y="92" font-weight="bold" fill="#8a6d0f">wall</text>
+  <text x="188" y="92" font-weight="bold">lists</text>
+  <text x="318" y="92" font-weight="bold">calendar</text>
+  <text x="58" y="222" font-weight="bold">apps</text>
+  <text x="188" y="222" font-weight="bold">chores</text>
+  <text x="318" y="222" font-weight="bold">agent</text>
+  <text x="253" y="322" font-weight="bold">gazette</text>
+
+  <!-- edges: X requires Y, arrow points at the requirement -->
+  <g stroke="#1b2440" stroke-width="1.5" fill="none" marker-end="url(#arr)">
+    <line x1="225" y1="200" x2="225" y2="106"/>
+    <line x1="320" y1="300" x2="355" y2="236"/>
+    <polyline points="235,317 20,317 20,87 38,87"/>
+    <polyline points="345,317 425,317 425,87 412,87"/>
+  </g>
+  <text x="40" y="132" font-size="11">no requires</text>
+  <text x="232" y="160" font-size="11">requires</text>
+  <text x="40" y="270" font-size="11">no requires</text>
+  <text x="20" y="372" font-size="11">Arrow = "requires". chores -&gt; lists since v0.3.0.</text>
+  <text x="20" y="388" font-size="11">gazette -&gt; agent, wall, calendar came later (Part 6).</text>
+
+  <!-- rules panel -->
+  <g stroke="#1b2440" stroke-width="1.5" fill="none">
+    <rect x="440" y="60" width="340" height="140"/>
+    <rect x="440" y="215" width="340" height="140"/>
+  </g>
+  <text x="452" y="82" font-weight="bold">ENABLE chores, lists is off</text>
+  <text x="452" y="104">POST .../chores/enable</text>
+  <text x="452" y="122">  -&gt; 409 requires_unmet</text>
+  <text x="452" y="140">     { unmet: ["lists"] }</text>
+  <text x="452" y="164">body { withRequirements: true }</text>
+  <text x="452" y="182">  -&gt; lists + chores on, one transaction</text>
+
+  <text x="452" y="237" font-weight="bold">DISABLE lists, chores is on</text>
+  <text x="452" y="259">POST .../lists/disable</text>
+  <text x="452" y="277">  -&gt; 409 dependents_active</text>
+  <text x="452" y="295">     { dependents: ["chores"] }</text>
+  <text x="452" y="319">body { withDependents: true }</text>
+  <text x="452" y="337">  -&gt; chores + lists off, one transaction</text>
+
+  <text x="20" y="430" font-size="11">Disable = UPDATE user_modules SET enabled_at = NULL. Rows are never deleted, and neither are the</text>
+  <text x="20" y="446" font-size="11">tasks, events or posts a module wrote. Re-enable and it all comes back.</text>
+  <text x="20" y="466" font-size="11">Gold = the only module with default_enabled: true.</text>
+</svg>

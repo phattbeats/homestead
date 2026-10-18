@@ -43,7 +43,8 @@ dependencies.
   rolling expiry.
 
 See the [glossary](docs/GLOSSARY.md) for the canonical name of every
-user-facing surface.
+user-facing surface, and the [devlog](docs/devlog/README.md) for how it
+was built.
 
 ## Stack
 

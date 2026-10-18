@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 560" font-family="monospace" font-size="12" fill="#1b2440">
+  <rect width="800" height="560" fill="#ffffff"/>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1b2440"/>
+    </marker>
+  </defs>
+  <text x="20" y="28" font-size="15" font-weight="bold">FIG 6-4  THE FORUM IS A COSTUME: WHAT EACH WORD IS STORED AS (v0.6.0)</text>
+  <line x1="20" y1="38" x2="780" y2="38" stroke="#1b2440" stroke-width="1"/>
+
+  <text x="40" y="62" font-weight="bold">FORUM (what you read)</text>
+  <text x="440" y="62" font-weight="bold">HOMESTEAD (what's in SQLite)</text>
+
+  <g stroke="#1b2440" stroke-width="1.5" fill="none">
+    <rect x="40" y="74" width="300" height="40"/>
+    <rect x="40" y="126" width="300" height="40"/>
+    <rect x="40" y="178" width="300" height="40"/>
+    <rect x="40" y="230" width="300" height="40"/>
+    <rect x="40" y="282" width="300" height="40"/>
+    <rect x="440" y="74" width="320" height="40"/>
+    <rect x="440" y="126" width="320" height="40"/>
+    <rect x="440" y="178" width="320" height="40"/>
+    <rect x="440" y="230" width="320" height="40"/>
+    <rect x="440" y="282" width="320" height="40"/>
+  </g>
+  <text x="54" y="99" font-weight="bold">Category</text>
+  <text x="54" y="151" font-weight="bold">Board</text>
+  <text x="54" y="203" font-weight="bold">Thread</text>
+  <text x="54" y="255" font-weight="bold">Reply</text>
+  <text x="54" y="307" font-weight="bold">Member profile</text>
+
+  <text x="454" y="99">walls.category + walls.sort</text>
+  <text x="454" y="151">walls row (membership, opt-out)</text>
+  <text x="454" y="203">wall_posts  +title +sticky +views</text>
+  <text x="454" y="255">post_comments  (unchanged)</text>
+  <text x="454" y="307">users  +signature +birthday (MM-DD)</text>
+
+  <g stroke="#1b2440" stroke-width="1.5" marker-end="url(#a)">
+    <line x1="340" y1="94" x2="438" y2="94"/>
+    <line x1="340" y1="146" x2="438" y2="146"/>
+    <line x1="340" y1="198" x2="438" y2="198"/>
+    <line x1="340" y1="250" x2="438" y2="250"/>
+    <line x1="340" y1="302" x2="438" y2="302"/>
+  </g>
+
+  <!-- derived -->
+  <rect x="40" y="348" width="720" height="168" stroke="#c9a227" stroke-width="3" fill="none"/>
+  <text x="56" y="370" font-weight="bold" fill="#8a6d0f">DERIVED ON EVERY READ, NEVER STORED</text>
+  <text x="56" y="394" font-weight="bold">post count</text><text x="250" y="394">COUNT(wall_posts) + COUNT(post_comments) by author</text>
+  <text x="56" y="414" font-weight="bold">rank</text><text x="250" y="414">ladder: Newcomer 0, Junior Member 5, Member 25,</text>
+  <text x="250" y="430">Senior Member 100, Elite Member 300</text>
+  <text x="250" y="446">built-in Hearth = "Moderator · House Agent"</text>
+  <text x="56" y="468" font-weight="bold">who's online</text><text x="250" y="468">last_active_at in the last 15 min (not Hearth)</text>
+  <text x="56" y="488" font-weight="bold">new since last visit</text><text x="250" y="488">after last_visit_at (a visit ends at 30 min idle)</text>
+  <text x="56" y="508" font-weight="bold">board totals</text><text x="250" y="508">threads + replies, counted live</text>
+
+  <text x="40" y="544" font-size="11">NOTE: no second content store. Reads go through wall membership: a board you can't see is a 404.</text>
+</svg>

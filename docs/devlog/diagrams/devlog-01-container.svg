@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 470" font-family="monospace" font-size="13" fill="#1b2440">
+  <rect width="800" height="470" fill="#ffffff"/>
+  <text x="20" y="28" font-size="15" font-weight="bold">FIG 1-2  ONE CONTAINER, ONE FILE (v0.0.1, 2026-07-29)</text>
+  <line x1="20" y1="38" x2="780" y2="38" stroke="#1b2440" stroke-width="1"/>
+  <g stroke="#1b2440" stroke-width="2" fill="none">
+    <rect x="30" y="70" width="170" height="110"/>
+    <rect x="240" y="70" width="150" height="110"/>
+    <rect x="430" y="60" width="340" height="250" stroke="#c9a227" stroke-width="3"/>
+    <rect x="450" y="100" width="300" height="56"/>
+    <rect x="450" y="168" width="300" height="56"/>
+    <rect x="450" y="236" width="300" height="56"/>
+    <rect x="450" y="360" width="300" height="80"/>
+  </g>
+  <text x="45" y="95" font-weight="bold">[1] PHONE</text>
+  <text x="45" y="118">PWA on the home</text>
+  <text x="45" y="136">screen. manifest +</text>
+  <text x="45" y="154">a 4-line sw.js.</text>
+  <text x="255" y="95" font-weight="bold">[2] PROXY</text>
+  <text x="255" y="118">any TLS reverse</text>
+  <text x="255" y="136">proxy. app trusts</text>
+  <text x="255" y="154">one hop.</text>
+  <text x="445" y="84" font-weight="bold" fill="#8a6d0f">[3] node:22-bookworm-slim  :3080</text>
+  <text x="462" y="124" font-weight="bold">server.js    212 lines</text>
+  <text x="462" y="144">Express 5 + sessions + bcryptjs</text>
+  <text x="462" y="192" font-weight="bold">public/index.html    473 lines</text>
+  <text x="462" y="212">plain HTML/CSS/JS. no build step.</text>
+  <text x="462" y="260" font-weight="bold">better-sqlite3</text>
+  <text x="462" y="280">synchronous. migrations run on boot.</text>
+  <text x="462" y="384" font-weight="bold">[4] VOLUME /data/life.db</text>
+  <text x="462" y="404">journal_mode = WAL</text>
+  <text x="462" y="424">users  tasks  events  services</text>
+  <g stroke="#1b2440" stroke-width="1.5" fill="#1b2440">
+    <line x1="200" y1="125" x2="234" y2="125"/><polygon points="240,125 232,121 232,129"/>
+    <line x1="390" y1="125" x2="424" y2="125"/><polygon points="430,125 422,121 422,129"/>
+    <line x1="600" y1="310" x2="600" y2="354"/><polygon points="600,360 596,352 604,352"/>
+  </g>
+  <text x="30" y="230" font-size="12">Back up one file and</text>
+  <text x="30" y="248" font-size="12">you have backed up</text>
+  <text x="30" y="266" font-size="12">the whole household.</text>
+  <text x="20" y="460" font-size="11">NOTE: line counts are the v0.0.1 commit. At v0.6.0 server.js is 4,837 lines and index.html 4,188. Same shape.</text>
+</svg>

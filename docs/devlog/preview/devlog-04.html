@@ -1,0 +1,315 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Homestead devlog, Part 4: Calendars and libraries: other people's data</title><style>body{margin:0;background:#FFFBF5;color:#2B2622;font:20px/1.65 Georgia,serif}
+header.site{background:#2B2622;color:#f6e4c3;padding:14px 4vw;font:600 15px system-ui;letter-spacing:.08em;display:flex;gap:12px;align-items:center}
+header.site b{color:#fff}header.site a{color:inherit;text-decoration:none}.stripe{height:5px;background:linear-gradient(90deg,#6D7B59 0 33%,#d49a40 33% 66%,#C4703C 66%)}
+main{max-width:740px;margin:0 auto;padding:40px 20px 80px}.meta{font:14px system-ui;color:#7a7269;text-transform:uppercase;letter-spacing:.05em}
+h1{font:800 44px/1.15 system-ui;margin:.3em 0}.excerpt{font:22px/1.5 system-ui;color:#4b4624}
+h2{font:700 30px system-ui;margin-top:1.8em;border-bottom:2px solid #4b4624;padding-bottom:.2em}h3{font:700 23px system-ui}
+img{max-width:100%;display:block;margin:1.4em auto 0;border-radius:4px}img[src$=".png"]{max-height:760px}.feature{width:100%;max-height:none!important;margin:1em 0 2em}
+em.cap{display:block;text-align:center;font:14px/1.4 system-ui;color:#7a7269;margin:.5em 0 1em}
+pre{background:#2B2622;color:#f3ece2;padding:18px;border-radius:6px;overflow:auto;font:14px/1.5 ui-monospace,Menlo,monospace;border-left:4px solid #d49a40}
+code{font:0.85em ui-monospace,Menlo,monospace;background:#f1ebe1;padding:1px 4px;border-radius:3px}pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%;font:15px/1.4 system-ui;margin:1.4em 0}th{background:#4b4624;color:#fff;text-align:left}th,td{border:1px solid #d8cfc2;padding:7px 9px}tr:nth-child(even) td{background:#f6efe4}
+blockquote{margin:1.6em 0;padding:14px 18px;background:#fbf1dc;border-left:5px solid #d49a40;font:17px/1.55 system-ui}
+blockquote.warn{background:#fbe9e0;border-color:#C4703C}
+footer{border-top:1px solid #e5ddd0;margin-top:60px;padding-top:20px;font:15px system-ui;color:#7a7269}</style>
+<header class="site"><a href="index.html"><b>Homestead</b> · devlog</a></header><div class="stripe"></div><main>
+<div class="meta">Part 4 · DRAFT PREVIEW, NOT PUBLISHED</div><h1>Homestead devlog, Part 4: Calendars and libraries: other people's data</h1><p class="excerpt">How Homestead stopped asking the household to type things twice: CalDAV and Microsoft 365 calendars merged into one month grid, credentials locked up with AES-256-GCM, and Plex and Kavita synced into an entity graph where Dune is one node.</p><img class="feature" src="../img/04-calendar.png" alt="">
+<p><img src="../img/04-calendar.png" alt="The Homestead calendar month grid with coloured per-person pips on several days"></p>
+<em class="cap">FIG 4-0 — The calendar month grid with per-person pips. Demo instance, demo data, users alex and sam.</em>
+<p>Part 3 was about rooms: things Homestead owns. This part is about things it doesn&#39;t. Calendars already live somewhere else. So do movies and books. A shared-life app that makes you re-type an appointment is just a second calendar.</p>
+<p>Both halves landed the same weekend, August 9 and 10, built by agents on parallel branches. That mattered once (section 5.3).</p>
+<h2>1. No double entry</h2>
+<p>The changelog states the goal plainly: Homestead &quot;now reads events from configured external calendars instead of forcing double-entry.&quot;</p>
+<p>The design is one interface and several adapters. The contract sits at the top of <code>lib/calendar-sources.js</code>:</p>
+<pre><code class="language-js">//   const adapter = createAdapter(sourceConfig, deps);
+//   await adapter.listCalendars() -&gt; [{ href, displayName, color? }]
+//   await adapter.listEvents({ start, end, calendarHref }) -&gt; [event]
+//   // Phase 2:
+//   await adapter.createEvent({ calendarHref, vevent })
+//   await adapter.updateEvent({ calendarHref, externalId, vevent })
+//   await adapter.deleteEvent({ calendarHref, externalId })
+//
+// All adapters must:
+//   * Treat credentials as opaque secrets — never log them, never
+//     include them in error messages, never return them.
+...
+</code></pre>
+<h3>1.1 Spec table: providers as of v0.6.0</h3>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>Adapter</th>
+<th>Auth</th>
+<th>Read</th>
+<th>Write-back</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Nextcloud</td>
+<td><code>CalDAVSource</code></td>
+<td>HTTP Basic, app password</td>
+<td>yes</td>
+<td>create, update, delete</td>
+</tr>
+<tr>
+<td>Apple iCloud</td>
+<td><code>CalDAVSource</code></td>
+<td>HTTP Basic, app-specific password</td>
+<td>yes</td>
+<td>create, update, delete</td>
+</tr>
+<tr>
+<td>Microsoft 365</td>
+<td><code>GraphSource</code></td>
+<td>OAuth2 access + refresh token</td>
+<td>yes</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Google</td>
+<td>none</td>
+<td>none</td>
+<td>reserved, POST returns 501</td>
+<td>no</td>
+</tr>
+</tbody></table>
+<p><img src="../diagrams/devlog-04-calendar-sources.svg" alt="Flow diagram: four providers feed two adapters, which sync into SQLite tables, which the merged events API reads"></p>
+<em class="cap">FIG 4-1 — Providers to adapters to the cache to <code>/api/events/merged</code>. Google is dashed because it is a name in an allow-list and nothing else.</em>
+<h3>1.2 One CalDAV adapter, two providers</h3>
+<p>Nextcloud and iCloud both speak CalDAV, so they share one implementation. The only real difference is discovery: Nextcloud&#39;s calendar home is predictable from the username, iCloud needs a PROPFIND against the user principal first. That&#39;s one flag, <code>discoverPrincipal</code>.</p>
+<p>There is no XML library in the dependency list. The agent hand-rolled a namespace-stripping XML walker and a minimal iCalendar parser, and left the reason in the source:</p>
+<blockquote>
+<p>&quot;pulling in a real XML parser dependency for ~10 fields is overkill.&quot;</p>
+</blockquote>
+<p>Fair. Recurring events are deliberately out of scope: single VEVENTs only, still true today.</p>
+<h3>1.3 Microsoft 365 through Graph</h3>
+<p>The second adapter needed &quot;No merge-layer, API-surface, or DTO changes&quot;. That&#39;s the point of an interface. <code>GraphSource</code> reads <code>/me/calendarView</code> for a time window, so Microsoft does the date filtering. Credentials are a token pair from your own Azure app registration (<code>Calendars.Read offline_access</code>). The adapter refreshes a minute before expiry, and once more if Graph answers 401 anyway.</p>
+<blockquote>
+<p><strong>NOTE</strong> There&#39;s an <code>onTokenRefresh</code> hook so the caller can re-encrypt and save a refreshed token. As of v0.6.0 nothing passes it. A refreshed access token is used for one sync and then forgotten. It works; it just refreshes more than it needs to.</p>
+</blockquote>
+<h2>2. The merge layer</h2>
+<p>Every source syncs into one table, <code>calendar_event_cache</code>. <code>syncSource()</code> asks the adapter for 60 days back to 365 days forward, deletes that source&#39;s cached rows and inserts the new set, all in one SQLite transaction.</p>
+<p>Reading is one endpoint, <code>GET /api/events/merged?from=YYYY-MM-DD&amp;to=YYYY-MM-DD</code>. Native Homestead events and cached provider events come back in one list:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>origin</code></td>
+<td><code>native</code> or <code>provider:&lt;provider&gt;</code></td>
+</tr>
+<tr>
+<td><code>color</code></td>
+<td>per source; native events use the owner&#39;s colour</td>
+</tr>
+<tr>
+<td><code>stale</code></td>
+<td>true when the source hasn&#39;t synced in 5 minutes</td>
+</tr>
+<tr>
+<td><code>last_error</code></td>
+<td>the last provider error, if any</td>
+</tr>
+</tbody></table>
+<p>The month-grid release changed the overlap rule so an event that starts before the window but ends inside it still counts:</p>
+<pre><code class="language-sql">WHERE cs.enabled = 1
+  AND cec.start_at &lt;= ?
+  AND (cec.end_at IS NULL OR cec.end_at &gt;= ?)
+</code></pre>
+<p>A conference that starts on the 30th still shows up on the 1st. <code>enabled = 1</code> is the pause switch: turn a source off and its events leave the grid without deleting anything. On the grid, provider pips get a 1px ring &quot;so they don&#39;t blur into the per-user coloured native pips on the same cell&quot;.</p>
+<h3>2.1 The resync that wasn&#39;t</h3>
+<p>The README says sources are &quot;re-synced in the background when the cache is more than 5 minutes old.&quot; The comment block in <code>lib/calendar-sources.js</code> says the merge endpoint re-syncs &quot;when the cache is older than <code>FRESHNESS_MS</code>.&quot;</p>
+<blockquote class="warn">
+<p><strong>WARNING</strong> The code doesn&#39;t do that. <code>isStale()</code> exists and has tests. Nothing outside the tests calls it. In v0.6.0 a source syncs when someone presses Refresh, and after a write-back. The merge endpoint only computes the <code>stale</code> flag, so the grid can at least admit the data is old. In the old history, as far back as the tagged releases go, it was never wired.</p>
+</blockquote>
+<h3>2.2 A leak check in the response path</h3>
+<p>The merged endpoint checks its own output before answering:</p>
+<pre><code class="language-js">const serialized = JSON.stringify({ events: [...native, ...cached] });
+if (/(cred_blob|app_password|access_token|refresh_token|client_secret)/i.test(serialized)) {
+  return res.status(500).json({ error: &#39;credential leak detected in merged feed — refusing to respond&#39; });
+}
+</code></pre>
+<p>The source-list endpoints instead send every row through <code>publicView()</code>, &quot;the single source of truth for &#39;what is safe to ship to the client&#39;&quot;.</p>
+<h2>3. Write-back</h2>
+<p>The same weekend, CalDAV sources got create, update and delete. It&#39;s a thin layer over HTTP:</p>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Request</th>
+<th>Guard</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>create</td>
+<td><code>PUT /&lt;cal-href&gt;/&lt;uid&gt;.ics</code></td>
+<td><code>If-None-Match: *</code>, never overwrite</td>
+</tr>
+<tr>
+<td>update</td>
+<td><code>PUT /&lt;cal-href&gt;/&lt;uid&gt;.ics</code></td>
+<td><code>If-Match: &lt;etag&gt;</code>, 412 on a lost update</td>
+</tr>
+<tr>
+<td>delete</td>
+<td><code>DELETE /&lt;cal-href&gt;/&lt;uid&gt;.ics</code></td>
+<td><code>If-Match</code> optional</td>
+</tr>
+</tbody></table>
+<p>The etag guard is the interesting one:</p>
+<pre><code class="language-js">// If-Match: &lt;etag&gt; protects against lost-update: a concurrent edit
+// elsewhere will have produced a new etag, and the PUT will fail
+// with 412 so the caller can re-fetch and retry.
+if (etag) headers[&#39;If-Match&#39;] = etag;
+</code></pre>
+<p>If the event changed on a phone after a client last read it, that client gets a 412 instead of silently overwriting the change. A provider failure comes back as a 502. A success kicks off a background sync.</p>
+<blockquote>
+<p><strong>NOTE</strong> Write-back is API-only in v0.6.0. The app&#39;s own event form still creates native Homestead events, and the merged feed doesn&#39;t include the external id or etag a client would need to edit a provider event. The plumbing is tested against a fake CalDAV server. The button isn&#39;t there.</p>
+</blockquote>
+<p>Graph never got write-back at all:</p>
+<pre><code class="language-js">createEvent: async () =&gt; { throw new Error(&#39;GraphSource.createEvent: Phase 2, not implemented&#39;); },
+</code></pre>
+<h2>4. Credentials at rest</h2>
+<p>A calendar source holds a real password or a real OAuth token. They live in <code>calendar_sources.cred_blob</code>, encrypted by <code>lib/secret-box.js</code>: AES-256-GCM, a fresh 12-byte IV per value, stored as <code>&lt;iv&gt;:&lt;tag&gt;:&lt;ciphertext&gt;</code>. The key is <code>CALENDAR_CRED_KEY</code>, from <code>openssl rand -hex 32</code>. A missing or wrong-length key throws on every call, and the header comment explains why there&#39;s no fallback:</p>
+<blockquote>
+<p>&quot;we&#39;d rather refuse to start than silently ship unencrypted credentials.&quot;</p>
+</blockquote>
+<p>What changed was how loud that is. In v0.1.9 a missing key made <code>/api/health</code> report <code>ok: false</code>, so every fresh install looked broken before anyone had connected a calendar. v0.4.3 relaxed it: health stays green, <code>calendarCredKeyReady</code> is reported on its own, and adding a source returns 503 until the key is set.</p>
+<blockquote class="warn">
+<p><strong>WARNING</strong> Rotating <code>CALENDAR_CRED_KEY</code> means re-encrypting every row. The source calls it &quot;a known operational footgun&quot;. There&#39;s no rotation helper yet.</p>
+</blockquote>
+<h3>4.1 A form, so it isn&#39;t curl-only</h3>
+<p>The first release was API-only. The next day the avatar menu got a Calendar sources sheet: add, edit, delete, refresh. It&#39;s driven by <code>GET /api/calendar-sources/kinds</code>, which describes each provider&#39;s credential fields and never any values. Editing can change the name, colour and enabled flag, not the credentials; delete and re-add for that. Admins can tick <strong>Shared</strong> to show a source to the whole household.</p>
+<p><img src="../img/04-calendar-sources.png" alt="The calendar sources settings sheet, empty state"></p>
+<em class="cap">FIG 4-2 — The calendar sources settings sheet before any source is added. Demo instance, demo data, users alex and sam.</em>
+<p>On August 12 the merged events got a second reader: <code>GET /api/me/snapshot</code>, one &quot;here&#39;s your day&quot; payload built from the same merge, so an agent sees the Nextcloud event and the Homestead chore in one list. Agents are Part 5. This is the first thing they read.</p>
+<h2>5. Libraries: the entity graph</h2>
+<p>The library work started from a complaint. The issue I filed explains why Homarr, Dashy and Homepage never stuck for me: no way to see relationships or move between things.</p>
+<blockquote>
+<p>&quot;Tiles are doors to unrelated rooms; bookmarks beat them.&quot;</p>
+</blockquote>
+<p>The fix was an entity layer. One node per real-world thing, typed edges between them, hydrated from the services we already run instead of typed in by hand. The canonical example: Dune is <em>one</em> node, and you can read it in Kavita, listen to it as an audiobook, or watch it in Plex. Each of those is an edge with a deep link.</p>
+<h3>5.1 Spec table: the schema</h3>
+<p>All of it is in <code>lib/sync/_schema.js</code>, idempotent, run on every boot:</p>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Holds</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>entities</code></td>
+<td><code>kind</code> (person, work, concept, ...), name, slug, <code>meta_json</code>, <code>source_service</code> + <code>source_id</code></td>
+</tr>
+<tr>
+<td><code>entity_aliases</code></td>
+<td>alternate names, for search</td>
+</tr>
+<tr>
+<td><code>entity_edges</code></td>
+<td>typed, directed, provenance-tagged, with a <code>deep_link</code> and a <code>stale</code> flag</td>
+</tr>
+<tr>
+<td><code>entity_review_queue</code></td>
+<td>possible duplicates waiting for a human</td>
+</tr>
+<tr>
+<td><code>entities_fts</code></td>
+<td>FTS5 index behind the ⌘K / Ctrl+K search palette</td>
+</tr>
+</tbody></table>
+<p>Edges are unique on <code>(from_id, to_id, type, source_service, source_id)</code>, so a sync can run twice and change nothing.</p>
+<p>The agent wrote a design doc first and came back with questions. Some of my answers, verbatim. Add <code>directed_by</code> and <code>authored_by</code> edges? &quot;yes.&quot; Plex collections as concept nodes? &quot;i like the idea.&quot; (They shipped as <code>tagged_with</code> concept edges, along with genres and moods.) Merge people on lowercased full name, accepting that two people with the same name collide?</p>
+<blockquote>
+<p>&quot;i dont know. whats the rigth answer?&quot;</p>
+</blockquote>
+<p>The agent defaulted to yes, wrote the collision risk into a code comment, and moved on.</p>
+<h3>5.2 The Dune walkthrough</h3>
+<p>Before any worker hit a real library, the agent turned the design doc&#39;s example into <code>scripts/seed-dune.js</code>, which writes straight to the database (there was no write API yet, by design). Trimmed:</p>
+<pre><code class="language-js">  // Step 1 — Kavita worker first run.
+  upsertEntity({
+    id: &#39;ent_dune_book&#39;, kind: &#39;work&#39;, name: &#39;Dune&#39;, slug: &#39;dune-book&#39;,
+    meta: { isbn: &#39;978-0-441-01359-3&#39;, year: 1965, ... },
+    source_service: &#39;kavita&#39;, source_id: &#39;series-1247&#39;, created_by: &#39;sync:kavita&#39;,
+  });
+  ...
+  upsertEdge({ id: &#39;edge_dune_film_directed_by&#39;, from_id: &#39;ent_dune_film_1984&#39;, to_id: &#39;ent_david_lynch&#39;,
+    type: &#39;directed_by&#39;, source_service: &#39;plex&#39;, source_id: &#39;8435&#39;, meta: {}, created_by: &#39;sync:plex&#39; });
+</code></pre>
+<p><img src="../diagrams/devlog-04-dune-graph.svg" alt="Graph diagram: a Dune franchise concept node with available_as edges to a book, an audiobook and a 1984 film, authored_by edges to Frank Herbert, directed_by to David Lynch, and adaptation_of from the film to the book"></p>
+<em class="cap">FIG 4-3 — The Dune walkthrough as seeded. The concept&#39;s page can render &quot;Available as (3)&quot; with a deep link per format.</em>
+<p>The graph tests (38 assertions) run the whole walkthrough end to end. One footnote: the audiobook is attributed to Audiobookshelf, and there&#39;s no Audiobookshelf sync worker in the repo. The seed writes that node by hand.</p>
+<h3>5.3 Plex and Kavita workers</h3>
+<p>The real workers came the same weekend:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Plex</th>
+<th>Kavita</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Module</td>
+<td><code>lib/sync/plex.js</code></td>
+<td><code>lib/sync/kavita.js</code></td>
+</tr>
+<tr>
+<td>Auth</td>
+<td><code>X-Plex-Token</code></td>
+<td><code>x-api-key</code> header</td>
+</tr>
+<tr>
+<td>Walks</td>
+<td>movies, shows, seasons, episodes</td>
+<td>Manga and Book libraries only</td>
+</tr>
+<tr>
+<td>Edges</td>
+<td><code>directed_by</code>, <code>part_of</code>, <code>tagged_with</code>, <code>available_as</code></td>
+<td><code>authored_by</code>, <code>tagged_with</code>, <code>available_as</code></td>
+</tr>
+<tr>
+<td>Tests</td>
+<td>65</td>
+<td>75</td>
+</tr>
+</tbody></table>
+<p>Both run every six hours, can be kicked by an admin, and skip silently when their token isn&#39;t set. Both link works across libraries when <code>(title_lower, year)</code> match. When something disappears upstream, they mark <em>edges</em> stale, not entities: &quot;the entity persists because the historical relationship still exists&quot;.</p>
+<p>The parallel branches did collide once. When the Plex branch was merged onto the graph branch, its server boot crashed: calendar-sources and secret-box routes from the other in-flight branch had leaked into <code>server.js</code>, referencing modules that didn&#39;t exist there. The fix was to strip them out. Two branches, one weekend, one <code>server.js</code>.</p>
+<h3>5.4 Duplicates and the review queue</h3>
+<p>On August 11 came dedup, in <code>lib/dedup/matcher.js</code>, in three tiers:</p>
+<ol>
+<li><strong>Known IDs</strong> (ISBN, TMDB, Audible, Plex GUID, Kavita id). A match adds an <code>adaptation_of</code> edge. It never merges.</li>
+<li><strong>TMDB cross-reference</strong>: same TMDB id, collection and year.</li>
+<li><strong>Fuzzy</strong>: <code>0.6 × title + 0.3 × author + 0.1 × year</code>. At 0.9 or above it adds an alias, between 0.7 and 0.9 it queues a review, below that it does nothing.</li>
+</ol>
+<p><code>mergeEntities()</code> is the only code path that merges two nodes, and it runs when a person clicks <strong>Merge into this</strong> on the entity page. <strong>Don&#39;t merge</strong> is permanent for that pair.</p>
+<h2>6. Media comprehension</h2>
+<p>The other kind of media is what people post to the Porch. v0.4.5 (August 29) added <code>GET /api/media/:id/context</code>, which describes a photo or video for an agent. The changelog&#39;s reason: reading only the caption &quot;misses the substance of a friend&#39;s post — a meme&#39;s joke, a video&#39;s scene-cut, the line someone actually said.&quot;</p>
+<p>Images return the file, thumbnail and caption. Videos return up to 12 keyframes from ffmpeg&#39;s scene detection (<code>select=gt(scene,0.4)</code>, first and last frame always included, 480px wide), plus an audio transcript. With no transcription key, the transcript is <code>null</code> and the status says <code>&#39;no_key&#39;</code>, so the caller knows why. Results are cached for 24 hours per <code>(media_id, source_mtime)</code>. ffmpeg had to be added to the Dockerfile, or every video request 500s.</p>
+<h2>7. The media queue</h2>
+<p>&quot;Queue Part Two for tonight&quot; needs somewhere to live, so there&#39;s a <code>media_queue</code> table, written by Hearth&#39;s <code>enqueue_media</code> action (Part 5 has the agent side). Titles are resolved through the entity graph. The row is unique per user and item, so asking twice gets you one row and one announcement. The announcement is a wall post, linked loosely on purpose:</p>
+<blockquote>
+<p>&quot;The queue row is the durable record of &#39;I asked for this&#39;; the wall post is an announcement with a retention window&quot;</p>
+</blockquote>
+<p>If the post fails, the queue row is deleted again, so nothing claims to have happened that only half happened.</p>
+<h2>8. End of Part 4</h2>
+<p>Where things stood:</p>
+<ul>
+<li>One <code>CalendarSource</code> interface with two working adapters: CalDAV for Nextcloud and iCloud, Graph for Microsoft 365. Google exists by name only.</li>
+<li>A merged events API with <code>origin</code>, colour and <code>stale</code> on every event, a pause switch per source, and a leak check on the way out.</li>
+<li>CalDAV write-back with etag guards, reachable from the API but not the UI.</li>
+<li>Credentials under AES-256-GCM with a key that fails closed.</li>
+<li>A documented background resync that doesn&#39;t run.</li>
+<li>An entity graph fed by Plex and Kavita, Dune as the worked example, and a dedup matcher that asks a human before merging.</li>
+<li>Media comprehension for Porch posts, and a media queue.</li>
+</ul>
+<p>Next, Part 5: agents move in. Personal access tokens, the third-party app contract, and Hearth, the house agent, which reads all of the above and was deliberately not given the lights.</p>
+
+<footer>Tags: Homestead, devlog, CalDAV, Microsoft Graph, Plex, Kavita<br>Slug: homestead-devlog-04-calendars-and-libraries</footer></main>
