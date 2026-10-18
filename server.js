@@ -1245,6 +1245,11 @@ app.get('/api/invites/:code/redemptions', auth, requireAdmin, (req, res) => {
 // /invite/:code page can render "what is Homestead / who invited you /
 // which wall" before any signup/signin choice is made. 410 on
 // expired/exhausted/revoked; 404 on unknown.
+//
+// The invite `note` is admin freeform and this route is unauthenticated,
+// so it runs through invites.scrubPublicNote first: operational copy
+// (ticket ids, wave/reissue/wipe language) must never reach a fresh
+// invitee. Dropped notes are logged rather than silently blanked.
 app.get('/api/public/invites/:code', (req, res) => {
   try {
     const inv = invites.peek(db, req.params.code);
@@ -1253,7 +1258,10 @@ app.get('/api/public/invites/:code', (req, res) => {
       id: inv.id,
       wall_slug: inv.wall_slug,
       wall_name: inv.wall_name,
-      note: inv.note || null,
+      note: invites.scrubPublicNote(inv.note, {
+        onDrop: (reason) => console.warn(
+          `[api/public/invites/:code] note withheld (${reason}) for invite ${inv.id}`),
+      }),
       inviter: inv.created_by_username ? {
         username: inv.created_by_username,
         display: inv.created_by_display || inv.created_by_username,
