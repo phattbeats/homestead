@@ -22,6 +22,8 @@ Pick a style from the chooser in the forum footer or in User CP. The choice appl
 
 The shoutbox panel is not in this release. It lands with the shoutbox backend (#149).
 
+### Agent HMAC secrets envelope-encrypted at rest
+
 ## v0.6.0 (2026-10-16) — fresh start
 
 First release on a fresh history: earlier tags, releases and changelog entries were retired. Upgrading from v0.5.24 brings the changes below.
