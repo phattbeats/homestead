@@ -17,6 +17,7 @@ const Database = require('better-sqlite3');
 
 const userModel = require('../lib/user-model');
 const agentEndpoints = require('../lib/agent-endpoints');
+const secretBox = require('../lib/secret-box');
 
 let pass = 0;
 let fail = 0;
@@ -63,7 +64,9 @@ console.log('agent-endpoints tests\n');
   assert(!created.secret_prefix.includes('homestead_aes_'.slice(0, -1)) || created.secret_prefix.endsWith('…'), 'secret_prefix is a redacted chip');
 
   const row = db.prepare('SELECT * FROM agent_endpoints WHERE id = ?').get(created.id);
-  assertEq(row.secret, created.secret_plaintext, 'DB persisted the secret plaintext');
+  // At rest this is an AES-256-GCM envelope, not the plaintext.
+  assert(secretBox.isEnvelope(row.secret), 'DB persisted an encrypted envelope');
+  assertEq(secretBox.openSecret(row.secret), created.secret_plaintext, 'envelope decrypts back to the revealed plaintext');
   fs.rmSync(tmpDir, { recursive: true, force: true });
 }
 
@@ -148,7 +151,8 @@ console.log('agent-endpoints tests\n');
   assertEq(rotated.event_filter, { task_created: true }, 'rotate preserves the prior event_filter');
 
   const row = db.prepare('SELECT secret FROM agent_endpoints WHERE id = ?').get(created.id);
-  assertEq(row.secret, rotated.secret_plaintext, 'DB now holds the rotated secret');
+  assert(secretBox.isEnvelope(row.secret), 'DB now holds an encrypted envelope');
+  assertEq(secretBox.openSecret(row.secret), rotated.secret_plaintext, 'envelope decrypts back to the rotated secret');
   fs.rmSync(tmpDir, { recursive: true, force: true });
 }
 

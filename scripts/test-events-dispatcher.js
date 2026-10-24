@@ -36,6 +36,7 @@ const Database = require('better-sqlite3');
 
 const userModel = require('../lib/user-model');
 const agentEndpoints = require('../lib/agent-endpoints');
+const secretBox = require('../lib/secret-box');
 const eventsDispatch = require('../lib/events-dispatch');
 
 let pass = 0;
@@ -250,7 +251,7 @@ async function main() {
     assertEq(seen.headers['x-homestead-user'], 'brandon', 'X-Homestead-User = brandon');
     assertEq(seen.headers['x-homestead-event-category'], 'task_created', 'X-Homestead-Event-Category = task_created');
     const epRow = db.prepare('SELECT secret FROM agent_endpoints WHERE id = ?').get(ep.id);
-    assert(verifySignature(seen.headers['x-homestead-signature'], epRow.secret, seen.headers['x-homestead-timestamp'], seen.body),
+    assert(verifySignature(seen.headers['x-homestead-signature'], secretBox.openSecret(epRow.secret), seen.headers['x-homestead-timestamp'], seen.body),
       'X-Homestead-Signature validates against stored secret');
     const parsed = JSON.parse(seen.body);
     assertEq(parsed.user.username, 'brandon', 'body.user.username = target user');

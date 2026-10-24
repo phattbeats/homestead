@@ -180,7 +180,16 @@ module.exports = function agentConnectionsRouter({
     // passes; the secret never leaves this handler.
     const firstRow = db.prepare('SELECT user_id FROM agent_connections WHERE id = ?').get(connectionId);
     if (!firstRow) return res.status(404).json({ error: 'not_found' });
-    const connection = agentConnections.get(db, connectionId, { ownerUserId: firstRow.user_id, includeSecretPlaintext: true });
+    let connection;
+    try {
+      connection = agentConnections.get(db, connectionId, { ownerUserId: firstRow.user_id, includeSecretPlaintext: true });
+    } catch (err) {
+      // The stored secret is an AES-256-GCM envelope now, and
+      // decrypting it needs HMAC_CRED_KEY (or CALENDAR_CRED_KEY). An
+      // operator who removes that env var gets a named 503 instead of a
+      // bare 500 — this is a box misconfiguration, not a bad request.
+      return res.status(503).json({ error: 'hmac_key_unavailable', detail: err.message });
+    }
     if (!connection) return res.status(404).json({ error: 'not_found' });
     if (connection.status === agentConnections.STATUS_REVOKED) {
       return res.status(410).json({ error: 'connection_revoked' });
