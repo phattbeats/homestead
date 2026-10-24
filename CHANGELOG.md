@@ -20,9 +20,11 @@ Pick a style from the chooser in the forum footer or in User CP. The choice appl
 
 **API:** `PATCH /api/forum/me` accepts `forum_skin` (`woodgrain` | `classic` | `clubhouse`, anything else is 400). New `GET /api/forum/me` returns the caller's forum profile and last visit. `/api/me` includes `forum_skin`. `/api/forum/stats` adds `views` (sum of thread views) and `topPosters`. Board index rows carry the seeded board `description`.
 
-The shoutbox panel is not in this release. It lands with the shoutbox backend (#149).
+The shoutbox panel ships with the shoutbox backend (#149) - see below.
 
 ### Agent HMAC secrets envelope-encrypted at rest
+
+### The Shoutbox
 
 ## v0.6.0 (2026-10-16) — fresh start
 
