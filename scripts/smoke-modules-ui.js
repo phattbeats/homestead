@@ -296,24 +296,15 @@ async function disableAll() {
     // The single-surface rule redirects / to /forum — verify that
     // path is reachable and the layout API's defaultRoute is honored.
     await page.goto('http://127.0.0.1:3194/forum', { waitUntil: 'load' });
-    // The /forum shell mounts the HomesteadFeed component into
-    // #porch-mount. The component creates a `.feed-root` child even
-    // when the user has no wall memberships (component
-    // contract). We assert the mount happened — inner feed content
-    // rendering for an empty-walls user is the component's job, not
-    // the layout/nav concern this smoke covers.
-    const porchMountState = await page.evaluate(() => {
-      const m = document.getElementById('porch-mount');
-      const root = m && m.querySelector('.feed-root');
-      return {
-        mountExists: !!m,
-        feedRootExists: !!root,
-      };
-    });
-    assert(porchMountState.mountExists,
-      'wall-only: /forum has #porch-mount');
-    assert(porchMountState.feedRootExists,
-      'wall-only: HomesteadFeed mounted a .feed-root child (component contract)');
+    // /forum renders the board index (public/forum/forum.js) for a
+    // wall-only user too: the starter boards are visible to everyone.
+    await page.waitForSelector('.fx-frow', { timeout: 10000 });
+    const forumState = await page.evaluate(() => ({
+      boards: document.querySelectorAll('.fx-frow').length,
+      skin: document.documentElement.getAttribute('data-skin'),
+    }));
+    assert(forumState.boards >= 1, 'wall-only: /forum renders the board index');
+    assertEq(forumState.skin, 'woodgrain', 'wall-only: /forum uses the default skin');
     await page.screenshot({ path: path.join(OUT_DIR, 'modui-wall-only.png'), fullPage: false });
     ok('wall-only: screenshot captured');
 

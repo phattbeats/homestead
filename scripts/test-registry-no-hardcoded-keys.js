@@ -269,6 +269,11 @@ const ALLOWED_LEGITIMATE = [
   // component reads to highlight the current page), not a registry
   // module-key branch.
   { file: 'public/gazette.html', literal: '"gazette"' },
+  // 'wall' as the board query-string param in the forum renderer
+  // (`/forum?wall=<slug>`, the legacy Porch deep-link shape kept so
+  // push notifications and welcome handoffs still land) — same
+  // namespace as welcome.html's allow-listed URL param above.
+  { file: 'public/forum/forum.js', literal: "'wall'" },
 ];
 
 function isAllowedLegitimate(file, match) {

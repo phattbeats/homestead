@@ -1,0 +1,112 @@
+/* Classic Board — phpBB2 / subSilver, circa 2003. Blue gradient table
+ * heads, grey alternating rows, "» " menu links, rank stars. */
+:root{--blue:#006699;--navy:#004c75;--orange:#dd6900;--row1:#efefef;--row2:#dee3e7;--row3:#d1d7dc;--soft:#555}
+html{background:#e5e5e5}
+body{font:12px Verdana,Tahoma,Arial,sans-serif;color:#000}
+a{color:var(--blue)}
+a:hover{color:var(--orange)}
+.fx-wrap{margin:12px auto;max-width:980px;background:#fff;border:1px solid #a9b8c2;padding:8px}
+.fx-v-classic,.fx-mono{display:block}
+
+.fx-header{flex-wrap:wrap;padding:6px 4px 0;gap:14px}
+.fx-mono{width:64px;height:64px;border-radius:6px;background:linear-gradient(#5b7fa6,#2c4f7a);color:#fff;display:grid;place-items:center;font:bold 28px Georgia,serif}
+.fx-logo:hover{text-decoration:none}
+.fx-name{font:bold 22px "Trebuchet MS",Verdana,sans-serif}
+.fx-tag{color:var(--soft);font-size:11px}
+.fx-loginbox{order:3;flex-basis:100%;margin:0;text-align:left;font-size:11px;padding:6px 2px;border-bottom:1px solid #ddd;line-height:1.5}
+.fx-loginbox br{display:none}
+.fx-loginbox [data-action=usercp]::before{content:" · ";color:#000}
+.fx-loginbox [data-action=usercp]{margin-left:2px}
+
+.fx-tabs{justify-content:flex-end;gap:14px;padding:6px 2px;flex-wrap:wrap}
+.fx-tabs a{font-size:11px;font-weight:bold}
+.fx-tabs a::before{content:"» ";color:#999}
+.fx-tabs a.on{color:#000}
+
+.fx-navbar{margin:6px 2px 8px;font-weight:bold;font-size:12px}
+.fx-sep{color:#000}
+.fx-here{color:#000}
+.fx-navinfo{font-weight:normal;font-size:11px}
+
+.fx-box{border:1px solid var(--blue);margin-bottom:10px}
+.fx-thead{background:linear-gradient(#5f8cb5,#2a5a87);color:#ffa34f;font:bold 11px Verdana;padding:6px 8px;justify-content:center}
+.fx-x{color:#ffa34f}
+.fx-cat .fx-thead{background:linear-gradient(#d1d7dc,#c2cbd2);color:var(--navy);font-size:12px;justify-content:space-between;padding:5px 8px}
+.fx-cat .fx-x{color:var(--navy)}
+.fx-tcat{background:linear-gradient(#5f8cb5,#2a5a87);color:#ffa34f;font:bold 11px Verdana;padding:5px 0;text-align:center}
+.fx-tcat,.fx-frow{grid-template-columns:40px 1fr 60px 60px 170px;grid-template-areas:"ic nm th po lp"}
+.fx-tcat>:nth-child(2){text-align:left}
+.fx-frow>div{border:1px solid #fff}
+.fx-frow .ic,.fx-frow .nm{background:var(--row1)}
+.fx-frow .n,.fx-frow .lp{background:var(--row2);font-size:11px}
+.fx-frow .n{display:grid;place-items:center}
+.fx-frow .n b{font-weight:normal}
+.fx-frow .lp{font-size:10px;line-height:1.45}
+.fx-frow .nm>a{font-size:13px}
+.fx-frow .d{font-size:11px;color:#333}
+.fx-badge{color:#c00;font-weight:bold;font-size:9px;vertical-align:super}
+.fx-muted{color:var(--soft)}
+
+.fx-wgo .fx-thead{justify-content:flex-start}
+.fx-wgo-row>div{border:1px solid #fff}
+.fx-wgo-row .ic,.fx-wgo-row .b{background:var(--row1)}
+.fx-wgo-row .b{font-size:11px;line-height:1.6}
+.fx-wgo-row h3{font-size:11px;color:var(--navy)}
+.fx-adm{color:#a00;font-weight:bold}
+.fx-bot{color:#8a5a00;font-weight:bold}
+
+.fx-btn{border:1px solid #6b8eb0;background:linear-gradient(#fff,#dbe4ec);font:bold 10px Verdana;padding:2px 8px;color:var(--navy);text-transform:uppercase}
+.fx-primary{font-size:11px;padding:4px 10px}
+.fx-newthread{margin:0 2px 8px}
+.fx-threads .fx-thead{justify-content:flex-start}
+.fx-trow>div{border:1px solid #fff}
+.fx-trow .ic,.fx-trow .t{background:var(--row1)}
+.fx-trow .lp,.fx-trow .n{background:var(--row2);font-size:10px;line-height:1.45}
+.fx-trow .by{font-size:10px;color:var(--soft)}
+.fx-trow .t>a{font-weight:bold}
+.fx-sticky{font-weight:bold}
+.fx-pager{font-size:11px;font-weight:bold}
+.fx-pager .on{color:#000}
+
+.fx-thread-box .fx-thead{justify-content:flex-start}
+.fx-post>div{border:1px solid #fff}
+.fx-who{background:var(--row1);font-size:11px}
+.fx-who-name{font-weight:bold;font-size:12px}
+.fx-post:nth-child(even) .fx-msg{background:var(--row2)}
+.fx-post:nth-child(odd) .fx-msg{background:var(--row1)}
+.fx-ava{width:80px;height:80px;border:1px solid #999;background:#fff;font-size:40px}
+.fx-rank{color:var(--soft);font-size:10px}
+.fx-stars{display:block;color:var(--orange);letter-spacing:1px;font-size:11px}
+.fx-meta{color:var(--soft);font-size:10px}
+.fx-ptop{font-size:10px;color:#444;border-bottom:1px solid #ccc}
+.fx-ptitle::before{content:"📄 "}
+.fx-pbody{font-size:13px;line-height:1.5}
+.fx-quote{border:1px solid #c2cbd2;background:#f6f8fa;font-size:11px}
+.fx-sig{border-top:1px dashed #aaa;font-size:10px;color:var(--soft);font-style:italic}
+.fx-emo{border:1px solid #c2cbd2;background:#fff;font-size:10px}
+.fx-emo.on{background:#ffe9cc;border-color:var(--orange)}
+.fx-linkcard{border:1px solid #c2cbd2;background:#f6f8fa}
+.fx-compose{border:1px solid var(--blue);background:var(--row1)}
+.fx-compose input,.fx-compose textarea,.fx-quick textarea{border:1px solid #6b8eb0;background:#fff;font:12px Verdana}
+.fx-quick>div{background:var(--row1);border:1px solid #fff}
+.fx-mrow{background:var(--row1);border-top:1px solid #fff}
+.fx-mrow .by{font-size:10px;color:var(--soft)}
+
+.fx-foot{justify-content:center;text-align:center;font-size:10px;color:#666;padding:8px}
+.fx-foot select{font-size:11px}
+.fx-sheet .fx-tbody{background:#fff}
+
+@media (max-width:600px){
+  .fx-wrap{margin:0;border:0;padding:4px}
+  .fx-mono{width:40px;height:40px;font-size:18px}
+  .fx-name{font-size:17px}
+  .fx-tabs{justify-content:flex-start;gap:10px}
+  .fx-frow .n{display:none}
+  .fx-tcat{display:grid;grid-template-columns:1fr 110px;grid-template-areas:"nm lp"}
+  .fx-tcat>:nth-child(1),.fx-tcat .n-threads,.fx-tcat .n-posts{display:none}
+  .fx-frow{grid-template-columns:40px 1fr 104px;grid-template-areas:"ic nm lp"}
+  .fx-frow .lp{display:block}
+  .fx-who{background:var(--row1)}
+  .fx-ava{width:36px;height:36px;font-size:18px}
+  .fx-who .fx-rank{display:none}
+}

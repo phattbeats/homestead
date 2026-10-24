@@ -69,6 +69,10 @@ module.exports = function forumRouter({
     const me = forumCaller(req, res); if (!me) return;
     res.json(forum.stats(me.id));
   });
+  router.get('/api/forum/me', auth, requireForumReadScope, (req, res) => {
+    const me = forumCaller(req, res); if (!me) return;
+    res.json({ ...forum.memberView(me.id), lastVisitAt: forum.lastVisitFor(me.id) });
+  });
   router.patch('/api/forum/me', auth, (req, res) => {
     if (tokenScopes(req) !== null) return res.status(403).json({ error: 'insufficient_scope' });
     const me = forumCaller(req, res); if (!me) return;

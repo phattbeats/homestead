@@ -216,6 +216,34 @@ const getJson = async (user, urlPath) => (await call(user, 'GET', urlPath)).json
     assertEq(idx.categories, [], 'non-member sees no boards');
   }
 
+  console.log('\nTest 9: switchable skins, sidebar extras');
+  {
+    const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+    assert(cols.includes('forum_skin'), 'users.forum_skin (additive)');
+    assertEq((await getJson('tyler', '/api/me')).forum_skin, 'woodgrain', 'NULL forum_skin reads as woodgrain');
+    assertEq((await getJson('tyler', '/api/forum/me')).forumSkin, 'woodgrain', 'GET /api/forum/me returns the skin');
+    for (const skin of ['classic', 'clubhouse', 'woodgrain']) {
+      const r = await call('tyler', 'PATCH', '/api/forum/me', { forum_skin: skin });
+      assertEq([r.status, (await r.json()).forumSkin], [200, skin], `PATCH forum_skin=${skin}`);
+    }
+    await call('tyler', 'PATCH', '/api/forum/me', { forum_skin: 'clubhouse' });
+    assertEq((await getJson('tyler', '/api/me')).forum_skin, 'clubhouse', '/api/me carries the saved skin');
+    for (const bad of ['geocities', '', null, 3]) {
+      assertEq((await call('tyler', 'PATCH', '/api/forum/me', { forum_skin: bad })).status, 400, `forum_skin=${JSON.stringify(bad)} → 400`);
+    }
+    assertEq((await getJson('tyler', '/api/me')).forum_skin, 'clubhouse', 'rejected values leave the skin unchanged');
+    assertEq((await getJson('brandon', '/api/me')).forum_skin, 'woodgrain', 'skin is per-user');
+
+    const st = await getJson('brandon', '/api/forum/stats');
+    const views = db.prepare('SELECT COALESCE(SUM(views),0) v FROM wall_posts').get().v;
+    assertEq(st.views, views, 'stats.views = sum of thread views (hit counter)');
+    assert(Array.isArray(st.topPosters) && st.topPosters.length > 0, 'stats.topPosters present');
+    assert(st.topPosters.every((t, i, a) => i === 0 || a[i - 1].postCount >= t.postCount), 'top posters sorted by post count');
+    const idx = await getJson('brandon', '/api/forum/index');
+    const intro = idx.categories.flatMap((c) => c.boards).find((b) => b.slug === 'introductions');
+    assertEq(intro && intro.description, 'New here? Say hello.', 'seeded boards carry their description');
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

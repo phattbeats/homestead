@@ -3,15 +3,13 @@
 // Copyright (C) 2026 PHATT Tech LLC
 
 // smoke test (extends the original smoke-porch-ui):
-// verify BOTH placements of the wall feed component — /forum (the
-// standalone thin shell) and /index.html (the in-place #page-wall
-// mount) — load the SAME /components/feed.js and reference the SAME
-// backend endpoints. The component extraction moved all the
-// composer/feed/reactions/comments logic into public/components/feed.js;
-// porch.js no longer exists. This smoke covers:
+// verify the wall feed component — mounted in place by /index.html
+// (#page-porch) — loads /components/feed.js and references the right
+// backend endpoints. /forum is the board UI now (public/forum/forum.js),
+// not a second feed placement. porch.js no longer exists. This smoke
+// covers:
 //
-//   1. Static asset shape (extraction is real — no inlined porch.js
-//      logic in forum.html).
+//   1. Static asset shape (forum.html is the board UI, not a feed shell).
 //   2. The shared component file is reachable as /components/feed.js
 //      and exposes window.HomesteadFeed.
 //   3. The /api/link-preview backend route still
@@ -107,9 +105,8 @@ function startFixtureServer() {
     const html = fs.readFileSync(htmlPath, 'utf8');
     const componentJs = fs.readFileSync(componentPath, 'utf8');
 
-    assert(html.includes('porch.css'), 'forum.html links porch.css');
-    assert(html.includes('/components/feed.js'), 'forum.html loads /components/feed.js (shared component)');
-    assert(html.includes('HomesteadFeed.mount'), 'forum.html calls HomesteadFeed.mount()');
+    assert(html.includes('/forum/forum.js'), 'forum.html loads the board UI (/forum/forum.js)');
+    assert(!html.includes('/components/feed.js'), 'forum.html no longer mounts the feed component');
 
     // Component file shape — must be the canonical extraction.
     assert(componentJs.includes('window.HomesteadFeed'), 'feed.js exposes window.HomesteadFeed');
@@ -148,8 +145,7 @@ function startFixtureServer() {
     let r = await fetch('http://127.0.0.1:3096/forum');
     assertEq(r.status, 200, 'GET /forum returns 200');
     const served = await r.text();
-    assert(served.includes('/components/feed.js'),
-      'served forum.html references /components/feed.js (shared component)');
+    assert(served.includes('/forum/forum.js'), 'served forum.html loads the board UI');
 
     // ---- 2b. GET /components/feed.js is reachable as a static asset. ----
     r = await fetch('http://127.0.0.1:3096/components/feed.js');

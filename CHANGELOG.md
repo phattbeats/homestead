@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### The Forum: board UI with three switchable skins
+
+`/forum` is now a real forum instead of a second copy of the wall feed. Index, board and thread views render one shared markup; the look comes from one of three stylesheets in `public/forum/`:
+
+- **Woodgrain** (default): vBulletin 3 layout in Homestead colours.
+- **Classic**: phpBB2 / subSilver.
+- **Night Owl**: starfield, marquee, hit counter, beveled buttons, Top Posters sidebar.
+
+Pick a style from the chooser in the forum footer or in User CP. The choice applies instantly and is saved per user (`users.forum_skin`, additive, NULL = Woodgrain). It is also mirrored to localStorage so the right skin paints before the API answers.
+
+- Index: collapsible categories, NEW markers, last post, thread/post counts, and a "What's Going On?" panel (who's online, birthdays, stats).
+- Board: stickies first, replies/views, pager, and a **New Thread** form (replaces the FAB composer on this page).
+- Thread: postbit (avatar, rank, rank stars, join date, post count), signatures, Quote, Thanks/emoticon reactions, and Quick Reply with smilies.
+- The header tabs (Forum · Gazette · Rooms · Invites · Members) replace the bottom tab bar and the "+ Add a room" pill on this page. Members is a simple member list.
+- Deep links still work: `?wall=<slug>` opens a board, `?post=<id>` a thread.
+
+**API:** `PATCH /api/forum/me` accepts `forum_skin` (`woodgrain` | `classic` | `clubhouse`, anything else is 400). New `GET /api/forum/me` returns the caller's forum profile and last visit. `/api/me` includes `forum_skin`. `/api/forum/stats` adds `views` (sum of thread views) and `topPosters`. Board index rows carry the seeded board `description`.
+
+The shoutbox panel is not in this release. It lands with the shoutbox backend (#149).
+
 ## v0.6.0 (2026-10-16) — fresh start
 
 First release on a fresh history: earlier tags, releases and changelog entries were retired. Upgrading from v0.5.24 brings the changes below.
