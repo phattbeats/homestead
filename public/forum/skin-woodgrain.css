@@ -1,0 +1,99 @@
+/* Woodgrain Board — the default skin. vBulletin 3 layout in Homestead
+ * colours: carved-wood header, doorway mark, olive table heads. */
+:root{--olive:#4b4624;--sage:#6D7B59;--paper:#f6e4c3;--paper2:#fbf1dd;--hearth:#ad5c05;--brass:#d49a40;--ink:#2B2622;--wood:#4e2d0f;--rule:#d9bf8e;--soft:#6a5a45}
+html{background:#3a2a17 repeating-linear-gradient(90deg,rgba(255,255,255,.025) 0 3px,transparent 3px 9px)}
+body{font:13px Tahoma,Verdana,sans-serif;color:var(--ink)}
+a{color:var(--hearth);font-weight:bold}
+.fx-wrap{margin:14px auto;background:var(--paper2);border:3px double var(--wood);box-shadow:0 0 0 4px #2a1c0d}
+.fx-v-woodgrain,.fx-door{display:block}
+
+.fx-header{padding:14px 18px;background:linear-gradient(#5e3a18,#3e2610);border-bottom:3px solid var(--brass)}
+.fx-door{width:54px;height:66px;border-radius:26px 26px 3px 3px;background:var(--olive);border:3px solid var(--brass);position:relative}
+.fx-door::after{content:"";position:absolute;right:8px;top:34px;width:7px;height:7px;border-radius:50%;background:var(--brass)}
+.fx-name{font:italic 30px Georgia,"Fraunces",serif;color:var(--paper);text-shadow:2px 2px 0 #000}
+.fx-tag{font:11px Tahoma;color:var(--brass);letter-spacing:2px;text-transform:uppercase}
+.fx-loginbox{font-size:11px;color:var(--paper)}
+.fx-loginbox a,.fx-loginbox .fx-user{color:var(--brass)}
+
+.fx-tabs{padding:0 12px;background:#3e2610}
+.fx-tabs a{background:#6b4a26;color:var(--paper);padding:7px 14px;border-radius:6px 6px 0 0;font-size:12px}
+.fx-tabs a.on{background:var(--paper2);color:var(--wood)}
+
+.fx-navbar{margin:10px;padding:8px 10px;border:1px solid #c9ad7f;background:var(--paper);font-size:12px}
+.fx-crumb::before{content:"🏡 "}
+.fx-here{font-weight:bold}
+.fx-layout{padding:0 10px}
+
+.fx-box{border:1px solid var(--wood)}
+.fx-thead{background:linear-gradient(var(--sage),var(--olive));color:var(--paper);font:bold 13px Tahoma;padding:7px 10px}
+.fx-x{color:var(--brass)}
+.fx-tbody{background:#fffaf0}
+.fx-tcat{background:#e6cf9f;color:var(--wood);font:bold 11px Tahoma;padding:4px 0}
+.fx-frow{border-top:1px solid var(--rule)}
+.fx-frow .ic{background:var(--paper)}
+.fx-frow .nm{background:#fffaf0}
+.fx-frow .d{font-size:11px;color:var(--soft)}
+.fx-frow .lp{background:var(--paper);font-size:11px;line-height:1.5}
+.fx-frow .n{background:#fffaf0;font-size:12px}
+.fx-frow .n b{font-weight:normal}
+.fx-frow.unread .ic{color:var(--hearth)}
+.fx-badge{background:var(--hearth);color:#fff;border-radius:3px;font-size:9px;padding:1px 4px;vertical-align:middle}
+.fx-muted{color:var(--soft)}
+
+.fx-wgo-row{border-top:1px solid var(--rule)}
+.fx-wgo-row:first-child{border-top:0}
+.fx-wgo-row .ic{background:var(--paper)}
+.fx-wgo-row .b{font-size:11px;line-height:1.7}
+.fx-wgo-row h3{font-size:12px;color:var(--wood)}
+.fx-adm{color:#8b1a1a;font-weight:bold}
+.fx-bot{color:var(--hearth);font-weight:bold;font-style:italic}
+
+.fx-newthread{margin:0 0 8px}
+.fx-btn{background:linear-gradient(#fffaf0,#ead6ad);border:1px solid #a88a5a;color:var(--wood);border-radius:4px;padding:4px 10px;font:bold 11px Tahoma}
+.fx-primary{background:linear-gradient(#c97a1c,var(--hearth));color:#fff;border-color:#6b3800;padding:6px 14px;font-size:12px}
+.fx-trow{border-top:1px solid var(--rule);font-size:12px}
+.fx-trow .ic{background:var(--paper)}
+.fx-trow .by{font-size:10px;color:var(--soft);font-weight:normal}
+.fx-trow .lp{background:var(--paper);font-size:10px;line-height:1.5}
+.fx-trow .n{font-size:11px;line-height:1.5}
+.fx-trow .n b{font-weight:normal}
+.fx-sticky{color:var(--olive);font-weight:bold}
+.fx-pager{font-size:11px}
+.fx-pager>*{border:1px solid #a88a5a;background:#fffaf0}
+.fx-pager .on{background:var(--olive);color:var(--paper)}
+
+.fx-post{border-top:1px solid var(--rule)}
+.fx-post:first-child{border-top:0}
+.fx-who{background:var(--paper);font-size:11px;line-height:1.5;color:var(--soft)}
+.fx-who-name{font-size:13px}
+.fx-ava{border:2px solid var(--brass);border-radius:6px;overflow:hidden;background:var(--olive)}
+.fx-rank{color:var(--olive);font-weight:bold}
+.fx-stars{display:block;color:var(--brass);font-size:11px}
+.fx-ptop{border-bottom:1px solid var(--rule);font-size:11px;color:var(--soft)}
+.fx-ptitle{font-weight:bold;color:var(--wood)}
+.fx-pnum{font-size:10px}
+.fx-pbody{font-size:13px;line-height:1.55}
+.fx-quote{border:1px solid #c9ad7f;background:var(--paper);font-size:12px}
+.fx-sig{border-top:1px dashed #c9ad7f;font-size:11px;color:var(--soft);font-style:italic}
+.fx-emo{background:var(--paper);border:1px solid #c9ad7f;border-radius:3px;font-size:11px}
+.fx-emo.on{background:var(--brass);color:#fff}
+.fx-linkcard{border:1px solid #c9ad7f;background:var(--paper)}
+.fx-compose{border:1px solid var(--wood);background:var(--paper)}
+.fx-compose input,.fx-compose textarea,.fx-quick textarea{border:1px solid #a88a5a;background:#fffaf0}
+.fx-quick{border-top:1px solid var(--rule)}
+.fx-quick-who{background:var(--paper)}
+.fx-mrow{border-top:1px solid var(--rule)}
+.fx-mrow .by{font-size:10px;color:var(--soft)}
+
+.fx-foot{margin-top:8px;background:#3e2610;color:var(--brass);font-size:10px;padding:8px 14px}
+.fx-foot select{background:#fffaf0;border:1px solid #a88a5a;font-size:11px;color:var(--ink)}
+.fx-sheet .fx-tbody{background:var(--paper2)}
+
+@media (max-width:600px){
+  .fx-wrap{margin:0;border:0;box-shadow:none}
+  .fx-name{font-size:20px}
+  .fx-door{width:34px;height:42px}
+  .fx-door::after{top:22px;right:5px}
+  .fx-header{padding:12px 14px}
+  .fx-who .fx-stars{display:none}
+}

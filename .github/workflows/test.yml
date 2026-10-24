@@ -88,6 +88,12 @@ jobs:
       - name: invite-redemption welcome screen smoke
         run: node scripts/smoke-invite-welcome.js
 
+      # The Forum's three switchable skins: footer chooser, reload and
+      # fresh-login persistence, board/thread flows, desktop + 390px
+      # screenshots of every skin.
+      - name: forum skins smoke
+        run: node scripts/smoke-forum-skins.js
+
       - name: Upload verify-out screenshots
         if: always()
         uses: actions/upload-artifact@v4

@@ -86,18 +86,12 @@ assert(/removeEventListener/.test(componentSrc), 'dispose() removes every regist
 // Test-only export — must be present for the vm sandbox tests.
 assert(/module\.exports/.test(componentSrc), 'feed.js exports helpers under module.exports (test-only)');
 
-// Thin-shell forum.html — must load the component, not the inlined porch.js.
-assert(!porchHtml.includes('/porch.js'), 'forum.html no longer loads /porch.js (replaced by component)');
-assert(porchHtml.includes('/components/feed.js'), 'forum.html loads /components/feed.js');
-assert(porchHtml.includes('HomesteadFeed.mount'), 'forum.html calls HomesteadFeed.mount()');
-assert(porchHtml.includes('porch.css'), 'forum.html still links porch.css (shared styles)');
-
-// The old standalone chrome (header.back, wallName id) is now in the
-// component, not the shell — forum.html is a THIN shell by the spec.
-// We assert the shell only contains a mount target + the script tag.
-assert(porchHtml.includes('id="porch-mount"'), 'forum.html has a #porch-mount target for the component');
-assert(!porchHtml.includes('class="back"'), 'forum.html shell does NOT inline the back link (component owns chrome)');
-assert(!porchHtml.includes('id="wallName"'), 'forum.html shell does NOT inline wallName (component renders it)');
+// forum.html is now the board UI (public/forum/forum.js), not a second
+// placement of the feed component. index.html's #page-porch is the
+// component's only mount.
+assert(!porchHtml.includes('/porch.js'), 'forum.html does not load the retired /porch.js');
+assert(!porchHtml.includes('/components/feed.js'), 'forum.html no longer mounts the feed component');
+assert(porchHtml.includes('/forum/forum.js'), 'forum.html loads the board UI (/forum/forum.js)');
 
 // index.html — must mount the same component inside a page-wall div.
 assert(/id=["']page-porch["']/.test(indexHtml), 'index.html has a page-porch page container');
@@ -255,10 +249,8 @@ process.env.NODE_ENV = 'production';
     const r1 = await fetch('http://127.0.0.1:3193/forum');
     assertEq(r1.status, 200, 'GET /forum returns 200');
     const porchServed = await r1.text();
-    assert(porchServed.includes('/components/feed.js'),
-      'served /forum loads /components/feed.js');
-    assert(porchServed.includes('HomesteadFeed.mount'),
-      'served /forum calls HomesteadFeed.mount()');
+    assert(porchServed.includes('/forum/forum.js'),
+      'served /forum loads the board UI (feed component lives on index.html only)');
 
     const r2 = await fetch('http://127.0.0.1:3193/components/feed.js');
     assertEq(r2.status, 200, 'GET /components/feed.js returns 200');

@@ -1,0 +1,132 @@
+/* Night Owl Clubhouse — ProBoards / Geocities / MySpace-era, max fun.
+ * Starfield, Comic Sans banner, marquee, hit counter, beveled buttons,
+ * sidebar with Who's Online and Top Posters. */
+:root{--violet:#8a7cff;--deep:#14123d;--deeper:#1c1950;--aqua:#7fffd4;--pink:#ff66cc;--yellow:#ffe66d;--lilac:#b7b2ff;--rule:#4a3f9a}
+html{background:radial-gradient(#ffffff55 1px,transparent 1.5px) 0 0/23px 23px,radial-gradient(#9ff 1px,transparent 1.5px) 11px 13px/41px 41px,#0b0b2a;min-height:100%}
+body{font:12px Verdana,Geneva,sans-serif;color:#e8e8ff}
+a{color:var(--aqua)}
+a:hover{color:var(--pink)}
+.fx-wrap{margin:10px auto;padding:0 8px}
+.fx-v-clubhouse,.fx-marquee,.fx-counter,.fx-badges{display:block}
+.fx-wgo-row.fx-wgo-top{display:block}
+.fx-tabicon{display:inline;margin-right:4px}
+
+.fx-header{flex-direction:column;gap:4px;border:2px ridge var(--violet);background:linear-gradient(#2a1660,#120838);padding:16px 16px 26px;text-align:center}
+.fx-logo{display:none}
+.fx-name{font:bold 38px "Comic Sans MS","Chalkboard SE","Trebuchet MS",cursive;color:#fff;letter-spacing:2px;text-shadow:0 0 6px var(--pink),0 0 14px var(--pink),3px 3px 0 #000}
+.fx-tag{color:var(--yellow);font:italic 12px Georgia,serif}
+.fx-counter{position:absolute;right:10px;bottom:6px;font:10px monospace;color:#aaa}
+.fx-counter b{background:#000;color:#0f0;padding:1px 3px;border:1px inset #555;letter-spacing:2px}
+.fx-loginbox{margin:0;text-align:center;font-size:10px;color:var(--lilac);line-height:1.5}
+.fx-loginbox br{display:none}
+.fx-loginbox [data-action=usercp]::before{content:" · "}
+
+.fx-marquee{border:1px solid #444;background:#000;color:var(--yellow);padding:3px 0;font:bold 11px monospace;margin:6px 0}
+.fx-tabs{flex-wrap:wrap;gap:4px;justify-content:center;margin-bottom:8px;overflow:visible}
+.fx-tabs a{background:linear-gradient(#5d4bd1,#2b1e7a);border:2px outset var(--violet);color:#fff;padding:4px 10px;font:bold 11px Verdana}
+.fx-tabs a.on{border-style:inset;background:var(--pink);color:#000}
+.fx-tabs a:hover{text-decoration:none;color:var(--yellow)}
+
+.fx-navbar{font-size:11px;margin:0 0 8px;padding:4px 8px;border:1px dotted var(--rule);background:var(--deep)}
+.fx-crumb::before{content:"✨ "}
+
+.fx-layout{display:grid;grid-template-columns:1fr 240px;gap:8px;align-items:start}
+.fx-layout:not(:has(.fx-side)){grid-template-columns:1fr}
+
+.fx-box{border:2px ridge var(--violet);background:var(--deep);margin-bottom:8px}
+.fx-thead{padding:5px 8px;font:bold 12px Verdana;color:#000;background:linear-gradient(90deg,var(--aqua),var(--pink));text-transform:uppercase;letter-spacing:1px}
+.fx-cat .fx-thead>span::before{content:"⭐ "}
+.fx-x{color:#000}
+.fx-tcat{display:none}
+.fx-frow{grid-template-columns:40px 1fr 80px 150px;grid-template-areas:"ic nm th lp" "ic nm po lp";border-top:1px dotted var(--rule);align-items:center}
+.fx-frow:first-of-type{border-top:0}
+.fx-frow>div{padding:4px 7px}
+.fx-frow .nm>a{font:bold 13px Verdana;color:var(--yellow)}
+.fx-frow .d{color:var(--lilac);font-size:11px}
+.fx-frow .n{font-size:10px;color:var(--lilac);line-height:1.3;padding:0 4px}
+.fx-frow .n-threads{align-self:end}
+.fx-frow .n-posts{align-self:start}
+.fx-frow .n b{color:#fff;font-size:12px}
+.fx-frow .n .u{display:inline}
+.fx-frow .lp{font-size:10px;color:var(--lilac);line-height:1.5}
+.fx-frow .lp a{color:var(--lilac)}
+.fx-badge{background:#ff3366;color:#ff3366;font:bold 9px Verdana;padding:1px 4px;animation:fx-blink 1s steps(2) infinite;position:relative}
+.fx-badge::after{content:"HOT";position:absolute;inset:0;padding:1px 4px;color:#fff}
+@keyframes fx-blink{50%{opacity:.2}}
+@media (prefers-reduced-motion:reduce){.fx-badge{animation:none}}
+.fx-muted{color:#888}
+
+/* Sidebar: each "What's Going On?" row becomes its own box. */
+.fx-wgo{border:0;background:none}
+.fx-wgo>.fx-thead{display:none}
+.fx-wgo .fx-tbody{display:block!important}
+.fx-wgo-row{display:block;border:2px ridge var(--violet);background:var(--deep);margin-bottom:8px}
+.fx-wgo-row .ic{display:none}
+.fx-wgo-row .b{padding:0;font-size:11px;line-height:1.6}
+.fx-wgo-row .b>div{padding:8px}
+.fx-wgo-row h3{padding:5px 8px;font:bold 12px Verdana;color:#000;background:linear-gradient(90deg,var(--aqua),var(--pink));text-transform:uppercase;letter-spacing:1px}
+.fx-wgo-online h3::before{content:"👀 "}
+.fx-wgo-birthdays h3::before{content:"🎂 "}
+.fx-wgo-stats h3::before{content:"📊 "}
+.fx-wgo-top h3::before{content:"🏅 "}
+.fx-top{padding-left:18px}
+.fx-adm{color:#ff4d4d;font-weight:bold}
+.fx-bot{color:#ffa94d;font-weight:bold}
+
+.fx-btn{background:linear-gradient(#5d4bd1,#2b1e7a);border:2px outset var(--violet);color:#fff;padding:3px 10px;font:bold 11px Verdana}
+.fx-btn:active{border-style:inset}
+.fx-primary{background:var(--pink);border-color:#ffb3e6;color:#000}
+.fx-newthread{margin:0 0 8px}
+.fx-trow{border-top:1px dotted var(--rule);align-items:center}
+.fx-trow:first-child{border-top:0}
+.fx-trow .t>a{font-weight:bold;color:var(--yellow)}
+.fx-trow .by,.fx-trow .lp,.fx-trow .n{font-size:10px;color:var(--lilac)}
+.fx-trow .n b{color:#fff;font-size:12px}
+.fx-sticky{color:var(--pink);font-weight:bold}
+.fx-pager>*{border:2px outset var(--violet);background:var(--deeper);font-size:11px}
+.fx-pager .on{background:var(--pink);color:#000;border-style:inset}
+
+.fx-post{border-top:1px dotted var(--rule)}
+.fx-post:first-child{border-top:0}
+.fx-who{background:var(--deeper);text-align:center;font-size:10px;line-height:1.5;color:var(--lilac)}
+.fx-who-name{font:bold 13px "Comic Sans MS","Chalkboard SE",cursive}
+.fx-who-name .fx-user{color:var(--pink)}
+.fx-who-name .fx-bot{color:#ffa94d}
+.fx-ava{width:90px;height:90px;margin:6px auto;border:3px double var(--aqua);background:#000;font-size:48px}
+.fx-rank{color:var(--yellow);font-style:italic}
+.fx-rank::before,.fx-rank::after{content:" ~ "}
+.fx-stars{display:block;color:var(--lilac)}
+.fx-ptop{font-size:10px;color:#888;border-bottom:1px dotted var(--rule)}
+.fx-ptitle::before{content:"« "}
+.fx-pdate::after{content:" »"}
+.fx-pbody{font-size:13px;line-height:1.55}
+.fx-quote{border:1px dashed var(--violet);background:var(--deeper);color:var(--lilac)}
+.fx-sig{border-top:1px dashed var(--rule);font-size:10px;color:var(--lilac);text-align:center}
+.fx-emo{background:#000;border:1px solid var(--rule);color:#e8e8ff;font-size:11px}
+.fx-emo.on{border-color:var(--pink);color:var(--pink)}
+.fx-linkcard{border:1px dashed var(--violet);background:var(--deeper)}
+.fx-compose{border:2px ridge var(--violet);background:var(--deep)}
+.fx-compose input,.fx-compose textarea,.fx-quick textarea,.fx-sheet input,.fx-sheet textarea,.fx-sheet select,.fx-foot select{background:#000;border:1px inset #555;color:#0f0;font:12px monospace}
+.fx-quick{border-top:1px dotted var(--rule)}
+.fx-quick-who{background:var(--deeper)}
+.fx-mrow{border-top:1px dotted var(--rule)}
+.fx-mrow .fx-ava{border-width:3px}
+.fx-mrow .by{font-size:10px;color:var(--lilac)}
+
+.fx-foot{flex-direction:column;align-items:center;text-align:center;font-size:10px;color:#888;padding:10px}
+.fx-powered::before{content:"best viewed in netscape navigator 4 @ 800x600 · "}
+.fx-badges span{display:inline-block;border:1px solid #888;padding:1px 4px;margin:2px;font:9px monospace;background:#222;color:#0f0}
+.fx-sheet .fx-tbody{background:var(--deep)}
+
+@media (max-width:700px){
+  .fx-layout{grid-template-columns:1fr}
+  .fx-name{font-size:26px}
+  .fx-header{padding:12px 10px 26px}
+  .fx-frow{grid-template-columns:36px 1fr 64px;grid-template-areas:"ic nm th" "ic nm po"}
+  .fx-frow .n{display:block}
+  .fx-frow .lp{display:none}
+  .fx-who{text-align:left}
+  .fx-who .fx-ava{border-width:2px}
+  .fx-who .fx-rank{display:block}
+  .fx-foot{align-items:center}
+}

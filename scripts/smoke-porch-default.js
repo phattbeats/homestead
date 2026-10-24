@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // acceptance smoke: fresh DB → boot → log in as brandon →
-// tap Porch → wall opens with composer → post lands. Screenshot
+// open the household board → New Thread → post lands. Screenshot
 // required, no DB edits anywhere in the test.
 //
 // closed green with a smoke test that open-coded an
@@ -36,6 +36,8 @@ process.env.ADMIN_PASSWORD = 'smoke-porch-default-admin-pw';
 process.env.BRANDON_PASSWORD = brandonPassword;
 process.env.SESSION_SECRET = 'smoke-porch-default-secret-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
+// Session cookies are Secure in production; the smoke speaks plain http.
+process.env.HOMESTEAD_INSECURE_TEST_COOKIES = '1';
 
 let pass = 0, fail = 0;
 function ok(label) { pass++; console.log(`  ✓ ${label}`); }
@@ -143,64 +145,29 @@ function assertEq(actual, expected, label) {
       'announcements,household,introductions',
       'fresh install lists exactly household + the two seeded starter boards');
 
-    // Open The Forum (the standalone feed page).
-    // Already on /forum (the landing); the standalone page mounts the
-    // feed directly. Reload so the feed reflects first-run completion.
-    await page.goto(`http://127.0.0.1:${port}/forum`, { waitUntil: 'domcontentloaded' });
-    const navMode = 'forum-landing';
-    // The standalone page keeps the composer behind the "+" button.
-    await page.waitForSelector('#composeFab', { state: 'visible', timeout: 10000 });
-    await page.click('#composeFab');
-    console.log(`  nav mode: ${navMode}`);
+    // Open The Forum → the household board → New Thread. The FAB
+    // composer is retired on /forum; posting goes through the board's
+    // "New Thread" form.
+    await page.goto(`http://127.0.0.1:${port}/forum?wall=household`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('[data-action=new-thread]', { state: 'visible', timeout: 10000 });
+    assert(!(await page.$('#composeFab')), 'no FAB composer on /forum');
+    await page.click('[data-action=new-thread]');
+    await page.waitForSelector('#newThread textarea', { state: 'visible', timeout: 5000 });
+    ok('board opens with the New Thread composer');
 
-    // Wait for the feed component to render the composer.
-    try {
-      await page.waitForSelector(
-        '#textBody',
-        { state: 'visible', timeout: 10000 },
-      );
-      ok('Porch tab opens with composer visible');
-    } catch (_) {
-      const post = await page.evaluate(() => ({
-        pagePorchClass: document.getElementById('page-porch') ? document.getElementById('page-porch').className : 'missing',
-        pagePorchOn: document.getElementById('page-porch') ? document.getElementById('page-porch').classList.contains('on') : false,
-        textBodyExists: !!document.getElementById('textBody'),
-        feedMounted: !!(document.getElementById('page-porch') && document.getElementById('page-porch').dataset.mounted),
-        mountHtml: (document.getElementById('page-porch') || {}).innerHTML ? document.getElementById('page-porch').innerHTML.slice(0, 300) : '',
-      }));
-      console.log('  post-click debug:', JSON.stringify(post));
-      throw new Error('Forum composer did not appear on /forum');
-    }
-
-    // Screenshot #1: Porch open, empty composer.
+    // Screenshot #1: board with the empty composer.
     const screenshot1 = path.join(verifyOut, 'porch-default-390.png');
     await page.screenshot({ path: screenshot1, fullPage: false });
     ok(`screenshot saved: ${path.relative(process.cwd(), screenshot1)}`);
 
-    // Type a post and submit it. The composer DOM is owned by
-    // public/components/feed.js — #textBody textarea, #postText
-    // button (id only present when canPost=true).
-    await page.fill('#textBody', 'hello porch');
-    const submitted = await page.evaluate(() => {
-      const btn = document.querySelector('#postText');
-      if (btn) { btn.click(); return true; }
-      return false;
-    });
-    if (!submitted) {
-      throw new Error('composer submit button (#postText) not found');
-    }
-    // Wait for the post to land in the feed (the new post body text
-    // shows up somewhere under the feed).
-    await page.waitForFunction(
-      () => {
-        const mount = document.querySelector('#porch-mount, #page-porch') || document.body;
-        return mount && /hello porch/.test(mount.textContent || '');
-      },
-      { timeout: 5000 },
-    );
-    ok('post lands in the feed');
+    await page.fill('#newThread input[name=title]', 'hello porch');
+    await page.fill('#newThread textarea', 'first post from the smoke');
+    await page.click('#newThread button[type=submit]');
+    await page.waitForURL(/\/forum\?post=/, { timeout: 10000 });
+    await page.waitForFunction(() => /hello porch/.test((document.querySelector('.fx-thread-box') || {}).textContent || ''), null, { timeout: 5000 });
+    ok('post lands as a new thread');
 
-    // Screenshot #2: Porch with the post visible.
+    // Screenshot #2: the new thread.
     const screenshot2 = path.join(verifyOut, 'porch-default-after-post-390.png');
     await page.screenshot({ path: screenshot2, fullPage: false });
     ok(`screenshot saved: ${path.relative(process.cwd(), screenshot2)}`);

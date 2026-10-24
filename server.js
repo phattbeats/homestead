@@ -721,16 +721,15 @@ app.get('/api/me', (req, res) => {
 // doesn't leak into other routes.
 const FORUM_ROUTE = '/forum';
 function buildMeEnvelope(db, sessionUser) {
-  const enabledRows = userModel.getEnabledModules(db,
-    db.prepare('SELECT id FROM users WHERE username = ?').get(sessionUser.username).id);
-  const enabledKeys = enabledRows.map(e => e.key);
   const userId = db.prepare('SELECT id FROM users WHERE username = ?').get(sessionUser.username).id;
+  const enabledKeys = userModel.getEnabledModules(db, userId).map(e => e.key);
   forum.touchActivity(userId); // /api/me fires on every page load — the cheapest "is here" signal
   return {
     user: sessionUser,
     enabled_modules: enabledKeys, // registry order, deterministic
     default_route: FORUM_ROUTE, // every user lands on The Forum, regardless of enabled modules
     first_run: userModel.isFirstRun(db, userId),
+    forum_skin: forum.skinFor(userId), // server value beats /forum's localStorage mirror
   };
 }
 
