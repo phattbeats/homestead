@@ -18,7 +18,7 @@ The built-in agent that ships with Homestead. Lives in this directory.
 ## Authoring rules
 
 - SOUL.md and IDENTITY.md are canon. Edit by PR. Review by Ledger (the COO agent).
-- Brandon has final say on personality changes; per the AGENTS.md commit identity policy, every commit on a `phattbeats/*` repo is `phattbeats <21150921+phattbeats.noreply.github.com>` only, zero `Co-authored-by` trailers.
+- Brandon has final say on personality changes; per the AGENTS.md commit identity policy, every commit on a `phattbeats/*` repo is `phattbeats <21150921+phattbeats@users.noreply.github.com>` only, zero `Co-authored-by` trailers.
 - The avatar icon (`PHATT-TECH/Projects/homestead-app/brand/hearth-agent-homestead-icon.png`) is owned by Brandon. Don't re-render without his sign-off.
 
 ## What lives in this directory that's NOT canon

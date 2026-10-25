@@ -95,6 +95,6 @@ The day this file starts sounding like a marketing page is the day to delete it 
 
 ## Commit identity policy — all `phattbeats/*` repositories
 
-For any commit to any `phattbeats/*` repository, the author and committer must be `phattbeats <21150921+phattbeats.noreply.github.com>` only. The only exception is GitHub `web-flow` as the merge committer on a merge commit. There must be zero `Co-authored-by` / `Co-Authored-By` trailers of any identity — not an agent, Claude, Anthropic, Paperclip, or anyone else.
+For any commit to any `phattbeats/*` repository, the author and committer must be `phattbeats <21150921+phattbeats@users.noreply.github.com>` only. The only exception is GitHub `web-flow` as the merge committer on a merge commit. There must be zero `Co-authored-by` / `Co-Authored-By` trailers of any identity — not an agent, Claude, Anthropic, Paperclip, or anyone else.
 
-If your coding harness adds co-author trailers (e.g. `includeCoAuthoredBy`), turn that off. If a commit still grows a trailer, amend it off before pushing. Never push through the Paperclip GitHub App if doing so would make `Paperclip-Paperclip` a contributor. Before committing, set `git config user.name "phattbeats"` and `git config user.email "21150921+phattbeats.noreply.github.com"`.
+If your coding harness adds co-author trailers (e.g. `includeCoAuthoredBy`), turn that off. If a commit still grows a trailer, amend it off before pushing. Never push through the Paperclip GitHub App if doing so would make `Paperclip-Paperclip` a contributor. Before committing, set `git config user.name "phattbeats"` and `git config user.email "21150921+phattbeats@users.noreply.github.com"`.
