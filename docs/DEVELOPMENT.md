@@ -99,7 +99,7 @@ test workflow.
 ## Author identity
 
 Every Homestead commit must have author/committer
-`phattbeats <21150921+phattbeats.noreply.github.com>` and contain no `Co-authored-by`
+`phattbeats <21150921+phattbeats@users.noreply.github.com>` and contain no `Co-authored-by`
 trailer of any identity. `npm run hooks:install` (run by `npm install` via the
 `prepare` step) wires the local hook that enforces this. The
 `.github/workflows/authorship-check.yml` workflow enforces it again on every
