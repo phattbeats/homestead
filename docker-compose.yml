@@ -13,6 +13,13 @@ services:
     volumes:
       # SQLite lives here. Mount a host path so the DB survives image upgrades.
       - /mnt/user/appdata/homestead:/data
+      # The daily newspaper's external-edition artifact, mounted READ-ONLY.
+      # The host path is Unraid-specific: /root/.openclaw inside the OpenClaw
+      # container is a bind of /mnt/cache/appdata/openclaw/config. On another
+      # host, point this at wherever the Ledger writes the artifact. The mount
+      # is inert until GAZETTE_EXTERNAL_EDITION_DIR below is set, so nothing
+      # reads it by default.
+      - /mnt/cache/appdata/openclaw/config/workspace/projects/daily-newspaper/gazette-v2:/gazette/external:ro
     environment:
       # REQUIRED. Long random string used to sign session cookies. The
       # server refuses to boot if this is missing, a known
@@ -22,6 +29,16 @@ services:
       # below also has SESSION_SECRET as Required + Masked — set it once
       # in the container's environment and never commit the value.
       - SESSION_SECRET=
+      # The external wire is OFF by default: an empty directory means the
+      # reader stays disabled and the edition changes nothing. To turn it on,
+      # set GAZETTE_EXTERNAL_EDITION_DIR to the container path of the mount
+      # above (GAZETTE_EXTERNAL_EDITION_DIR=/gazette/external) in the .env
+      # next to this file, then recreate the container.
+      - GAZETTE_EXTERNAL_EDITION_DIR=${GAZETTE_EXTERNAL_EDITION_DIR:-}
+      # Which account owns the newspaper's personal sections (the social
+      # picks). Unset means nobody receives them: the digest owner's picks are
+      # theirs, and every other reader gets household sections only.
+      - GAZETTE_EXTERNAL_OWNER_ID=${GAZETTE_EXTERNAL_OWNER_ID:-}
       # Seed password used ONLY on the very first run (when /data/life.db
       # does not exist yet). It bootstraps the `admin` user; log in as admin
       # and create real household users via Settings → Users. Later env

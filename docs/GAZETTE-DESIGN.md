@@ -258,3 +258,77 @@ blank.
   dispatch; `composeGazette` does not. "Token spend is the soul" argues
   the Gazette should be counted too — worth a follow-up once there's a
   surface that shows the number.
+
+# As built (2026-10-25) — the external wire
+
+The daily newspaper now has a consumer. This section records what was
+actually built, against the design contract agreed in PHA-3147.
+
+## What it is
+
+`lib/external-edition.js` reads one dated artifact per day — the Ledger's
+`external-edition-v2` — and turns it into the external sections that get
+merged into a typed issue. The artifact is written by the newspaper's own
+cron; Homestead never fetches it over the network. It is a read-only volume
+mount.
+
+The wire is **off by default**. With no `GAZETTE_EXTERNAL_EDITION_DIR` set,
+the reader returns `disabled`, the merge adds nothing, and the edition is
+byte-for-byte what it was before this change.
+
+## The three things that are easy to get wrong
+
+**External sections do not belong in `TYPED_ITEMS`.** That map is
+`section key -> (household context) => items`, so a section key added there
+derives its items from the household and produces an **empty** section. The
+wire carries its own items, so they are appended to the section list directly
+and never touch that map.
+
+**The merge goes above the thin computation.** `thin` is derived from "what
+is in this edition", so it has to be computed over a list that already
+contains the wire sections. A household with nothing in it and a healthy wire
+is not thin; a household with nothing in it and a dead wire is. Merging after
+the computation would make the renderer return early on `thin` and hide a
+full page of headlines behind a "nothing happened" note.
+
+**Personal sections are filtered in context assembly, never in the
+renderer.** The social sections are the digest owner's picks. `GAZETTE_EXTERNAL_OWNER_ID`
+names the account that owns them; unset means nobody receives them, which is
+the safe default.
+
+## States the wire has, which the household does not
+
+`published` / `partial` / `stale` / `unavailable` mean something specific
+here and are deliberately not the household's vocabulary. A degraded source
+becomes **one** footer line naming it, never per-item prose and never a hole
+in the paper. A section past its age budget is withheld **and named** —
+yesterday's headlines under today's date is the worst outcome available, and
+the silent one. A missing, unreadable or malformed artifact resolves to a
+named state; a bad artifact never takes the household edition down with it.
+
+## Untrusted content
+
+Every title and summary in the artifact is data. It is never passed to the
+harness as instruction and never enters `buildPrompt` — the wire is rendered
+as cards, not as prose for the model to work on.
+
+## Turning it on
+
+```sh
+# .env next to docker-compose.yml
+GAZETTE_EXTERNAL_EDITION_DIR=/gazette/external
+GAZETTE_EXTERNAL_OWNER_ID=<the digest owner's user id>
+```
+
+Then recreate the container. The mount in `docker-compose.yml` is read-only
+and inert until the directory variable is set.
+
+## Still open
+
+* **The sheet renderer.** `public/index.html`'s `paintGazette` is prose-only
+  and shows lede/briefs/note; typed cards need the same branches there if
+  the sheet path is ever used. The sheet cache (`gazette_editions`) has no
+  rows, so this was deliberately left out of scope.
+* **The owner id.** `GAZETTE_EXTERNAL_OWNER_ID` is a user id the server has
+  to know. Until it is set, the personal sections are withheld from everyone,
+  which is correct but means the owner's own picks are missing.
