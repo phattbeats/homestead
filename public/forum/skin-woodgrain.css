@@ -49,7 +49,8 @@ a{color:var(--hearth);font-weight:bold}
 .fx-bot{color:var(--hearth);font-weight:bold;font-style:italic}
 
 .fx-shout-form textarea{border:1px solid #a88a5a;background:#fffaf0}
-.fx-shout{border-top:1px solid var(--rule);padding-top:5px}
+.fx-shouts{gap:0}
+.fx-shout{border-top:1px solid var(--rule);padding:5px 0}
 .fx-shout:first-child{border-top:0;padding-top:0}
 .fx-shout-who{color:var(--wood)}
 .fx-shout-at{color:var(--soft)}
