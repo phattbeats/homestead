@@ -55,6 +55,13 @@ a:hover{color:var(--orange)}
 .fx-adm{color:#a00;font-weight:bold}
 .fx-bot{color:#8a5a00;font-weight:bold}
 
+.fx-shout-form textarea{border:1px solid #6b8eb0;background:#fff;font:12px Verdana}
+.fx-shouts{gap:0}
+.fx-shout{border:1px solid #fff;background:var(--row1);padding:5px 7px}
+.fx-shout-who{color:var(--navy)}
+.fx-shout-at{color:var(--soft);font-size:10px}
+.fx-shouts .fx-empty{color:var(--soft);font-size:11px}
+
 .fx-btn{border:1px solid #6b8eb0;background:linear-gradient(#fff,#dbe4ec);font:bold 10px Verdana;padding:2px 8px;color:var(--navy);text-transform:uppercase}
 .fx-primary{font-size:11px;padding:4px 10px}
 .fx-newthread{margin:0 2px 8px}

@@ -40,7 +40,8 @@
   var HOT_REPLIES = 10;
 
   var root = document.getElementById('forum');
-  var state = { me: null, profile: null, stats: null, online: null };
+  var state = { me: null, profile: null, stats: null, online: null, shouts: [], smilies: {}, shoutError: null, shoutStream: null };
+  var SHOUT_LIMIT = 50;
 
   // ---------- helpers ----------
 
@@ -256,7 +257,7 @@
   // ---------- index ----------
 
   function renderIndex() {
-    return Promise.all([api('GET', '/api/forum/index'), refreshSidebar()]).then(function (r) {
+    return Promise.all([api('GET', '/api/forum/index'), refreshSidebar(), loadShoutbox()]).then(function (r) {
       var idx = r[0];
       var cats = idx.categories.map(function (c) {
         var rows = c.boards.map(function (b) {
@@ -276,6 +277,7 @@
           { id: 'cat:' + c.name, label: c.name, cls: 'fx-cat' });
       }).join('');
       page('forum', navbar([link({}, 'The Forum')]) + (cats || box('The Forum', '<p class="fx-empty">No boards yet.</p>')), sidebar());
+      mountShoutbox();
     });
   }
   function refreshSidebar() {
@@ -301,11 +303,140 @@
         return '<li>' + (t.isAgent ? '🤖 ' : '') + who(t, { plain: true }) + ' — ' + num(t.postCount) + '</li>';
       }).join('') + '</ol>', 'top'));
     }
-    return box("What's Going On?", rows.join(''), { id: 'wgo', label: "What's Going On", cls: 'fx-wgo' });
+    return box("What's Going On?", rows.join(''), { id: 'wgo', label: "What's Going On", cls: 'fx-wgo' }) +
+      box(esc('📣 Shoutbox'), shoutboxInner(), { id: 'shoutbox', label: 'Shoutbox', cls: 'fx-shoutbox' });
   }
   function wgo(icon, title, inner, key) {
     return '<div class="fx-wgo-row fx-wgo-' + key + '"><div class="ic" aria-hidden="true">' + icon + '</div>' +
       '<div class="b"><h3>' + esc(title) + '</h3><div>' + inner + '</div></div></div>';
+  }
+
+  // ---------- shoutbox ----------
+
+  // The shoutbox is the household chat strip. Reads and writes go to
+  // /api/shoutbox; live shouts arrive on the SSE feed at
+  // /api/shoutbox/events. The server owns the classic emoticon table
+  // (it ships with every list response) — we apply it at render time
+  // so what was typed is what was stored.
+  function applySmilies(text, map) {
+    if (!map) return String(text == null ? '' : text);
+    var keys = Object.keys(map).sort(function (a, b) { return b.length - a.length; });
+    var out = String(text == null ? '' : text);
+    for (var i = 0; i < keys.length; i++) {
+      if (keys[i]) out = out.split(keys[i]).join(map[keys[i]]);
+    }
+    return out;
+  }
+  function shoutAt(ts) {
+    var d = parseTs(ts);
+    if (!d) return '';
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var day = new Date(d); day.setHours(0, 0, 0, 0);
+    if (day.getTime() === today.getTime()) return clock(d);
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + clock(d);
+  }
+  function shoutErrorText(e) {
+    var code = (e && e.message) || 'error';
+    if (code === 'body_required') return 'Type something first.';
+    if (code === 'body_too_long') return 'Keep it under 280 characters.';
+    if (code === 'rate_limited') return 'Slow down — five shouts a minute.';
+    if (code === 'banned_phrase') return 'That word does not fly in this house.';
+    if (code === 'insufficient_scope' || code === 'unknown_user' || (e && e.status === 401) || (e && e.status === 403)) {
+      return 'Sign in to shout.';
+    }
+    return 'Could not shout: ' + code;
+  }
+  function shoutboxInner() {
+    var form = state.shoutError ? '' :
+      '<form class="fx-shout-form" id="shoutForm">' +
+        '<label class="fx-shout-label" for="shoutBody">Say something to the house</label>' +
+        '<textarea id="shoutBody" name="body" rows="2" maxlength="280" placeholder="Shout something…" aria-label="Shout"></textarea>' +
+        '<p class="fx-err" role="alert"></p>' +
+        '<div class="fx-btns"><button type="submit" class="fx-btn fx-primary">Shout</button></div>' +
+      '</form>';
+    return form + '<div class="fx-shouts" id="shoutList" aria-live="polite"></div>';
+  }
+  function shoutRow(s) {
+    var text = applySmilies(s.body, state.smilies);
+    return '<div class="fx-shout fx-shout-' + esc(s.kind) + '" data-id="' + esc(s.id) + '">' +
+      '<span class="fx-shout-who">' + (s.kind === 'me' ? '* ' : '') + who(s.author || {}, { plain: true }) + '</span>' +
+      '<span class="fx-shout-at">' + esc(shoutAt(s.createdAt)) + '</span>' +
+      '<span class="fx-shout-body">' + esc(text) + '</span>' +
+      '</div>';
+  }
+  function renderShouts() {
+    var list = root.querySelector('#shoutList');
+    if (!list) return;
+    if (state.shoutError) {
+      list.innerHTML = '<p class="fx-empty">' + esc(state.shoutError) + '</p>';
+      return;
+    }
+    list.innerHTML = state.shouts.length ? state.shouts.map(shoutRow).join('')
+      : '<p class="fx-empty">Quiet house. Shout something.</p>';
+    list.scrollTop = list.scrollHeight;
+  }
+  function addShout(s) {
+    if (!s || s.id == null) return;
+    for (var i = 0; i < state.shouts.length; i++) {
+      if (state.shouts[i].id === s.id) return;
+    }
+    state.shouts.push(s);
+    while (state.shouts.length > SHOUT_LIMIT) state.shouts.shift();
+    renderShouts();
+  }
+  function loadShoutbox() {
+    return api('GET', '/api/shoutbox').then(function (d) {
+      state.shouts = (d && d.shouts) || [];
+      state.smilies = (d && d.smilies) || {};
+      state.shoutError = null;
+    }).catch(function (e) {
+      state.shouts = [];
+      state.shoutError = 'The shoutbox is unavailable right now.';
+    });
+  }
+  // The live feed. The server publishes every shout on the shoutbox
+  // channel, so a shout from another member lands without a reload.
+  function openShoutStream() {
+    if (state.shoutStream || typeof EventSource === 'undefined') return;
+    var es;
+    try { es = new EventSource('/api/shoutbox/events'); } catch (_) { return; }
+    es.addEventListener('shout', function (ev) {
+      var data = null;
+      try { data = JSON.parse(ev.data); } catch (_) { return; }
+      addShout(data);
+    });
+    state.shoutStream = es;
+  }
+  function closeShoutStream() {
+    if (!state.shoutStream) return;
+    try { state.shoutStream.close(); } catch (_) { /* already closed */ }
+    state.shoutStream = null;
+  }
+  function mountShoutbox() {
+    var form = root.querySelector('#shoutForm');
+    if (form) {
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var ta = form.querySelector('textarea');
+        var err = form.querySelector('.fx-err');
+        var btn = form.querySelector('button[type=submit]');
+        var text = (ta.value || '').trim();
+        if (err) err.textContent = '';
+        if (!text) { if (err) err.textContent = 'Type something first.'; return; }
+        if (btn) btn.disabled = true;
+        api('POST', '/api/shoutbox', { body: text }).then(function (s) {
+          ta.value = '';
+          addShout(s);
+        }).catch(function (e) {
+          if (err) err.textContent = shoutErrorText(e);
+        }).then(function () {
+          if (btn) btn.disabled = false;
+          ta.focus();
+        });
+      });
+    }
+    renderShouts();
+    openShoutStream();
   }
 
   // ---------- board ----------
@@ -485,11 +616,14 @@
   function route() {
     var q = new URLSearchParams(location.search);
     root.removeAttribute('data-thread');
+    var isIndex = !q.get('post') && !q.get('wall') && q.get('view') !== 'members';
     var view;
     if (q.get('post')) view = renderThread(q.get('post'));
     else if (q.get('wall')) view = renderBoard(q.get('wall'), parseInt(q.get('page'), 10) || 1);
     else if (q.get('view') === 'members') view = renderMembers();
     else view = renderIndex();
+    // The shoutbox only lives on the index — drop the live feed elsewhere.
+    if (!isIndex) closeShoutStream();
     return view.catch(fail);
   }
   function go(params) {

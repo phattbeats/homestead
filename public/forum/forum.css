@@ -71,6 +71,18 @@ button,input,select,textarea{font:inherit;color:inherit}
 .fx-top{margin:0;padding-left:20px}
 .fx-wgo-row.fx-wgo-top{display:none} /* clubhouse only */
 
+/* Shoutbox — the household chat strip in the sidebar */
+.fx-shout-form{display:grid;gap:6px;margin-bottom:8px}
+.fx-shout-label{font-weight:bold;font-size:11px}
+.fx-shout-form textarea{width:100%;padding:6px;min-height:44px;resize:vertical}
+.fx-shout-form .fx-btns{justify-content:flex-end}
+.fx-shouts{max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+.fx-shout{display:grid;grid-template-columns:1fr auto;gap:2px 8px;font-size:12px;line-height:1.5}
+.fx-shout-who{grid-column:1;min-width:0;overflow-wrap:anywhere}
+.fx-shout-at{grid-column:2;grid-row:1;font-size:10px;opacity:.75;white-space:nowrap}
+.fx-shout-body{grid-column:1/-1;overflow-wrap:anywhere;white-space:pre-wrap}
+.fx-shout-me .fx-shout-body{font-style:italic}
+
 /* Postbit: author column | message */
 .fx-post{display:grid;grid-template-columns:160px 1fr}
 .fx-who{padding:10px;min-width:0;overflow-wrap:anywhere}
