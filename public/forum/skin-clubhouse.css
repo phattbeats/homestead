@@ -73,6 +73,19 @@ a:hover{color:var(--pink)}
 .fx-adm{color:#ff4d4d;font-weight:bold}
 .fx-bot{color:#ffa94d;font-weight:bold}
 
+/* Night Owl puts the Shoutbox at the top of the right column, above the
+   "What's Going On?" boxes — the sidebar is a flex column so the panel
+   can lead without touching the DOM order the other skins rely on. */
+.fx-side{display:flex;flex-direction:column}
+.fx-shoutbox{order:-1}
+.fx-shout-form textarea{background:#000;border:1px inset #555;color:#0f;font:12px monospace}
+.fx-shout{border-bottom:1px dotted var(--rule);padding:5px 8px;font-size:11px}
+.fx-shout:last-child{border-bottom:0}
+.fx-shout-who{color:var(--pink)}
+.fx-shout-at{color:#888}
+.fx-shouts .fx-empty{color:#888}
+.fx-shouts{max-height:220px}
+
 .fx-btn{background:linear-gradient(#5d4bd1,#2b1e7a);border:2px outset var(--violet);color:#fff;padding:3px 10px;font:bold 11px Verdana}
 .fx-btn:active{border-style:inset}
 .fx-primary{background:var(--pink);border-color:#ffb3e6;color:#000}

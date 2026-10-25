@@ -48,6 +48,13 @@ a{color:var(--hearth);font-weight:bold}
 .fx-adm{color:#8b1a1a;font-weight:bold}
 .fx-bot{color:var(--hearth);font-weight:bold;font-style:italic}
 
+.fx-shout-form textarea{border:1px solid #a88a5a;background:#fffaf0}
+.fx-shout{border-top:1px solid var(--rule);padding-top:5px}
+.fx-shout:first-child{border-top:0;padding-top:0}
+.fx-shout-who{color:var(--wood)}
+.fx-shout-at{color:var(--soft)}
+.fx-shouts .fx-empty{color:var(--soft)}
+
 .fx-newthread{margin:0 0 8px}
 .fx-btn{background:linear-gradient(#fffaf0,#ead6ad);border:1px solid #a88a5a;color:var(--wood);border-radius:4px;padding:4px 10px;font:bold 11px Tahoma}
 .fx-primary{background:linear-gradient(#c97a1c,var(--hearth));color:#fff;border-color:#6b3800;padding:6px 14px;font-size:12px}

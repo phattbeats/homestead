@@ -26,6 +26,14 @@ The shoutbox panel ships with the shoutbox backend (#149) - see below.
 
 ### The Shoutbox
 
+The household chat strip now has a home on the Forum index. The panel is one shared markup with the same box pattern the rest of the forum uses, so all three skins get it:
+
+- **Night Owl** leads the right column with the Shoutbox; **Woodgrain** and **Classic** put it after "What's Going On?".
+- A post box plus the recent shouts. The server's classic emoticon table (`:D`, `<3`, …) is applied at render time, and `/me` shouts render in the house style (* name).
+- Shouts arrive live over the existing SSE feed at `/api/shoutbox/events` - no reload. The feed is closed when you leave the index.
+
+The panel reads and writes the shoutbox API; no new endpoints, no schema change.
+
 ## v0.6.0 (2026-10-16) — fresh start
 
 First release on a fresh history: earlier tags, releases and changelog entries were retired. Upgrading from v0.5.24 brings the changes below.

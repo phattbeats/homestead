@@ -8,7 +8,9 @@
 //      reload, and survives a fresh browser context (server-side pref).
 //   5. Retired chrome stays gone: no FAB composer, no "+ Add a room"
 //      pill, no bottom tab bar.
-//   6. Screenshots: index in all three skins at desktop and 390×844,
+//   6. The Shoutbox panel: it posts, it renders, another member's
+//      shout arrives live, and it sits in the right place per skin.
+//   7. Screenshots: index in all three skins at desktop and 390×844,
 //      board + thread in the default skin at both sizes.
 //
 // Seeding uses header-trust requests from Node, the same path the
@@ -190,6 +192,36 @@ async function seed() {
       "What's Going On? shows Who's Online, birthdays and stats");
     await shot(page, 'index-woodgrain-desktop');
 
+    // ---- the shoutbox panel ----
+    const panel = await page.evaluate(() => {
+      const sb = document.querySelector('.fx-shoutbox');
+      const wg = document.querySelector('.fx-wgo');
+      return {
+        panel: !!sb,
+        form: !!document.querySelector('#shoutForm'),
+        list: !!document.querySelector('#shoutList'),
+        sbTop: sb ? sb.getBoundingClientRect().top : null,
+        wgoTop: wg ? wg.getBoundingClientRect().top : null,
+      };
+    });
+    assert(panel.panel && panel.form && panel.list, 'index shows the Shoutbox panel with a post form', JSON.stringify(panel));
+    assert(panel.sbTop > panel.wgoTop, "Woodgrain: the Shoutbox sits after What's Going On?", JSON.stringify(panel));
+
+    await page.fill('#shoutBody', 'smoke test shout from the forum');
+    await page.click('#shoutForm button[type=submit]');
+    await page.waitForFunction(
+      () => /smoke test shout from the forum/.test(document.getElementById('shoutList').textContent),
+      null, { timeout: 10000 });
+    ok('posted shout renders in the shoutbox');
+
+    // another member's shout lands live, without a reload
+    await as('emily', 'POST', '/api/shoutbox', { body: 'live shout from emily' });
+    await page.waitForFunction(
+      () => /live shout from emily/.test(document.getElementById('shoutList').textContent),
+      null, { timeout: 10000 });
+    ok('a shout from another member arrives live over SSE');
+    await shot(page, 'index-woodgrain-shoutbox');
+
     // collapse a category, and it stays collapsed after reload
     await page.click('.fx-cat .fx-x');
     await page.reload({ waitUntil: 'domcontentloaded' });
@@ -280,6 +312,21 @@ async function seed() {
         const hidden = await fresh.evaluate(() => getComputedStyle(document.querySelector('.fx-marquee')).display);
         assertEq(hidden, 'none', `${skin}: Night Owl marquee stays hidden`);
       }
+      const shoutbox = await fresh.evaluate(() => {
+        const sb = document.querySelector('.fx-shoutbox');
+        const wg = document.querySelector('.fx-wgo');
+        return {
+          sbTop: sb ? sb.getBoundingClientRect().top : null,
+          wgoTop: wg ? wg.getBoundingClientRect().top : null,
+          text: (document.getElementById('shoutList') || {}).textContent || '',
+        };
+      });
+      assert(skin === 'clubhouse' ? shoutbox.sbTop < shoutbox.wgoTop : shoutbox.sbTop > shoutbox.wgoTop,
+        skin === 'clubhouse'
+          ? 'Night Owl: the Shoutbox leads the right column'
+          : `${skin}: the Shoutbox sits after What's Going On?`,
+        JSON.stringify(shoutbox));
+      assert(/smoke test shout from the forum/.test(shoutbox.text), `${skin}: the Shoutbox shows the household's shouts`);
       await shot(fresh, `index-${skin}-desktop`);
     }
     await ctxB.close();
