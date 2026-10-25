@@ -61,3 +61,10 @@ if (!process.env.HOMESTEAD_INSECURE_TEST_COOKIES) {
 if (!process.env.NODE_ENV) {
   process.env.NODE_ENV = 'test';
 }
+
+// The external wire is read inside composeTypedPayload, so a machine with
+// the feature switched on would otherwise pull the real morning artifact into
+// every unit test.  Pin it off for tests; the wire's own tests set it
+// themselves after this shim runs.
+process.env.GAZETTE_EXTERNAL_EDITION_DIR = '';
+process.env.GAZETTE_EXTERNAL_OWNER_ID = '';

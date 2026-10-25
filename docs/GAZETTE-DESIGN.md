@@ -332,3 +332,26 @@ and inert until the directory variable is set.
 * **The owner id.** `GAZETTE_EXTERNAL_OWNER_ID` is a user id the server has
   to know. Until it is set, the personal sections are withheld from everyone,
   which is correct but means the owner's own picks are missing.
+
+## The live seam: read the wire inside `composeTypedPayload`
+
+There are two live paths that compose a typed issue: the daily writer in
+`jobs/gazette-daily.js` (the path that fills `gazette_issues`) and the sheet
+route in `server.js`. Both assemble a context, compose optional prose, and
+then call `composeTypedPayload(ctx, { prose })`. They do **not** call
+`composeIssue`.
+
+The first version of the wire read the artifact only in `composeIssue`. That
+function had no callers, so a direct probe of it showed external sections while
+the live cron and route silently composed every issue without them. It was a
+dead merge: the feature looked correct in the helper and did nothing in
+production.
+
+The reader now lives inside `composeTypedPayload` itself. When `external` is
+omitted, it reads the dated artifact for `ctx.date` and filters personal
+sections by `ctx.user.username`; callers can still pass `external: null` to
+suppress it deliberately. This makes the live seam the only place that can
+forget the wire -- and it cannot. The test bootstrap pins the wire off so the
+unit suite remains hermetic when a production container has it enabled; the
+wire test explicitly turns it on and proves a payload composed with **no**
+external argument gets both household and owner-only sections.
