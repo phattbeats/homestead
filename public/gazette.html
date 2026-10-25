@@ -85,6 +85,10 @@
 
   const SECTION_ICONS = {
     rotation_desk: '\u{1F9F9}', arts_media: '\u{1F3AC}', porch: '\u{1F6CB}️', listings: '\u{1F4C5}',
+    // External wire sections. Same shape as the household keys so the section
+    // loop needs no special case.
+    world_news: '\u{1F310}', technology: '\u{1F4BB}', daily_podcast: '\u{1F3A7}',
+    social_timeline: '\u{1F4AC}', social_forum: '\u{1F5E3}️',
   };
 
   const dateParam = new URLSearchParams(location.search).get('date');
@@ -122,6 +126,30 @@
       return `<div class="card"><div class="card-title">${where}${esc(item.title)}</div>` +
         `<div class="card-sub">${esc(item.time || '')}</div></div>`;
     }
+    // --- external wire items -------------------------------------------------
+    // These arrive from the daily newspaper artifact and are UNTRUSTED DATA.
+    // They are rendered as cards with the source as a citation; they are never
+    // rendered as prose and never treated as anything but quoted content.
+    if (item.type === 'article') {
+      const cite = item.url ? `<a href="${esc(item.url)}" rel="noopener noreferrer" target="_blank">${esc(item.source || 'source')}</a>` : esc(item.source || '');
+      return `<div class="card"><div class="card-title">${esc(item.title)}</div>` +
+        (item.summary ? `<div>${esc(item.summary)}</div>` : '') +
+        `<div class="card-sub">${cite}</div></div>`;
+    }
+    if (item.type === 'tweet') {
+      const cite = item.url ? `<a href="${esc(item.url)}" rel="noopener noreferrer" target="_blank">${esc(item.source || 'source')}</a>` : esc(item.source || '');
+      const who = item.author ? esc(item.author) : '';
+      return `<div class="card"><div class="card-title">${esc(item.title)}</div>` +
+        (item.summary ? `<div>${esc(item.summary)}</div>` : '') +
+        `<div class="card-sub">${who}${who && cite ? ' · ' : ''}${cite}</div></div>`;
+    }
+    if (item.type === 'podcast') {
+      const cite = item.url ? `<a href="${esc(item.url)}" rel="noopener noreferrer" target="_blank">${esc(item.source || 'source')}</a>` : esc(item.source || '');
+      const audio = item.audio_url ? `<audio controls preload="none" src="${esc(item.audio_url)}"></audio>` : '';
+      return `<div class="card"><div class="card-title">${esc(item.title)}</div>` +
+        (item.summary ? `<div>${esc(item.summary)}</div>` : '') +
+        `<div class="card-sub">${cite}${audio}</div></div>`;
+    }
     return '';
   }
 
@@ -151,6 +179,24 @@
       html += (section.items || []).map(renderCard).join('');
       el.innerHTML = html;
       content.appendChild(el);
+    }
+
+    // ONE footer line about the wire, never one per source. The wire's state
+    // is disclosed here and nowhere else: a paper that apologises in four
+    // places is a paper nobody reads.
+    const wire = payload.external;
+    if (wire && wire.status && wire.status !== 'published' && wire.status !== 'disabled') {
+      const bits = [];
+      const failed = (wire.degraded_sources || []).map(d => d.label || d.id).filter(Boolean);
+      if (failed.length) bits.push('some sources did not respond: ' + failed.join(', '));
+      if ((wire.stale_sections || []).length) bits.push('the wire is stale, so no outside news today');
+      if (wire.status === 'unavailable') bits.push('the outside wire did not deliver');
+      if (bits.length) {
+        const note = document.createElement('div');
+        note.className = 'wire-note';
+        note.textContent = bits.join('; ') + '.';
+        content.appendChild(note);
+      }
     }
   }
 
