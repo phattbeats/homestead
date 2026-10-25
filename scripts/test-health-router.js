@@ -104,11 +104,15 @@ const healthRouter = require('../routes/health');
     assert.equal(versionJson.version, pkg.version, 'version.version matches package.json');
     assert.equal(versionJson.commit, '3214-test-sha', 'version.commit matches COMMIT_SHA env');
 
-    // 10: server.js line count drift check. Pre-PR was 4846 lines.
-    // Allow a small upward drift for new comments / reformatting, but
-    // a large jump means somebody re-inflated it without extracting.
+    // 10: server.js line count drift check. The ceiling is 4846 lines —
+    // the count before /api/health and /api/version were extracted to
+    // routes/health.js. It is a DECOMPOSITION ceiling: server.js must
+    // stay under it, and a new route goes in a module rather than in
+    // the monolith. The old failure message here read "dropped below
+    // the pre-PR baseline", which described the opposite of what the
+    // assertion checks — it fires when the file GROWS.
     const lineCount = Number(execSync(`wc -l < ${path.join(__dirname, '..', 'server.js')}`).toString().trim());
-    assert.ok(lineCount < 4846, `server.js line count dropped below the pre-PR baseline (got ${lineCount}, expected < 4846)`);
+    assert.ok(lineCount < 4846, `server.js line count exceeded the 4846-line decomposition ceiling (got ${lineCount}, expected < 4846)`);
 
     console.log('routes/health.js extraction passes (10/10)');
   } finally {

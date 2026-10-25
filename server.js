@@ -58,8 +58,6 @@ const media = require('./lib/media');
 const walls = require('./lib/walls');
 const wallEvents = require('./lib/wall-events');
 const shoutbox = require('./lib/shoutbox');
-// Not a valid wall slug (slugs never contain ':'), so it can't collide with a board.
-const SHOUTBOX_CHANNEL = 'shoutbox:household';
 const lists = require('./lib/lists');
 const houseRooms = require('./lib/house-rooms');
 const notifications = require('./lib/notifications');
@@ -76,6 +74,8 @@ const agentConnectionsRouter = require('./routes/agent-connections');
 // second domain extracted from server.js.
 const healthRouter = require('./routes/health');
 const forumRouter = require('./routes/forum');
+const listsRouter = require('./routes/lists');
+const shoutboxRouter = require('./routes/shoutbox');
 
 const hearthCharacters = require('./lib/hearth-characters');
 // Hearth's inbound action surface — the house-actions the
@@ -170,7 +170,7 @@ hearthCharacters.migrate(db);
 // boot on every restart.
 hearthCharacters.ensureBuiltinAgentUser(db);
 // shouts table; live events ride wall-events under a reserved channel.
-shoutbox.migrate(db, { publish: (event, data) => wallEvents.publish(SHOUTBOX_CHANNEL, event, data) });
+shoutbox.migrate(db, { publish: (event, data) => wallEvents.publish(shoutbox.CHANNEL, event, data) });
 // media_queue, the table behind Hearth's enqueue_media action.
 // FKs to users(id); its wall_post_id is a soft reference (see the module
 // header for why), so ordering against walls.migrate() is a courtesy
@@ -2826,59 +2826,8 @@ app.use(forumRouter({
   publicDir: path.join(__dirname, 'public'),
 }));
 
-// ---- The Shoutbox ----
-// Household-wide, so any signed-in member may read and shout. App-scoped
-// tokens are refused outright: there is no scope for it, and a shout is
-// spoken as the human.
-function shoutCaller(req, res) {
-  if (tokenScopes(req) !== null) { res.status(403).json({ error: 'insufficient_scope' }); return null; }
-  const me = userModel.getMe(db, req.session.user.username);
-  if (!me) { res.status(401).json({ error: 'unknown_user' }); return null; }
-  return me;
-}
-app.get('/api/shoutbox', auth, (req, res) => {
-  if (!shoutCaller(req, res)) return;
-  res.json(shoutbox.list({ limit: req.query.limit, afterId: req.query.after }));
-});
-app.post('/api/shoutbox', auth, (req, res) => {
-  const me = shoutCaller(req, res); if (!me) return;
-  try { res.status(201).json(shoutbox.post(me.id, (req.body || {}).body)); } catch (e) { wallsErr(res, e); }
-});
-app.get('/api/shoutbox/events', auth, (req, res) => {
-  if (!shoutCaller(req, res)) return;
-  res.status(200);
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-  res.flushHeaders && res.flushHeaders();
-  res.write('retry: 3000\n');
-  res.write(': connected\n\n');
-  const unsubscribe = wallEvents.subscribe(SHOUTBOX_CHANNEL, ({ event, data }) => {
-    if (res.writableEnded) return;
-    res.write(`event: ${event}\n`);
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
-  });
-  const heartbeat = setInterval(() => { if (!res.writableEnded) res.write(': ping\n\n'); }, 25000);
-  req.on('close', () => { clearInterval(heartbeat); unsubscribe(); });
-});
-
-// Hearth's occasional chime. The gate lives in lib/shoutbox.js; here we only
-// supply the words via the agent runtime (server-staged key) and tick.
-async function draftHearthShout(context) {
-  const system = 'You are Hearth, the house companion, dropping ONE short line (under 120 chars) into the household shoutbox. Warm, dry, specific to what people just said. No hashtags, no greetings like "Great post". Reply with ONLY the line.';
-  const user = 'Recent shouts:\n' + context.map((c) => `${c.who}${c.kind === 'me' ? ' *' : ':'} ${c.body}`).join('\n');
-  const r = await agentRuntime.composeGazette({ system, user, providerCfg: null });
-  return r && r.ok ? r.text : null;
-}
-let shoutboxHearthTimer = null;
-function startShoutboxHearth() {
-  if (shoutboxHearthTimer) return;
-  shoutboxHearthTimer = setInterval(() => {
-    shoutbox.hearthChime({ draft: draftHearthShout }).catch((e) => console.log('[shoutbox] hearth chime failed:', e.message));
-  }, 10 * 60 * 1000);
-  if (shoutboxHearthTimer.unref) shoutboxHearthTimer.unref();
-}
+// ---- The Shoutbox (routes/shoutbox.js) ----
+app.use('/api', shoutboxRouter({ db, auth, tokenScopes, userModel, wallsErr }));
 
 // ---- agent-to-agent mailbox ----
 // A "foreign harness" here is nothing more than an installed third-party
@@ -3251,120 +3200,8 @@ app.delete('/api/tasks/:id', auth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---- lists ----
-//
-// Lists are the household-shared, multiple-contributor primitive
-// distinct from chores/tasks. The `lists` module in lib/modules.js
-// scopes reads to `read:lists` and writes to `write:lists`; both
-// are auto-granted to the household via the session user (the auth
-// middleware resolves the caller below). Routes follow the same
-// shape as /api/walls so the SPA can use a familiar fetch pattern.
-//
-// Design notes:
-//   * No membership gate — lists are household-shared by default.
-//     Future work can add per-list visibility if a household asks for it.
-//   * App-scoped bearer tokens must hold the matching list scope.
-//     Cookie/header-trust sessions retain normal first-party access, as
-//     requireScope() intentionally permits them.
-//   * Lists are not deleted by accidental item-delete — items cascade
-//     only when the parent list is removed.
-
-app.get('/api/lists', auth, requireScope('read:lists'), (req, res) => {
-  try {
-    const includeArchived = req.query.include_archived === '1' || req.query.include_archived === 'true';
-    res.json({ lists: lists.listLists({ includeArchived }) });
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.code || 'list_failed' });
-  }
-});
-
-app.get('/api/lists/stats', auth, requireScope('read:lists'), (req, res) => {
-  try {
-    res.json(lists.publicStats());
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.code || 'stats_failed' });
-  }
-});
-
-app.get('/api/lists/:id', auth, requireScope('read:lists'), (req, res) => {
-  try {
-    res.json(lists.getList(req.params.id));
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.code || 'list_failed' });
-  }
-});
-
-app.post('/api/lists', auth, requireScope('write:lists'), (req, res) => {
-  try {
-    const me = userModel.getMe(db, req.session.user.username);
-    const userId = me ? me.id : null;
-    res.status(201).json(lists.createList(req.body || {}, userId));
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.code || 'list_failed' });
-  }
-});
-
-app.patch('/api/lists/:id', auth, requireScope('write:lists'), (req, res) => {
-  try {
-    res.json(lists.updateList(req.params.id, req.body || {}));
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.code || 'list_failed' });
-  }
-});
-
-app.delete('/api/lists/:id', auth, requireScope('write:lists'), (req, res) => {
-  try {
-    res.json(lists.deleteList(req.params.id));
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.code || 'list_failed' });
-  }
-});
-
-app.post('/api/lists/reorder', auth, requireScope('write:lists'), (req, res) => {
-  try {
-    res.json({ lists: lists.reorderLists((req.body && req.body.ordered_ids) || []) });
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.code || 'list_failed' });
-  }
-});
-
-app.get('/api/lists/:id/items', auth, requireScope('read:lists'), (req, res) => {
-  try {
-    const includeChecked = req.query.include_checked === '1' || req.query.include_checked === 'true';
-    const limit = req.query.limit ? Math.max(1, Math.min(500, parseInt(req.query.limit, 10) || 100)) : undefined;
-    res.json({ items: lists.listItems(req.params.id, { includeChecked, limit }) });
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.code || 'item_failed' });
-  }
-});
-
-app.post('/api/lists/:id/items', auth, requireScope('write:lists'), (req, res) => {
-  try {
-    const me = userModel.getMe(db, req.session.user.username);
-    const userId = me ? me.id : null;
-    res.status(201).json(lists.addItem(req.params.id, req.body || {}, userId));
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.code || 'item_failed' });
-  }
-});
-
-app.patch('/api/list-items/:itemId', auth, requireScope('write:lists'), (req, res) => {
-  try {
-    const me = userModel.getMe(db, req.session.user.username);
-    const userId = me ? me.id : null;
-    res.json(lists.updateItem(req.params.itemId, req.body || {}, userId));
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.code || 'item_failed' });
-  }
-});
-
-app.delete('/api/list-items/:itemId', auth, requireScope('write:lists'), (req, res) => {
-  try {
-    res.json(lists.deleteItem(req.params.itemId));
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.code || 'item_failed' });
-  }
-});
+// ---- lists (routes/lists.js) ----
+app.use('/api', listsRouter({ db, auth, requireScope, userModel, lists }));
 
 // ---- house rooms ----
 // Rooms as LOCATIONS of the house — HALL, DEN, KITCHEN. See
@@ -4892,7 +4729,7 @@ if (require.main === module) {
   startScheduler();
   startHealthChecker();
   startPorchSweep();
-  startShoutboxHearth();
+  shoutbox.startHearth({ agentRuntime });
   app.listen(PORT, () => console.log(`Homestead on :${PORT}`));
 }
 // tests need direct db access for setup (e.g. seeding

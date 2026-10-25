@@ -10,7 +10,13 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Pinned on purpose: the browser build and the runner image have to
+    # agree. `ubuntu-latest` moved from ubuntu-24.04 to ubuntu-26.04 on
+    # 2026-10-25, and Playwright 1.56.1 has no chromium build for 26.04
+    # ("Playwright does not support chromium on ubuntu26.04-x64"), so the
+    # chromium install failed before npm test even ran. Bump the runner
+    # and the Playwright pin together.
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
