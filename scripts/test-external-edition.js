@@ -205,7 +205,90 @@ fs.writeFileSync(path.join(artifactDir, `${DAY}.json`), JSON.stringify(artifact(
   assertEq(both.external.status, 'partial', 'the wire status is carried');
 }
 
-// --- 8. ordering ------------------------------------------------------------
+// --- 8. the live compose paths must not bypass the wire ---------------------
+//
+// This is the regression test for a defect that shipped: the wire was read
+// only by `composeIssue`, and both live compose paths -- the daily cron and
+// the sheet route -- called `composeTypedPayload` without handing a block
+// in, so the wire was never read in production even with the feature
+// switched on.  The fix reads it inside `composeTypedPayload`, so a caller
+// cannot forget it.
+
+function withWireEnv(dir, owner, fn) {
+  const prevDir = process.env.GAZETTE_EXTERNAL_EDITION_DIR;
+  const prevOwner = process.env.GAZETTE_EXTERNAL_OWNER_ID;
+  process.env.GAZETTE_EXTERNAL_EDITION_DIR = dir;
+  if (owner === undefined) delete process.env.GAZETTE_EXTERNAL_OWNER_ID;
+  else process.env.GAZETTE_EXTERNAL_OWNER_ID = owner;
+  try { return fn(); } finally {
+    if (prevDir === undefined) delete process.env.GAZETTE_EXTERNAL_EDITION_DIR;
+    else process.env.GAZETTE_EXTERNAL_EDITION_DIR = prevDir;
+    if (prevOwner === undefined) delete process.env.GAZETTE_EXTERNAL_OWNER_ID;
+    else process.env.GAZETTE_EXTERNAL_OWNER_ID = prevOwner;
+  }
+}
+
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-wire-'));
+  fs.writeFileSync(path.join(dir, '2026-10-24.json'), JSON.stringify({
+    schema_version: 2, type: 'external.edition', edition_date: '2026-10-24',
+    timezone: 'America/New_York', generated_at: new Date().toISOString(),
+    status: 'partial', audience_scope: 'mixed', masthead: { title: 'The Ledger' },
+    sources: [{ id: 'bbc', label: 'BBC News', status: 'ok', checked_at: '2026-10-24T07:00:00Z' }],
+    sections: [
+      { id: 'news', homestead_key: 'world_news', title: 'The World Today', audience: 'household',
+        max_age_hours: 48, source_ids: ['bbc'],
+        items: [{ id: 'a1', kind: 'article', title: 'Headline one', summary: 'Excerpt.',
+                  summary_origin: 'publisher_excerpt', url: 'https://example.org/one',
+                  source: 'BBC News', source_id: 'bbc', published_at: '2026-10-24T05:00:00Z' }] },
+      { id: 'twitter', homestead_key: 'social_timeline', title: 'From Your Timeline', audience: 'personal',
+        max_age_hours: 24, source_ids: ['twitter'],
+        items: [{ id: 't1', kind: 'tweet', title: '@someone: hello', summary: 'hello',
+                  summary_origin: 'post_text', url: 'https://x.com/someone/status/1',
+                  source: 'X / Twitter', source_id: 'twitter', published_at: '2026-10-24T06:00:00Z' }] },
+    ],
+    provenance: { summary_policy: 'Publisher excerpts.', producer: 'daily-newspaper' },
+    policy: { untrusted_content: true, citation_required: ['url', 'source'],
+              personal_sections: ['social_timeline'], shared_wall_publication: 'forbidden',
+              max_item_chars: { title: 300, summary: 500 } },
+  }));
+
+  const ctx = { date: '2026-10-24', tz: 'UTC', user: { id: 2, username: 'phatt', display: 'Brandon' },
+                today_tasks: [], overdue_tasks: [], upcoming_chores: [], arrivals: [],
+                porch_overnight: { posts: [], comments: [] }, today_events: [] };
+
+  // The exact shape both live call sites use: a context and a prose edition,
+  // no block.  This must pick the wire up.
+  const live = withWireEnv(dir, 'phatt', () => composeTypedPayload(ctx, { prose: null }));
+  assert(live.sections.some(s => s.key === 'world_news'),
+    'a payload composed WITHOUT an explicit block still gets the wire');
+  assert(live.sections.some(s => s.key === 'social_timeline'),
+    'the owner gets the personal section when composing without a block');
+
+  const other = withWireEnv(dir, 'someone-else', () => composeTypedPayload(ctx, { prose: null }));
+  assert(other.sections.some(s => s.key === 'world_news'),
+    'a non-owner still gets the household section');
+  assert(!other.sections.some(s => s.key === 'social_timeline'),
+    'a non-owner does NOT get the personal section');
+
+  const suppressed = composeTypedPayload(ctx, { prose: null, external: null });
+  assert(!suppressed.sections.some(s => s.key === 'world_news'),
+    'an explicit null still means no wire, for callers that want the old shape');
+
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+{
+  // Neither live compose path may hand in a block that suppresses the wire.
+  const repo = path.join(__dirname, '..');
+  for (const rel of ['server.js', 'jobs/gazette-daily.js']) {
+    const src = fs.readFileSync(path.join(repo, rel), 'utf8');
+    assert(!/composeTypedPayload\([^)]*external:\s*null/.test(src),
+      `${rel} does not compose with the wire explicitly suppressed`);
+  }
+}
+
+// --- 9. ordering ------------------------------------------------------------
 {
   assertEq(EXTERNAL_SECTION_KEYS, ['world_news', 'technology', 'daily_podcast', 'social_timeline', 'social_forum'], 'the external registry order is fixed');
 }
