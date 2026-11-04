@@ -2912,7 +2912,39 @@ function agentConnectionsTtlMinutes(minted){
 
 async function openAgentConnectionsListSheet(){
   const conns = await api('GET', '/api/agent-connections');
+  try { window.__agentHub = (await api('GET', '/api/agent-hub/status')).enabled; } catch (_) { window.__agentHub = false; }
   openAgentConnectionsListSheetWith(conns);
+}
+
+/* Per-service permissions + activity for one connection, served by the PHATT Agent Hub. */
+async function openAgentPermissionsSheet(id, title){
+  try {
+    const [catalog, conn, audit] = await Promise.all([
+      api('GET', '/api/agent-hub/permissions'),
+      api('GET', `/api/agent-hub/connections/${id}`),
+      api('GET', `/api/agent-hub/connections/${id}/audit`),
+    ]);
+    const have = new Set(conn.permissions);
+    const rows = catalog.permissions.map(p => `<label class="tok-row" style="display:flex;gap:10px;align-items:center">
+      <input type="checkbox" data-perm="${esc(p.id)}" ${have.has(p.id) ? 'checked' : ''} ${conn.status === 'revoked' ? 'disabled' : ''}>
+      <span><b>${esc(p.id)}</b><br><span class="tok-meta">${esc(p.description)}</span></span></label>`).join('');
+    const events = audit.events.slice(0, 10).map(e =>
+      `<div class="tok-meta">${esc(new Date(e.at * 1000).toLocaleString())} · ${esc(e.action)}${e.detail && e.detail.permission ? ' · ' + esc(e.detail.permission) : ''}</div>`).join('');
+    openSheet(`<h2>${esc(title)}</h2>
+      <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">What this agent may do across PHATT. Changes apply immediately.</p>
+      <div class="tok-list">${rows}</div>
+      <h3 style="margin:16px 0 6px;font-size:14px">Recent activity</h3>${events || '<div class="tok-meta">Nothing yet.</div>'}
+      <button class="link" style="margin-top:14px;width:100%;text-align:center" id="perm-back">Back</button>`);
+    document.querySelectorAll('[data-perm]').forEach(cb => {
+      cb.onchange = async () => {
+        try {
+          await api(cb.checked ? 'PUT' : 'DELETE', `/api/agent-hub/connections/${id}/permissions/${encodeURIComponent(cb.dataset.perm)}`);
+          openAgentPermissionsSheet(id, title);
+        } catch (e) { cb.checked = !cb.checked; alert((e && e.error) || 'Could not update permission'); }
+      };
+    });
+    $('#perm-back').onclick = () => openAgentConnectionsListSheet();
+  } catch (e) { alert((e && e.error) || 'Permissions are unavailable right now'); }
 }
 
 function openAgentConnectionsListSheetWith(conns){
@@ -2935,7 +2967,7 @@ function openAgentConnectionsListSheetWith(conns){
         <div class="tok-meta">${lastUsed}</div>
       </div>
       <div class="tok-actions">
-        ${c.status !== 'revoked' ? `<button class="link" data-act="rename">Rename</button><button class="link danger" data-act="revoke">Revoke</button>` : ''}
+        ${window.__agentHub ? `<button class="link" data-act="perms">Permissions</button>` : ''}${c.status !== 'revoked' ? `<button class="link" data-act="rename">Rename</button><button class="link danger" data-act="revoke">Revoke</button>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -2950,6 +2982,8 @@ function openAgentConnectionsListSheetWith(conns){
     const id = row.dataset.id;
     const conn = conns.find(x => String(x.id) === id);
     if (!conn) return;
+    const permsBtn = row.querySelector('[data-act="perms"]');
+    if (permsBtn) permsBtn.onclick = () => openAgentPermissionsSheet(id, conn.label || connectAgentProviderLabel(conn.provider));
     const renameBtn = row.querySelector('[data-act="rename"]');
     if (renameBtn) renameBtn.onclick = async () => {
       const next = prompt('Rename connection', conn.label || connectAgentProviderLabel(conn.provider));

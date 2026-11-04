@@ -37,6 +37,7 @@
 'use strict';
 
 const { Router } = require('express');
+const hubClient = require('../lib/hub-client');
 
 module.exports = function agentConnectionsRouter({
   db,
@@ -52,6 +53,9 @@ module.exports = function agentConnectionsRouter({
   if (!mailbox) throw new Error('agentConnectionsRouter: mailbox is required');
 
   const r = Router();
+  const hub = hubClient.createClient();
+  // Mirror owner-initiated changes to the hub (best-effort; Homestead stays usable if the hub is down).
+  const mirror = (fn) => { if (hub) Promise.resolve().then(fn).catch((e) => console.warn('[agent-hub] mirror failed:', e.message)); };
 
   // GET /api/agent-connections — own connections, or (admin + ?user=)
   // another user's.
@@ -108,10 +112,12 @@ module.exports = function agentConnectionsRouter({
       let updated;
       if (revoke) {
         updated = agentConnections.revoke(db, req.params.id, { ownerUserId: me.id });
+        mirror(() => hub.revoke(hubClient.ownerFor(db, me.id), req.params.id));
       } else if (rotate_secret) {
         updated = agentConnections.rotateSecret(db, req.params.id, { ownerUserId: me.id });
       } else if (label !== undefined) {
         updated = agentConnections.rename(db, req.params.id, label, { ownerUserId: me.id });
+        mirror(() => hub.rename(hubClient.ownerFor(db, me.id), req.params.id, label));
       } else {
         return res.status(400).json({ error: 'nothing to update' });
       }
@@ -143,7 +149,7 @@ module.exports = function agentConnectionsRouter({
   // or stores OAuth cookies for the harness; only the companion secret
   // stays in the user-side companion state. Homestead never persists
   // any cookie/token alongside the event.
-  r.post('/:id/events', (req, res) => {
+  r.post('/:id/events', async (req, res) => {
     const connectionId = Number(req.params.id);
     if (!Number.isInteger(connectionId) || connectionId <= 0) {
       return res.status(400).json({ error: 'invalid_connection_id' });
@@ -193,6 +199,13 @@ module.exports = function agentConnectionsRouter({
     if (!connection) return res.status(404).json({ error: 'not_found' });
     if (connection.status === agentConnections.STATUS_REVOKED) {
       return res.status(410).json({ error: 'connection_revoked' });
+    }
+    if (hub) {
+      // A revoke made anywhere in PHATT (hub) must stop events here too. Hub unreachable → fall back to local status.
+      try {
+        const hc = await hub.get(hubClient.ownerFor(db, firstRow.user_id), connectionId);
+        if (hc.status === 'revoked') return res.status(410).json({ error: 'connection_revoked' });
+      } catch (e) { if (e.status !== 404) console.warn('[agent-hub] status check failed:', e.message); }
     }
     if (connection.status !== agentConnections.STATUS_ACTIVE) {
       return res.status(409).json({ error: 'connection_not_active', status: connection.status });

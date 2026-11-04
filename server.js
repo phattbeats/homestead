@@ -71,6 +71,7 @@ const porchComprehension = require('./lib/porch/comprehension');
 const oidcLink = require('./lib/oidc-link');
 const mailbox = require('./lib/porch/mailbox');
 const agentConnectionsRouter = require('./routes/agent-connections');
+const agentHubRouter = require('./routes/agent-hub');
 // second domain extracted from server.js.
 const healthRouter = require('./routes/health');
 const forumRouter = require('./routes/forum');
@@ -2344,6 +2345,9 @@ app.use('/api/agent-connections', agentConnectionsRouter({
   agentConnections,
   mailbox,
 }));
+
+// Settings screens for agent permissions/audit call the PHATT Agent Hub (HUB_URL + HUB_SERVICE_KEY).
+app.use('/api/agent-hub', agentHubRouter({ db, auth, userModel }));
 
 // ---- Hearth first-open intro path ----
 // When a user opens the drawer for the first time after enabling the
