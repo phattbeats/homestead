@@ -87,10 +87,17 @@ function freshStack() {
       id INTEGER PRIMARY KEY, actor TEXT, verb TEXT, target TEXT,
       ts TEXT DEFAULT (datetime('now')), payload TEXT
     );
+    -- Seeded on the HOST LOCAL date, not SQLite's UTC date.
+    -- snapshot.build() computes "today" from the runtime's local
+    -- timezone (lib/snapshot.js isoDateLocal), so a task seeded with
+    -- date('now') — which is UTC — lands on the wrong day for the four
+    -- hours a day between 20:00 and 24:00 Eastern. The fixture then
+    -- asserted against a "today" that the snapshot had already moved
+    -- past. 'localtime' makes the seed and the assertion the same day.
     INSERT OR IGNORE INTO tasks (id, title, assignee, due_date, done)
-      VALUES (1, 'Take out trash', 'brandon', date('now'), 0);
+      VALUES (1, 'Take out trash', 'brandon', date('now', 'localtime'), 0);
     INSERT OR IGNORE INTO events (id, title, date, time, owner)
-      VALUES (1, 'Movie night', date('now'), '20:00', 'all');
+      VALUES (1, 'Movie night', date('now', 'localtime'), '20:00', 'all');
     INSERT OR IGNORE INTO groups (id, name, display_name)
       VALUES (1, 'admins', 'Admins');
     INSERT OR IGNORE INTO groups (id, name, display_name)
