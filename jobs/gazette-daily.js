@@ -279,13 +279,21 @@ async function runForUser(db, user, now) {
   // compose, and the paper would claim a wire it does not have.
   const payload = gazette.composeTypedPayload(ctx, { prose, external: block });
   gazette.putIssue(db, user.id, localDate, { payload, weatherEntry: payload.weather });
-  return {
+  const outcome = {
     username: user.username,
     date: localDate,
     thin: payload.thin,
     recomposed: Boolean(existing),
     wire: block.status,
   };
+  // A recompose is the repair this whole path exists for — a late
+  // artifact turning a wire-less issue into a wired one. It is rare, and
+  // it is worth a line in the container log: the failure it repairs used
+  // to be completely invisible.
+  if (outcome.recomposed) {
+    console.log(`[gazette-daily] recomposed ${user.username} ${localDate} — wire=${block.status}`);
+  }
+  return outcome;
 }
 
 // Has today's end-of-window alert already been said?
@@ -320,6 +328,10 @@ function postWindowAlert(db, user, date, detail) {
     // job that runs before the server's own migration.
     shoutbox.migrate(db);
     shoutbox.post(user.id, body, { now: new Date() });
+    // The log line the issue asked for: a missed window has to be visible
+    // in the container logs, not only in the shoutbox. The shoutbox is
+    // the operational signal; this is the operator's copy.
+    console.log(`[gazette-daily] ALERT ${user.username} ${date} — ${detail}`);
     return { sent: true };
   } catch (err) {
     console.error(`[gazette-daily] alert failed for ${user.username}:`, err.message);

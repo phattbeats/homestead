@@ -153,6 +153,13 @@ const EXCLUDE_FILES = new Set([
   // `open_mode` / the server-sent `sheets[]` rather than naming a key,
   // so they pass the audit on their own merits.
   'scripts/test-gazette.js',
+  // Gazette catch-up acceptance test: seeds the gazette module onto the
+  // fixture user with `INSERT INTO user_modules (user_id, module_key, ...)`
+  // and drives the daily compose job, whose user lookup is itself a
+  // module_key query. Same category as the sibling acceptance tests above
+  // and as `jobs/gazette-daily.js` below — test config and a data-query
+  // argument, not a render-time branch against the registry.
+  'scripts/test-gazette-catchup.js',
   // cross-page bottom-nav component: the `LINKS` array is a separate
   // navigation namespace (Wall/Porch/Rooms/Invites/Connect), not the registry
   // namespace. The `'wall'` literal is intentionally kept here as an extra
