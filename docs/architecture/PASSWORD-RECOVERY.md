@@ -37,8 +37,8 @@ Attach the flow to the Identification stage of the main login flow (`recovery_fl
 
 ### Failure modes and invariants
 - Depends on working SMTP from Authentik. If mail is down the member sees success and gets nothing. Add a check that Authentik's mail test succeeds and an alert on worker mail failures.
-- Recovery must not bypass MFA. If members have TOTP/WebAuthn, add an authenticator-validate stage after stage 2 (or document that email possession = full recovery, which is weaker). **Decision for Brandon.**
-- Admins/`admins` group: Homestead derives `is_admin` from that group. Recovery for admin accounts has the same email-only strength. Option: exclude the `admins` group from the flow via policy binding and keep them on break-glass. **Decision for Brandon.**
+- Recovery must not bypass MFA. **Decided (Brandon, 2026-11-08): no MFA on recovery.** Email possession = full recovery. Accepted as weaker than MFA; mitigated by excluding admins (below).
+- Admins/`admins` group: Homestead derives `is_admin` from that group. Recovery for admin accounts has the same email-only strength. **Decided (Brandon, 2026-11-08): exclude `admins`** via a group-membership policy bound to the flow (deny), so admins stay on break-glass. The denial must look identical to the normal "check your email" result so it doesn't reveal admin accounts.
 - Password reset should invalidate existing sessions/tokens (user write + `session` cleanup). Verify.
 - Export the flow as a blueprint (YAML) into git so it is reproducible and reviewable instead of hand-clicked.
 
@@ -55,10 +55,11 @@ Breakers:
 - 10 requests in a minute: confirm throttled.
 - Reuse the link after success: must fail. Use after expiry: must fail.
 - Account with no email: no mail, same page.
-- Account with MFA: behaves per decision above.
+- Account with MFA: reset succeeds on email alone (by decision).
+- Account in `admins`: no mail, same page and timing as an unknown user.
 
-## Open decisions for Brandon
-1. MFA on recovery: require second factor, or accept email-only?
-2. Exclude `admins` from self-service recovery?
-3. Token lifetime 15 min OK?
-4. Okay to apply to production Authentik, and which mailbox for the throwaway account?
+## Decisions
+1. MFA on recovery: not required (Brandon, 2026-11-08).
+2. `admins` excluded from self-service; break-glass only (Brandon, 2026-11-08).
+3. Token lifetime 15 min: approved (Brandon, 2026-11-08).
+4. **Open:** approval to apply to production Authentik, and which mailbox to use for the throwaway account.
