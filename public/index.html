@@ -2913,6 +2913,19 @@ function agentConnectionsTtlMinutes(minted){
 async function openAgentConnectionsListSheet(){
   const conns = await api('GET', '/api/agent-connections');
   try { window.__agentHub = (await api('GET', '/api/agent-hub/status')).enabled; } catch (_) { window.__agentHub = false; }
+  // Agents connected on the PHATT Agent Hub (Claude.ai / ChatGPT connectors, agents.phatt.vip/connect) have no row here:
+  // list them too so they can be limited or revoked from Homestead. Hub times are unix seconds.
+  if (window.__agentHub) {
+    try {
+      const mine = new Set(conns.map(c => String(c.id)));
+      const sqlTime = (t) => t ? new Date(t * 1000).toISOString().slice(0, 19).replace('T', ' ') : null;
+      for (const h of await api('GET', '/api/agent-hub/connections')) {
+        if (mine.has(String(h.id)) || h.status === 'pending') continue;
+        conns.push({ id: h.id, provider: h.provider, label: h.label, status: h.status, hub_only: true,
+          created_at: sqlTime(h.created_at), last_used_at: sqlTime(h.last_used_at) });
+      }
+    } catch (_) { /* hub unreachable: the Homestead rows still show */ }
+  }
   openAgentConnectionsListSheetWith(conns);
 }
 
@@ -2929,7 +2942,7 @@ async function openAgentPermissionsSheet(id, title){
       <input type="checkbox" data-perm="${esc(p.id)}" ${have.has(p.id) ? 'checked' : ''} ${conn.status === 'revoked' ? 'disabled' : ''}>
       <span><b>${esc(p.id)}</b><br><span class="tok-meta">${esc(p.description)}</span></span></label>`).join('');
     const events = audit.events.slice(0, 10).map(e =>
-      `<div class="tok-meta">${esc(new Date(e.at * 1000).toLocaleString())} · ${esc(e.action)}${e.detail && e.detail.permission ? ' · ' + esc(e.detail.permission) : ''}</div>`).join('');
+      `<div class="tok-meta">${esc(new Date(e.at * 1000).toLocaleString())} · ${esc(e.action)}${e.detail && e.detail.permission ? ' · ' + esc(e.detail.permission) : ''}${e.detail && e.detail.tool ? ' · ' + esc(e.detail.tool) : ''}${e.detail && e.detail.changed && e.detail.changed.to ? ' → ' + esc(e.detail.changed.to) : ''}</div>`).join('');
     openSheet(`<h2>${esc(title)}</h2>
       <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">What this agent may do across PHATT. Changes apply immediately.</p>
       <div class="tok-list">${rows}</div>
@@ -2967,13 +2980,13 @@ function openAgentConnectionsListSheetWith(conns){
         <div class="tok-meta">${lastUsed}</div>
       </div>
       <div class="tok-actions">
-        ${window.__agentHub ? `<button class="link" data-act="perms">Permissions</button>` : ''}${c.status !== 'revoked' ? `<button class="link" data-act="rename">Rename</button><button class="link danger" data-act="revoke">Revoke</button>` : ''}
+        ${window.__agentHub ? `<button class="link" data-act="perms">Permissions</button>` : ''}${c.status !== 'revoked' ? `${c.hub_only ? '' : '<button class="link" data-act="rename">Rename</button>'}<button class="link danger" data-act="revoke">Revoke</button>` : ''}
       </div>
     </div>`;
   }).join('');
 
   openSheet(`<h2>Connections</h2>
-    <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">Agents paired through the "Connect an agent" wizard. Revoking is immediate.</p>
+    <p style="font-size:13px;color:var(--muted);margin:-4px 0 14px">Agents paired through the "Connect an agent" wizard or connected to PHATT from Claude, ChatGPT and other apps. Revoking is immediate.</p>
     <div class="tok-list">${rows || '<div class="empty" style="padding:24px 4px">No connections yet.</div>'}</div>
     <button class="btn" id="conn-add" style="margin-top:14px">+ Connect an agent</button>
     <button class="link" style="margin-top:14px;width:100%;text-align:center" onclick="closeSheet()">Done</button>`);
@@ -2999,7 +3012,8 @@ function openAgentConnectionsListSheetWith(conns){
     if (revokeBtn) revokeBtn.onclick = async () => {
       if (!confirm(`Revoke "${conn.label || connectAgentProviderLabel(conn.provider)}"?\n\nThis agent will lose access immediately. This cannot be undone.`)) return;
       try {
-        await api('PATCH', `/api/agent-connections/${id}`, { revoke: true });
+        if (conn.hub_only) await api('POST', `/api/agent-hub/connections/${id}/revoke`);
+        else await api('PATCH', `/api/agent-connections/${id}`, { revoke: true });
         await openAgentConnectionsListSheet();
       } catch (e) {
         alert((e && e.error) || 'Revoke failed');

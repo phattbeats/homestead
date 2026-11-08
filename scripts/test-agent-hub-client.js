@@ -36,6 +36,9 @@ const listen = (app) => new Promise((r) => { const s = app.listen(0, () => r(s))
   await fetch(`${base}/connections/41/permissions/homestead:read`, { method: 'DELETE' });
   check(seen[0] === 'PUT /api/v1/connections/41/permissions/homestead%3Aread owner=sub-3 auth=Bearer k', `grant forwarded (${seen[0]})`);
   check(seen[1].startsWith('DELETE ') && seen[1].includes('owner=sub-3'), 'revoke forwarded');
+  // PHA-4886: a hub-only agent (MCP connector) is revoked from Homestead through the hub
+  const rv = await fetch(`${base}/connections/41/revoke`, { method: 'POST' });
+  check(rv.status === 200 && seen[2] === 'PATCH /api/v1/connections/41 owner=sub-3 auth=Bearer k', `connection revoke forwarded (${seen[2]})`);
 
   const app2 = express();
   app2.use((req, _r, next) => { req.session = { user: { username: 'u' } }; next(); });
