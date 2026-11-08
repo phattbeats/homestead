@@ -270,7 +270,7 @@ and `iat`, and then treats the request as that member.
   from `<hub>/auth/phatt-id/key`, cached for an hour, refetched at most once
   a minute after a verify failure) or `PHATTID_HUB_KEY` (pinned Ed25519 JWK
   `x`, never fetched). While off, any `PhattId` header gets a 401.
-- `PHATTID_AUD` — expected audience, default `homestead.phatt.vip`.
+- `PHATTID_AUD` — expected audience, default `life.phatt.vip` (Homestead's own host; `homestead.phatt.vip` is the Lodge).
 - `PHATTID_SCOPES` — space/comma separated, default
   `read:me read:lists write:lists read:tasks write:tasks read:events`.
   It can only narrow the route table below.

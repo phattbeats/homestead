@@ -31,7 +31,7 @@ function keypair() {
   const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
   return { privateKey, x: publicKey.export({ format: 'jwk' }).x };
 }
-const AUD = 'homestead.phatt.vip';
+const AUD = 'life.phatt.vip';
 function mint(privateKey, claims) {
   const body = Buffer.from(JSON.stringify(claims)).toString('base64url');
   const sig = crypto.sign(null, Buffer.from('pa1.' + body), privateKey).toString('base64url');
@@ -73,7 +73,7 @@ console.log('PHATT ID assertion tests\n');
   console.log('\nTest 2: config() and requiredScope()');
   assertEq(phattId.config({}), null, 'off when neither PHATTID_HUB_URL nor PHATTID_HUB_KEY set');
   const c = phattId.config({ PHATTID_HUB_KEY: 'x' });
-  assertEq(c.aud, 'homestead.phatt.vip', 'PHATTID_AUD defaults to homestead.phatt.vip');
+  assertEq(c.aud, 'life.phatt.vip', 'PHATTID_AUD defaults to life.phatt.vip');
   assertEq(c.scopes, ['read:me', 'read:lists', 'write:lists', 'read:tasks', 'write:tasks', 'read:events'], 'default scope list');
   assertEq(phattId.config({ PHATTID_HUB_KEY: 'x', PHATTID_SCOPES: 'read:lists, read:tasks' }).scopes, ['read:lists', 'read:tasks'], 'PHATTID_SCOPES overrides');
   assertEq(phattId.requiredScope('PATCH', '/api/list-items/abc'), 'write:lists', 'PATCH list item -> write:lists');
