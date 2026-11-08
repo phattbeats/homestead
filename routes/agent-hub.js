@@ -23,6 +23,8 @@ module.exports = function agentHubRouter({ db, auth, userModel, hub = hubClient.
   r.get('/connections/:id', auth, wrap((owner, req) => hub.get(owner, req.params.id)));
   r.put('/connections/:id/permissions/:perm', auth, wrap((owner, req) => hub.grant(owner, req.params.id, req.params.perm)));
   r.delete('/connections/:id/permissions/:perm', auth, wrap((owner, req) => hub.revokePermission(owner, req.params.id, req.params.perm)));
+  // Agents connected on the hub itself (MCP connectors, /connect pairing) have no Homestead row; this is their Revoke.
+  r.post('/connections/:id/revoke', auth, wrap((owner, req) => hub.revoke(owner, req.params.id)));
   r.get('/connections/:id/audit', auth, wrap((owner, req) => hub.audit(owner, req.params.id)));
   return r;
 };
