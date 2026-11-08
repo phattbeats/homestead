@@ -96,6 +96,8 @@ Changing it later does nothing; rotate passwords in-app. (Deleting
 | `HMAC_CRED_KEY`     | no             | 32-byte hex key for agent HMAC secrets at rest. Falls back to `CALENDAR_CRED_KEY`. |
 | `PLEX_URL`, `PLEX_TOKEN` | no        | Enables the optional Plex library sync.                              |
 | `KAVITA_URL`, `KAVITA_API_KEY` | no  | Enables the optional Kavita library sync.                            |
+| `PHATTID_HUB_URL` / `PHATTID_HUB_KEY` | no | Enables `Authorization: PhattId` assertions (see [PHATT ID assertions](#phatt-id-assertions)). |
+| `PHATTID_AUD`, `PHATTID_SCOPES` | no | Expected assertion audience and scope list for PhattId requests. |
 
 ## Data
 
@@ -255,6 +257,36 @@ Use a token as `Authorization: Bearer homestead_pat_…`.
 `GET /api/me/snapshot` returns a single-call summary (profile, today's
 tasks and events, the upcoming week, recent activity) intended for agents;
 send `X-Homestead-Tz: <IANA name>` to pin "today" to the user's clock.
+
+## PHATT ID assertions
+
+A trusted PHATT server (e.g. The Lodge) can act for a household member
+by forwarding that member's own short-lived PHATT ID assertion:
+`Authorization: PhattId pa1.<claims>.<signature>`. Homestead verifies the
+Ed25519 signature itself against the PHATT hub key, checks `aud`, `exp`
+and `iat`, and then treats the request as that member.
+
+- **Off by default.** Set `PHATTID_HUB_URL` (hub base URL; the key is read
+  from `<hub>/auth/phatt-id/key`, cached for an hour, refetched at most once
+  a minute after a verify failure) or `PHATTID_HUB_KEY` (pinned Ed25519 JWK
+  `x`, never fetched). While off, any `PhattId` header gets a 401.
+- `PHATTID_AUD` — expected audience, default `homestead.phatt.vip`.
+- `PHATTID_SCOPES` — space/comma separated, default
+  `read:me read:lists write:lists read:tasks write:tasks read:events`.
+  It can only narrow the route table below.
+- **Mapping:** the assertion's `sub` is looked up in `identity_links`
+  (restricted to `HUB_PHATTID_ISSUER` when set); otherwise an existing user
+  whose username equals the `username` claim. Users are never created from
+  an assertion (unknown user: 401 `unknown_user`) and group membership is
+  not changed.
+- **Deny by default.** A PhattId request reaches only: `GET /api/me/snapshot`
+  (`read:me`); the `/api/lists` and `/api/list-items` routes (`read:lists` /
+  `write:lists`); `GET/POST /api/tasks`, `PUT/DELETE /api/tasks/:id`,
+  `POST /api/tasks/:id/toggle` (`read:tasks` / `write:tasks`);
+  `GET /api/events` and `GET /api/events/merged` (`read:events`). Every
+  other route, including admin, settings, tokens and app installs, answers
+  403 `insufficient_scope`.
+- No session cookie is ever set for a PhattId request.
 
 ## Development
 

@@ -40,6 +40,7 @@ const agentTokens = require('./lib/agent-tokens');
 const agentEndpoints = require('./lib/agent-endpoints');
 const agentConnections = require('./lib/agent-connections');
 const appApiLog = require('./lib/app-api-log');
+const phattId = require('./lib/phatt-id');
 const appInstall = require('./lib/app-install');
 const connectorInstall = require('./lib/connector-install');
 const connectorWizard = require('./lib/connector-wizard');
@@ -335,8 +336,13 @@ function recordSessionStart(req, user, device) {
 //   3. Session-cookie — established by /api/login (LAN fallback) or by
 //      the header-trust layer above; survives across requests.
 //   4. Unauthenticated → 401.
+// Ahead of all of these, `Authorization: PhattId <assertion>` is handled
+// by authenticatePhattId() below and never falls through.
 function authenticate(req, res, next) {
   const authHeader = req.get('authorization') || '';
+  if (/^PhattId(\s|$)/i.test(authHeader)) {
+    return authenticatePhattId(req, res, next, authHeader.replace(/^PhattId\s*/i, '').trim());
+  }
   const bearerMatch = authHeader.match(/^Bearer\s+(\S+)$/i);
   if (bearerMatch && bearerMatch[1].startsWith(agentTokens.TOKEN_PREFIX_LABEL)) {
     const tokenRow = agentTokens.verify(db, bearerMatch[1]);
@@ -405,6 +411,40 @@ function authenticate(req, res, next) {
   }
   if (req.session.user) return next();
   return res.status(401).json({ error: 'unauthorized' });
+}
+
+// PHATT ID assertion layer (lib/phatt-id.js). Off unless PHATTID_HUB_URL
+// or PHATTID_HUB_KEY is set. Verifies the hub-signed assertion, maps it
+// to an EXISTING user (never provisions, never touches groups), and
+// only lets the request through to a (method, path) in the fixed
+// PhattId route table whose scope is configured — deny-by-default,
+// because most routes are guarded by `auth` alone and requireScope()
+// would not stop them. The synthesized session user also carries the
+// scope list so requireScope()/tokenScopes() treat it like an app
+// token. The session is detached from the store (req.sessionID unset)
+// so express-session neither saves it nor sends Set-Cookie.
+const phattIdKeys = phattId.createKeyStore();
+async function authenticatePhattId(req, res, next, token) {
+  const cfg = phattId.config();
+  if (!cfg) return res.status(401).json({ error: 'phatt_id_disabled' });
+  const claims = token ? await phattIdKeys.verify(token, cfg) : null;
+  if (!claims) return res.status(401).json({ error: 'invalid_assertion' });
+  const u = phattId.resolveUser(db, claims);
+  if (!u) return res.status(401).json({ error: 'unknown_user' });
+  const required = phattId.requiredScope(req.method, req.originalUrl);
+  if (!required || !cfg.scopes.includes(required)) {
+    return res.status(403).json({ error: 'insufficient_scope', required: required || undefined });
+  }
+  req.sessionID = undefined;
+  req.session.user = {
+    username: u.username,
+    display: u.display,
+    color: u.color,
+    isAdmin: !!u.is_admin,
+    authProvider: 'phatt_id',
+    authProviderDetail: { scopes: JSON.stringify(cfg.scopes), phattIdSub: String(claims.sub) },
+  };
+  return next();
 }
 // Legacy alias used by route definitions below.
 const auth = authenticate;
