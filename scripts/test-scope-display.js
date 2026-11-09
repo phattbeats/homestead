@@ -119,6 +119,9 @@ console.log('scope-display tests\n');
   assert(typeof scopeDisplay.describeScope === 'function', 'describeScope is exported');
   assert(typeof scopeDisplay.describeScopes === 'function', 'describeScopes is exported');
   assert(Array.isArray(scopeDisplay.SCOPE_VOCABULARY), 'SCOPE_VOCABULARY is exported as an array');
+assert(Array.isArray(scopeDisplay.API_SCOPE_RULES), 'API_SCOPE_RULES is exported as the app capability registry');
+assert(scopeDisplay.scopeForApiRoute('GET', '/api/lists/example') === 'read:lists', 'route registry resolves parameterized list reads');
+assert(scopeDisplay.scopeForApiRoute('POST', '/api/apps/install') === null, 'route registry leaves app management unmapped (fail closed)');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

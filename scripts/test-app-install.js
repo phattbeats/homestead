@@ -497,7 +497,8 @@ await new Promise((resolveTest) => {
     const appCallRes = await request({
       ...base, path: '/api/apps/popcorn_vote', method: 'GET', headers: { Authorization: `Bearer ${tokenPlaintext}` },
     });
-    assertEq(appCallRes.status, 200, 'the minted app-scoped token authenticates a real API call');
+    assertEq(appCallRes.status, 403, 'the minted app-scoped token cannot access an unmapped app-management route');
+    assertEq(appCallRes.body && appCallRes.body.error, 'insufficient_scope', 'unmapped app-management route is denied by scope guard');
 
     const revokeRes = await request({ ...base, path: '/api/apps/popcorn_vote/revoke', method: 'POST', headers: { Cookie: cookie } });
     assertEq(revokeRes.status, 200, 'POST /api/apps/:key/revoke succeeds');

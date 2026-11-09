@@ -27,6 +27,7 @@ const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const Database = require('better-sqlite3');
 const path = require('path');
+const { scopeForApiRoute } = require('./lib/scope-display');
 const fs = require('fs');
 const webpush = require('web-push');
 const crypto = require('crypto');
@@ -341,6 +342,14 @@ function recordSessionStart(req, user, device) {
 //   4. Unauthenticated → 401.
 // Ahead of all of these, `Authorization: PhattId <assertion>` is handled
 // by authenticatePhattId() below and never falls through.
+function enforceAppTokenScope(req, res, next) {
+  const scopes = tokenScopes(req);
+  if (scopes === null) return next();
+  const required = scopeForApiRoute(req.method, req.originalUrl);
+  if (required && scopes.includes(required)) return next();
+  return res.status(403).json({ error: 'insufficient_scope', required });
+}
+
 function authenticate(req, res, next) {
   const authHeader = req.get('authorization') || '';
   if (/^PhattId(\s|$)/i.test(authHeader)) {
@@ -380,7 +389,7 @@ function authenticate(req, res, next) {
         }
       });
     }
-    return next();
+    return enforceAppTokenScope(req, res, next);
   }
   const headerUser = req.get('x-authentik-username');
   if (headerUser) {
