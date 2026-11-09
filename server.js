@@ -27,6 +27,7 @@ const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const Database = require('better-sqlite3');
 const path = require('path');
+const { scopeForApiRoute } = require('./lib/scope-display');
 const fs = require('fs');
 const webpush = require('web-push');
 const crypto = require('crypto');
@@ -335,6 +336,14 @@ function recordSessionStart(req, user, device) {
 //   3. Session-cookie — established by /api/login (LAN fallback) or by
 //      the header-trust layer above; survives across requests.
 //   4. Unauthenticated → 401.
+function enforceAppTokenScope(req, res, next) {
+  const scopes = tokenScopes(req);
+  if (scopes === null) return next();
+  const required = scopeForApiRoute(req.method, req.originalUrl);
+  if (required && scopes.includes(required)) return next();
+  return res.status(403).json({ error: 'insufficient_scope', required });
+}
+
 function authenticate(req, res, next) {
   const authHeader = req.get('authorization') || '';
   const bearerMatch = authHeader.match(/^Bearer\s+(\S+)$/i);
@@ -371,7 +380,7 @@ function authenticate(req, res, next) {
         }
       });
     }
-    return next();
+    return enforceAppTokenScope(req, res, next);
   }
   const headerUser = req.get('x-authentik-username');
   if (headerUser) {
