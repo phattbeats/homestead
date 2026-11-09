@@ -40,7 +40,7 @@ function mint(privateKey, claims) {
 function claimsFor(username, over) {
   const now = Math.floor(Date.now() / 1000);
   return Object.assign({
-    sub: `uuid-${username}`, member: true, username, name: username, aud: AUD, iat: now, exp: now + 300,
+    sub: `uuid-${username}`, member: true, username, name: username, groups: ['household'], aud: AUD, iat: now, exp: now + 300,
   }, over || {});
 }
 
@@ -223,12 +223,70 @@ async function httpTest() {
     db.prepare("INSERT INTO identity_links (user_id, provider, issuer, provider_subject) VALUES (?, 'authentik', 'https://auth.example.test/', 'sub-emily-1')").run(emilyId);
     const linked = await request('POST', `/api/tasks/${taskId}/toggle`, { token: mint(K.privateKey, claimsFor('not-emily', { sub: 'sub-emily-1' })) });
     assertEq([linked.status, linked.body && linked.body.done_by], [200, 'emily'], 'identity_links sub maps to emily');
+    process.env.PHATTID_PROVISION = '0'; // these check the lookup itself, not stand-ins (below)
     process.env.HUB_PHATTID_ISSUER = 'https://other-issuer.test/';
     const wrongIss = await request('GET', '/api/tasks', { token: mint(K.privateKey, claimsFor('not-emily', { sub: 'sub-emily-1' })) });
     assertEq(wrongIss.status, 401, 'HUB_PHATTID_ISSUER restricts the identity_links lookup');
     process.env.HUB_PHATTID_ISSUER = 'https://auth.example.test/';
     const hijack = await request('GET', '/api/tasks', { token: mint(K.privateKey, claimsFor('emily', { sub: 'sub-someone-else' })) });
     assertEq(hijack.status, 401, 'username never maps, linked or not');
+    delete process.env.HUB_PHATTID_ISSUER;
+    delete process.env.PHATTID_PROVISION;
+
+    // household (PHA-4352): the hub's claim is the only source
+    const grp = (u) => db.prepare("SELECT COUNT(*) c FROM user_groups ug JOIN groups g ON g.id = ug.group_id JOIN users u ON u.id = ug.user_id WHERE u.username = ? AND g.name = 'household'").get(u).c;
+    assertEq(grp('brandon'), 1, 'a household claim puts the linked user in household');
+    const outTok = mint(K.privateKey, claimsFor('brandon', { groups: [] }));
+    const out = await request('GET', '/api/lists', { token: outTok });
+    assertEq([out.status, out.body && out.body.error], [403, 'not_household'], 'no household claim -> 403 not_household, even when linked');
+    assertEq(grp('brandon'), 0, '... and the user leaves household');
+    const noGroups = await request('GET', '/api/tasks', { token: mint(K.privateKey, claimsFor('brandon', { groups: undefined })) });
+    assertEq(noGroups.status, 403, 'an assertion without groups (an older hub) is not household');
+    const otherGroup = await request('GET', '/api/tasks', { token: mint(K.privateKey, claimsFor('brandon', { groups: ['plex', 'admins'] })) });
+    assertEq(otherGroup.status, 403, 'other groups do not count');
+    await request('GET', '/api/tasks', { token: tok });
+    assertEq(grp('brandon'), 1, 'back in the group: back in household');
+    const adminGroups = () => db.prepare("SELECT group_concat(g.name) n FROM user_groups ug JOIN groups g ON g.id = ug.group_id WHERE ug.user_id = (SELECT id FROM users WHERE username = 'admin') ORDER BY g.name").get().n || '';
+    const adminBefore = adminGroups().split(',').filter(n => n !== 'household').sort().join(',');
+    await request('GET', '/api/tasks', { token: mint(K.privateKey, claimsFor('admin', { groups: [] })) });
+    assertEq(adminGroups().split(',').filter(Boolean).sort().join(','), adminBefore, 'only household is touched (admins stays)');
+    process.env.PHATTID_GROUP = 'family';
+    assertEq((await request('GET', '/api/tasks', { token: tok })).status, 403, 'PHATTID_GROUP picks the group');
+    assertEq((await request('GET', '/api/tasks', { token: mint(K.privateKey, claimsFor('brandon', { groups: ['family'] })) })).status, 200, '... and its claim lets in');
+    delete process.env.PHATTID_GROUP;
+
+    // a household member without a Homestead user: a stand-in, keyed on the uuid, never on the name
+    const iss = 'https://auth.example.test/';
+    process.env.HUB_PHATTID_ISSUER = iss;
+    const kev = await request('GET', '/api/lists', { token: mint(K.privateKey, claimsFor('Kevdog', { sub: 'uuid-kev', name: 'Kev' })) });
+    assertEq(kev.status, 200, 'household member with no user -> 200');
+    const kevRow = db.prepare("SELECT u.id, u.username, u.display, u.auth_provider, u.is_admin, u.pass_hash FROM users u JOIN identity_links il ON il.user_id = u.id WHERE il.provider = 'authentik' AND il.issuer = ? AND il.provider_subject = 'uuid-kev'").get(iss);
+    assertEq(kevRow && [kevRow.username, kevRow.display, kevRow.auth_provider, kevRow.is_admin, kevRow.pass_hash], ['kevdog', 'Kev', 'phatt_id', 0, ''], 'stand-in user: linked by uuid, no password, not admin');
+    assertEq(grp('kevdog'), 1, 'stand-in is in household');
+    const nUsers = db.prepare('SELECT COUNT(*) c FROM users').get().c;
+    await request('GET', '/api/tasks', { token: mint(K.privateKey, claimsFor('Kevdog-renamed', { sub: 'uuid-kev' })) });
+    assertEq(db.prepare('SELECT COUNT(*) c FROM users').get().c, nUsers, 'same uuid, new name: the same user, nothing new');
+    const asAdmin = await request('POST', `/api/tasks/${taskId}/toggle`, { token: mint(K.privateKey, claimsFor('admin', { sub: 'uuid-renamed-to-admin' })) });
+    assertEq(asAdmin.status, 200, 'a household PHATT ID named admin gets in ...');
+    assert(asAdmin.body && asAdmin.body.done_by !== 'admin' && /^admin-\d+$/.test(asAdmin.body.done_by), '... as a new admin-N, never the admin', asAdmin.body && asAdmin.body.done_by);
+    const outsider = await request('GET', '/api/tasks', { token: mint(K.privateKey, claimsFor('stranger', { sub: 'uuid-stranger', groups: [] })) });
+    assertEq(outsider.status, 403, 'not in the household: no user made');
+    assertEq(db.prepare("SELECT COUNT(*) c FROM users WHERE username = 'stranger'").get().c, 0, 'no stranger row');
+    const outScope = await request('GET', '/api/agent-tokens', { token: mint(K.privateKey, claimsFor('scoper', { sub: 'uuid-scoper' })) });
+    assertEq([outScope.status, db.prepare("SELECT COUNT(*) c FROM users WHERE username = 'scoper'").get().c], [403, 0], 'an out-of-table route makes no user');
+    process.env.PHATTID_PROVISION = '0';
+    assertEq((await request('GET', '/api/tasks', { token: mint(K.privateKey, claimsFor('newbie', { sub: 'uuid-newbie' })) })).status, 401, 'PHATTID_PROVISION=0: unlinked household member -> 401');
+    delete process.env.PHATTID_PROVISION;
+
+    // the member links their own account later: the link moves off the stand-in
+    const emilyHas = (sub) => db.prepare("SELECT COUNT(*) c FROM identity_links WHERE user_id = ? AND provider_subject = ?").get(emilyId, sub).c;
+    assertEq(phattId.takeOverStandIn(db, kevRow.id, emilyId, 'authentik', iss, 'uuid-kev'), true, 'stand-in link moves to the real account');
+    assertEq(emilyHas('uuid-kev'), 1, 'emily now holds uuid-kev');
+    const afterMove = await request('POST', `/api/tasks/${taskId}/toggle`, { token: mint(K.privateKey, claimsFor('Kevdog', { sub: 'uuid-kev' })) });
+    assertEq(afterMove.body && afterMove.body.done_by, 'emily', 'that PHATT ID is now emily');
+    assertEq(grp('kevdog'), 0, 'the old stand-in leaves household');
+    const brandonLinkOwner = db.prepare("SELECT user_id FROM identity_links WHERE provider_subject = 'uuid-brandon'").get().user_id;
+    assertEq(phattId.takeOverStandIn(db, brandonLinkOwner, emilyId, 'authentik', 'https://auth.example.test/', 'uuid-brandon'), false, 'a real (non stand-in) user keeps its link: still a collision');
     delete process.env.HUB_PHATTID_ISSUER;
 
     // out-of-scope routes: denied even for the admin user

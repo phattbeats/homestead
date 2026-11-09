@@ -98,6 +98,7 @@ Changing it later does nothing; rotate passwords in-app. (Deleting
 | `KAVITA_URL`, `KAVITA_API_KEY` | no  | Enables the optional Kavita library sync.                            |
 | `PHATTID_HUB_URL` / `PHATTID_HUB_KEY` | no | Enables `Authorization: PhattId` assertions (see [PHATT ID assertions](#phatt-id-assertions)). |
 | `PHATTID_AUD`, `PHATTID_SCOPES` | no | Expected assertion audience and scope list for PhattId requests. |
+| `PHATTID_GROUP`, `PHATTID_PROVISION` | no | The PHATT ID group a PhattId request needs (default `household`); `0` turns off stand-in users for unlinked members. |
 
 ## Data
 
@@ -278,9 +279,18 @@ and `iat`, and then treats the request as that member.
   (restricted to `HUB_PHATTID_ISSUER` when set). That link is the one a
   member makes once in Settings, Link PHATT ID (provider `authentik`; its
   subject is the Authentik user uuid, the same `sub` the hub signs). Never by
-  username: PHATT ID usernames are member-chosen and can be renamed. Users and
-  links are never created from an assertion (unlinked: 401 `unknown_user`)
-  and group membership is not changed.
+  username: PHATT ID usernames are member-chosen and can be renamed.
+- **Household comes from PHATT ID.** The hub signs the member's allow-listed
+  Authentik groups into `groups`. Without `PHATTID_GROUP` (default
+  `household`) there, a PhattId request answers 403 `not_household`, linked
+  or not. With it, a member who has no Homestead user yet gets a stand-in on
+  first use: a new user (`auth_provider` `phatt_id`, no password, not admin)
+  named after their PHATT ID username (`-2`, `-3` when that is taken; never an
+  existing user), linked to their uuid. `PHATTID_PROVISION=0` turns stand-ins
+  off (unlinked: 401 `unknown_user`). On every PhattId request the user's
+  membership of that one group follows the claim; no other group changes.
+  When the member later links their own account with Link PHATT ID, the link
+  moves off the stand-in (password-less, one link) to that account.
 - **Deny by default.** A PhattId request reaches only: `GET /api/me/snapshot`
   (`read:me`); the `/api/lists` and `/api/list-items` routes (`read:lists` /
   `write:lists`); `GET/POST /api/tasks`, `PUT/DELETE /api/tasks/:id`,

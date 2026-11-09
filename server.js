@@ -414,8 +414,11 @@ function authenticate(req, res, next) {
 }
 
 // PHATT ID assertion layer (lib/phatt-id.js). Off unless PHATTID_HUB_URL
-// or PHATTID_HUB_KEY is set. Verifies the hub-signed assertion, maps it
-// to an EXISTING user (never provisions, never touches groups), and
+// or PHATTID_HUB_KEY is set. Verifies the hub-signed assertion, refuses
+// anyone the hub does not put in the household group (403
+// not_household), maps it to the member's linked user (or a stand-in
+// made on first use, keyed on the PHATT ID uuid), keeps that user's
+// household membership in step with the claim (that group only), and
 // only lets the request through to a (method, path) in the fixed
 // PhattId route table whose scope is configured — deny-by-default,
 // because most routes are guarded by `auth` alone and requireScope()
@@ -429,12 +432,19 @@ async function authenticatePhattId(req, res, next, token) {
   if (!cfg) return res.status(401).json({ error: 'phatt_id_disabled' });
   const claims = token ? await phattIdKeys.verify(token, cfg) : null;
   if (!claims) return res.status(401).json({ error: 'invalid_assertion' });
-  const u = phattId.resolveUser(db, claims);
-  if (!u) return res.status(401).json({ error: 'unknown_user' });
   const required = phattId.requiredScope(req.method, req.originalUrl);
   if (!required || !cfg.scopes.includes(required)) {
     return res.status(403).json({ error: 'insufficient_scope', required: required || undefined });
   }
+  if (!phattId.inGroup(claims, cfg)) {
+    // out of the household now: a linked user loses the group here too
+    const was = phattId.resolveUser(db, claims);
+    if (was) phattId.syncGroup(db, was.id, claims, cfg);
+    return res.status(403).json({ error: 'not_household' });
+  }
+  const u = phattId.resolveOrProvision(db, claims, cfg);
+  if (!u) return res.status(401).json({ error: 'unknown_user' });
+  phattId.syncGroup(db, u.id, claims, cfg);
   req.sessionID = undefined;
   req.session.user = {
     username: u.username,
@@ -1944,7 +1954,14 @@ app.post('/api/me/identities/link/confirm', auth, (req, res) => {
     return res.status(410).json({ error: 'handle_invalid_or_expired', message: 'Link session was already used or expired.' });
   }
   try {
-    const result = identity.linkIdentity(db, me.id, v.provider, v.issuer, v.validated_subject);
+    let result;
+    try {
+      result = identity.linkIdentity(db, me.id, v.provider, v.issuer, v.validated_subject);
+    } catch (e) {
+      // the household stand-in made for this PHATT ID (lib/phatt-id.js): the member's real account takes the link over
+      if (e.code !== 'identity_collision' || !phattId.takeOverStandIn(db, e.conflictingUserId, me.id, v.provider, v.issuer, v.validated_subject)) throw e;
+      result = { id: null, alreadyLinked: false, movedFromStandIn: true };
+    }
     res.status(result.alreadyLinked ? 200 : 201).json({
       ok: true,
       alreadyLinked: !!result.alreadyLinked,
