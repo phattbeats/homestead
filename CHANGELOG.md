@@ -4,7 +4,7 @@
 
 ### PHATT ID assertions
 
-Homestead accepts `Authorization: PhattId <assertion>`: a short-lived, Ed25519-signed PHATT ID assertion forwarded by a trusted PHATT server (The Lodge) on behalf of the signed-in member. Off unless `PHATTID_HUB_URL` or `PHATTID_HUB_KEY` is set; `PHATTID_AUD` (default `life.phatt.vip`, Homestead's own host) and `PHATTID_SCOPES` (default `read:me read:lists write:lists read:tasks write:tasks read:events`) tune it. The member is matched through `identity_links` or by existing username and is never created. PhattId requests reach only a fixed route table (snapshot, lists, tasks, events reads) and never get a session cookie. Everything else answers 403. See README, "PHATT ID assertions".
+Homestead accepts `Authorization: PhattId <assertion>`: a short-lived, Ed25519-signed PHATT ID assertion forwarded by a trusted PHATT server (The Lodge) on behalf of the signed-in member. Off unless `PHATTID_HUB_URL` or `PHATTID_HUB_KEY` is set; `PHATTID_AUD` (default `life.phatt.vip`, Homestead's own host) and `PHATTID_SCOPES` (default `read:me read:lists write:lists read:tasks write:tasks read:events`) tune it. The member is matched only through the `identity_links` row they made with Link PHATT ID (provider `authentik`), never by username, and is never created. v0.6.4 also matched by equal username; v0.6.5 drops that, because PHATT ID usernames are member-chosen. PhattId requests reach only a fixed route table (snapshot, lists, tasks, events reads) and never get a session cookie. Everything else answers 403. See README, "PHATT ID assertions".
 
 ### The Forum: board UI with three switchable skins
 

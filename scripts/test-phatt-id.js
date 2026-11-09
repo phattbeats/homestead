@@ -141,6 +141,11 @@ async function httpTest() {
   });
   const noCookie = (r, label) => assert(!r.headers['set-cookie'], `${label}: no Set-Cookie`, JSON.stringify(r.headers['set-cookie']));
 
+  // Members are matched only through the link they made in Homestead (provider 'authentik', subject = PHATT ID uuid)
+  const link = (username, sub, provider = 'authentik') => db.prepare("INSERT INTO identity_links (user_id, provider, issuer, provider_subject) VALUES ((SELECT id FROM users WHERE username = ?), ?, 'https://auth.example.test/', ?)").run(username, provider, sub);
+  link('brandon', 'uuid-brandon');
+  link('admin', 'uuid-admin');
+
   try {
     const tok = mint(K.privateKey, claimsFor('brandon'));
 
@@ -203,9 +208,15 @@ async function httpTest() {
     assertEq(db.prepare('SELECT COUNT(*) c FROM users').get().c, usersBefore, 'no user row created');
     assertEq(db.prepare("SELECT COUNT(*) c FROM users WHERE username = 'mallory'").get().c, 0, 'mallory does not exist');
 
-    // username match is case-insensitive like the rest of Homestead
-    const upper = await request('GET', '/api/tasks', { token: mint(K.privateKey, claimsFor('Brandon')) });
-    assertEq(upper.status, 200, 'username claim matches case-insensitively');
+    // never by username: an unlinked PHATT ID named like a Homestead user is nobody (the name is member-chosen)
+    const byName = await request('GET', '/api/tasks', { token: mint(K.privateKey, claimsFor('emily')) });
+    assertEq([byName.status, byName.body && byName.body.error], [401, 'unknown_user'], 'equal username without a link -> 401 unknown_user');
+    const byNameAdmin = await request('GET', '/api/tasks', { token: mint(K.privateKey, claimsFor('admin', { sub: 'uuid-renamed-to-admin' })) });
+    assertEq(byNameAdmin.status, 401, 'a PHATT ID renamed to admin is not the admin');
+    // only an authentik link counts: a header_trust row with that subject does not
+    link('emily', 'uuid-hdr', 'header_trust');
+    const viaHdr = await request('GET', '/api/tasks', { token: mint(K.privateKey, claimsFor('x', { sub: 'uuid-hdr' })) });
+    assertEq(viaHdr.status, 401, 'header_trust link is not a PHATT ID link');
 
     // identity_links by sub wins over username
     const emilyId = db.prepare("SELECT id FROM users WHERE username = 'emily'").get().id;
@@ -217,7 +228,7 @@ async function httpTest() {
     assertEq(wrongIss.status, 401, 'HUB_PHATTID_ISSUER restricts the identity_links lookup');
     process.env.HUB_PHATTID_ISSUER = 'https://auth.example.test/';
     const hijack = await request('GET', '/api/tasks', { token: mint(K.privateKey, claimsFor('emily', { sub: 'sub-someone-else' })) });
-    assertEq(hijack.status, 401, 'username fallback refused when the user is linked to a different subject under the issuer');
+    assertEq(hijack.status, 401, 'username never maps, linked or not');
     delete process.env.HUB_PHATTID_ISSUER;
 
     // out-of-scope routes: denied even for the admin user

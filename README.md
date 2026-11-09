@@ -275,10 +275,12 @@ and `iat`, and then treats the request as that member.
   `read:me read:lists write:lists read:tasks write:tasks read:events`.
   It can only narrow the route table below.
 - **Mapping:** the assertion's `sub` is looked up in `identity_links`
-  (restricted to `HUB_PHATTID_ISSUER` when set); otherwise an existing user
-  whose username equals the `username` claim. Users are never created from
-  an assertion (unknown user: 401 `unknown_user`) and group membership is
-  not changed.
+  (restricted to `HUB_PHATTID_ISSUER` when set). That link is the one a
+  member makes once in Settings, Link PHATT ID (provider `authentik`; its
+  subject is the Authentik user uuid, the same `sub` the hub signs). Never by
+  username: PHATT ID usernames are member-chosen and can be renamed. Users and
+  links are never created from an assertion (unlinked: 401 `unknown_user`)
+  and group membership is not changed.
 - **Deny by default.** A PhattId request reaches only: `GET /api/me/snapshot`
   (`read:me`); the `/api/lists` and `/api/list-items` routes (`read:lists` /
   `write:lists`); `GET/POST /api/tasks`, `PUT/DELETE /api/tasks/:id`,
