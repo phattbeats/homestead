@@ -274,6 +274,9 @@ app.use(express.json({
     }
   },
 }));
+// Arcade delete/export hooks (PHA-4102): HMAC-signed by arcade.phatt.vip,
+// no session. Mounted before the session/auth layers on purpose.
+app.use('/hooks', require('./lib/arcade-hooks').router({ db }));
 // fail-closed session secret. Throws at boot if SESSION_SECRET
 // is missing, empty, a known placeholder, or shorter than 32 chars. Same
 // posture as `lib/secret-box.js` loadKey() for CALENDAR_CRED_KEY — we'd
