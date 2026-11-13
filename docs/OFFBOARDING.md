@@ -28,7 +28,7 @@ Effect of step 1: no new SSO logins anywhere. Existing app sessions live on unti
 | Ghost | Staff users: Settings > Staff > Suspend. Members: Members > the member > delete or unsubscribe. Ghost has no SSO tie, so nothing is automatic. | MANUAL UNVERIFIED |
 | Nextcloud | `occ user:disable <uid>` (or OCS `PUT /ocs/v1.php/cloud/users/<uid>/disable`). Disabling logs out sessions and app passwords. If login is OIDC-only, step 1 already blocks new logins. | MANUAL UNVERIFIED |
 | TeamSpeak | Kick + ban the client's identity/UID, remove server group, delete the privilege key if one was issued. Not tied to PHATT ID. | MANUAL UNVERIFIED |
-| SillyTavern | Multi-user mode: Admin panel > Users > disable the account. Not tied to PHATT ID unless fronted by Authentik forward-auth. | MANUAL UNVERIFIED |
+| SillyTavern | Multi-user mode: Admin panel > Users > disable the account. Not tied to PHATT ID unless fronted by Authentik forward-auth. On disk: record `data/_storage/<sha256("user:<handle>")>` (`enabled` flag) plus folder `data/<handle>/`. Disable = `enabled:false`; delete = remove both. | MANUAL, disk-level disable/delete TESTED 2026-11-13 (admin-UI path not run) |
 
 ## 3. Export on request — MANUAL
 Produce one folder `export-<date>-<ticketid>/`, hand over via a link that expires. Contents per app:
@@ -42,7 +42,7 @@ Produce one folder `export-<date>-<ticketid>/`, hand over via a link that expire
 
 ## 4. Delete, after export is confirmed — MANUAL
 1. Homestead: same command with `--delete` (refuses unless the export file exists and the user isn't the owner). Dry run is the default. **TESTED.**
-2. Ghost: delete member/staff. 3. Nextcloud: `occ user:delete <uid>` (removes files). 4. Plex: remove user. 5. TeamSpeak: remove identity DB entries. 6. SillyTavern: delete user data directory. 7. Clubhouse/Arcade: via delete hooks once PHA-4102 lands. 8. Authentik: delete the user last (so step 1's evidence stays reachable until verified).
+2. Ghost: delete member/staff. 3. Nextcloud: `docker exec -u abc nextcloud php /app/www/public/occ user:delete <uid>` (removes files; this container needs user `abc`, not www-data). TESTED 2026-11-08. 4. Plex: remove user. 5. TeamSpeak: remove identity DB entries. 6. SillyTavern: delete user data directory. 7. Clubhouse/Arcade: via delete hooks once PHA-4102 lands. 8. Authentik: delete the user last (so step 1's evidence stays reachable until verified).
 Known leftovers: free-text mentions of the person in other people's posts; backups (age out by retention, say so to the member).
 
 ## 5. Verification (evidence per app)
@@ -62,3 +62,6 @@ For each app record: how checked, result, date. Account gone or disabled means: 
 ## 6. Test record
 - Homestead export+delete: `node --require ./scripts/_test-bootstrap.js scripts/test-offboard-user.js` passes (2026-11-08, throwaway DB, real schema).
 - Live end-to-end on a throwaway PHATT ID: **not run.** Needs a throwaway account created in each app and admin access to each. See the issue for what's missing.
+- Nextcloud `occ user:disable` / `user:delete` on throwaway `zz-offboard-test`: enabled:false, then gone (2026-11-08). Homestead live DB: export+delete, 0 rows left, others untouched (2026-11-08).
+- SillyTavern throwaway `zz-offboard-test` (record + folder): created, `enabled:false`, deleted; both gone (2026-11-13).
+- Not run: Authentik, Ghost, Plex, TeamSpeak, Clubhouse/Arcade (no credentials/access yet).
