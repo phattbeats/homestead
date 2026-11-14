@@ -1,6 +1,6 @@
 # Removing someone from PHATT ID: runbook
 
-Status: **Homestead, Nextcloud, SillyTavern tested on the live app with a throwaway account. Authentik, Ghost, TeamSpeak tested on throwaway containers of the same image/version as prod. Plex and Clubhouse/Arcade not tested** (see section 6). Issue: PHA-5023. Related: PHA-4953 (Clubhouse cut-off), PHA-4102 (delete hooks), PHA-4090 (export/delete round trip), `docs/architecture/PASSWORD-RECOVERY.md`.
+Status: **Homestead, Nextcloud, SillyTavern tested on the live app with a throwaway account. Authentik, Ghost, TeamSpeak tested on throwaway containers of the same image/version as prod. Plex is a manual unshare step, accepted untested by Brandon. Clubhouse/Arcade not tested** (see section 6). Issue: PHA-5023. Related: PHA-4953 (Clubhouse cut-off), PHA-4102 (delete hooks), PHA-4090 (export/delete round trip), `docs/architecture/PASSWORD-RECOVERY.md`.
 
 Rules: a real member is never touched while testing. Use a `zz-offboard-<date>` account. No secrets in tickets or logs.
 
@@ -24,7 +24,7 @@ Effect of step 1: no new SSO logins anywhere. Existing app sessions live on unti
 |---|---|---|
 | Clubhouse + Arcade | Access cut within seconds of the PHATT ID going inactive (PHA-4953). Verify, don't assume. | AUTO |
 | Homestead | OIDC login fails. Existing cookie session persists until expiry; admin can't revoke it from the UI. Delete the user (section 4) to kill it. Local password, if any: set via `scripts/reset-owner-password.js` is NOT a disable. | AUTO (login) / MANUAL (live session) |
-| Plex | Remove share: Plex bridge, or Settings > Users & Sharing > remove friend. Also kill active streams. | MANUAL (bridge-assisted) UNVERIFIED |
+| Plex | Unshare every library the user has access to (Settings > Users & Sharing > user > untick all libraries / remove friend). Also kill active streams. | MANUAL (accepted untested by Brandon 2026-11-14) |
 | Ghost | Staff users: Settings > Staff > Suspend (Admin API `PUT /users/<id>/` `{"status":"inactive"}`). Members: Members > the member > delete (`DELETE /members/<id>/`). Ghost has no SSO tie, so nothing is automatic. | MANUAL, TESTED 2026-11-13 (throwaway ghost:6.72.0) |
 | Nextcloud | `docker exec -u abc nextcloud php /app/www/public/occ user:disable <uid>`. If login is OIDC-only, step 1 already blocks new logins. | MANUAL, TESTED 2026-11-08 |
 | TeamSpeak | ServerQuery (port 10011, serveradmin): `clientkick`, `banadd uid=<uid> banreason=...`, `servergroupdelclient`, `privilegekeylist` + `tokendelete token=<t>`. Not tied to PHATT ID. | MANUAL, ban/token/group TESTED 2026-11-13 (throwaway teamspeak:3.13); kick of a live client not run |
@@ -67,4 +67,4 @@ For each app record: how checked, result, date. Account gone or disabled means: 
 - Ghost (throwaway `zz-offboard-ghost`, ghost:6.72.0, sqlite): member created, CSV export contains it, `DELETE` 204, filter total 0. Contributor staff `zz-offboard-staff`: active -> inactive via API, delete 204, lookup 404 (2026-11-13).
 - TeamSpeak (throwaway `zz-offboard-ts3`, teamspeak:3.13): server group created, privilege key created then `tokendelete` -> 0 left, `banadd uid=` -> in banlist; then cleaned up, banlist empty (2026-11-13).
 - All throwaway containers, network and volumes removed after the run; no prod container touched.
-- Not run: **Plex** (a throwaway share needs a second plex.tv account; none exists, and the prod server is not a throwaway). **Clubhouse/Arcade** (export/delete hooks don't exist yet, PHA-4102/4090; PHA-4953 cut-off not observed).
+- Not run: **Plex** — Brandon 2026-11-14: no test needed, offboarding is a manual unshare of every library the user can access. **Clubhouse/Arcade** (export/delete hooks don't exist yet, PHA-4102/4090; PHA-4953 cut-off not observed).
