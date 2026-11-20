@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### The Forum: mood on member profiles
+
+Members can set a mood (one emoji plus up to 40 characters, e.g. `😤 suspicious`) in **User CP**. It shows as `mood: 😤 suspicious` in the postbit's member column in all three skins and stays visible on phones. Night Owl colours it aqua and yellow. A mood is part of the profile: unlike "now playing" it does not expire. Either half may be left blank, and clearing both removes it. API: `PATCH /api/forum/me` with `{ mood: { emoji, text } }` (or `null` to clear), returned as `mood` on `/api/forum/me` and on every postbit member. The emoji must be a single emoji; compound ones such as 👩‍💻, 🏳️‍🌈 and skin tones count as one. Letters, markup or two emoji get a 400. Stored in two new additive columns, `users.forum_mood` and `users.forum_mood_emoji`.
+
 ### The Forum: polls
 
 A thread can carry a poll: a question, 2–10 options, an optional closing time, and one vote per member. Voting again moves your vote, and you can take it back while the poll is open. Start one from **📊 Add a poll** in the New Thread form, or later from the thread (thread starter or an admin). The poll shows above the first post. The index sidebar gets a **📊 Poll** box with the newest open poll, and you can vote right there. In Night Owl it sits under the Shoutbox with aqua vote bars, as in the mockup. Poll threads show `Poll:` and a 📊 icon in the thread list. The thread starter or an admin can close or reopen a poll.

@@ -288,6 +288,41 @@ const getJson = async (user, urlPath) => (await call(user, 'GET', urlPath)).json
     assertEq(db.prepare("SELECT now_playing_kind k FROM users WHERE username='emily'").get().k, null, 'clear nulls every column');
   }
 
+  console.log('\nTest 11: mood on member profiles (PHA-4422)');
+  {
+    assertEq((await getJson('emily', '/api/forum/me')).mood, null, 'no mood by default');
+    const set = await call('emily', 'PATCH', '/api/forum/me', { mood: { emoji: '😤', text: '  suspicious \n of  the cat ' } });
+    assertEq(set.status, 200, 'set mood');
+    assertEq((await set.json()).mood, { emoji: '😤', text: 'suspicious of the cat' }, 'text whitespace-collapsed + trimmed');
+    const v = await getJson('brandon', `/api/forum/threads/${t1}`);
+    const emReply = v.replies.find((r) => r.member && r.member.username === 'emily');
+    assertEq(emReply && emReply.member.mood, { emoji: '😤', text: 'suspicious of the cat' }, 'postbit member carries mood');
+
+    // Day-one break: compound emoji are one emoji; letters/markup/doubles are not.
+    for (const e of ['👩‍💻', '🏳️‍🌈', '👍🏽', '🇺🇸', '1️⃣']) {
+      const r = await call('emily', 'PATCH', '/api/forum/me', { mood: { emoji: e, text: 'ok' } });
+      assertEq(r.status, 200, `accepts compound emoji ${e}`);
+    }
+    assertEq((await call('emily', 'PATCH', '/api/forum/me', { mood: { text: 'x'.repeat(40) } })).status, 200, 'accepts 40-char text');
+    for (const [body, label] of [
+      [{ mood: { emoji: '😤', text: 'x'.repeat(41) } }, '41-char text'],
+      [{ mood: { emoji: 'a', text: 'x' } }, 'letter as emoji'],
+      [{ mood: { emoji: '<b>', text: 'x' } }, 'markup as emoji'],
+      [{ mood: { emoji: '😤😤', text: 'x' } }, 'two emoji'],
+      [{ mood: { emoji: '😤x', text: 'x' } }, 'emoji + letter'],
+      [{ mood: 'grumpy' }, 'non-object'],
+      [{ mood: ['😤'] }, 'array'],
+      [{ mood: { text: 42 } }, 'non-string text'],
+    ]) assertEq((await call('emily', 'PATCH', '/api/forum/me', body)).status, 400, `rejects ${label}`);
+    assertEq((await getJson('emily', '/api/forum/me')).mood, { emoji: null, text: 'x'.repeat(40) }, 'rejected PATCH left mood intact');
+    await call('emily', 'PATCH', '/api/forum/me', { mood: { emoji: '☕' } });
+    await call('emily', 'PATCH', '/api/forum/me', { signature: 'sig only' });
+    assertEq((await getJson('emily', '/api/forum/me')).mood, { emoji: '☕', text: null }, 'emoji-only mood; unrelated PATCH keeps it');
+    assertEq((await (await call('emily', 'PATCH', '/api/forum/me', { mood: { emoji: ' ', text: ' ' } })).json()).mood, null, 'blank clears');
+    await call('emily', 'PATCH', '/api/forum/me', { mood: { emoji: '😤' } });
+    assertEq((await (await call('emily', 'PATCH', '/api/forum/me', { mood: null })).json()).mood, null, 'null clears');
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });
