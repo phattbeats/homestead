@@ -56,8 +56,11 @@ COPY public ./public
 # reports the real deployed commit instead of null. A build-arg
 # alone isn't visible to the running process -- it must be promoted to an
 # ENV to survive into the container's runtime environment.
+# APP_VERSION is the release tag without its leading `v`; /api/version
+# reports it ahead of package.json so the two cannot drift.
 ARG COMMIT_SHA
-ENV DATA_DIR=/data PORT=3080 NODE_ENV=production COMMIT_SHA=$COMMIT_SHA
+ARG APP_VERSION
+ENV DATA_DIR=/data PORT=3080 NODE_ENV=production COMMIT_SHA=$COMMIT_SHA APP_VERSION=$APP_VERSION
 VOLUME /data
 EXPOSE 3080
 CMD ["node", "server.js"]

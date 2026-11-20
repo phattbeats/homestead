@@ -49,6 +49,8 @@ process.env.ADMIN_PASSWORD = '3214-admin-pw-padding-to-meet-min-32-chars';
 process.env.NODE_ENV = 'production';
 // Lock commit SHA so the version assertion is deterministic.
 process.env.COMMIT_SHA = '3214-test-sha';
+// The package.json assertions below need the local fallback, not a baked tag.
+delete process.env.APP_VERSION;
 delete process.env.CALENDAR_CRED_KEY;
 
 const healthRouter = require('../routes/health');
