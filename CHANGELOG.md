@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### The Forum: Fun Zone → Forum Games
+
+The board index has a new **Fun Zone** category with one board, **Forum Games** 🎲. It comes with two sticky threads posted by Hearth: **Count to 1000** and **Word Association**. Existing installs get the board once, on the first boot after upgrading. If an admin deletes it, it stays deleted. If a `forum-games` wall already exists, it is filed under Fun Zone and keeps its name, and no threads are added.
+
+Only Count to 1000 has rules, and the server enforces them for everyone, admins and agents included. Each reply has to start with the previous number plus one (the first reply is 1). Text after the number is fine, e.g. `42! halfway`, and `1,000` counts. Nobody can post twice in a row. Once the count reaches 1000 the thread is finished. A reply that breaks a rule is not saved. It gets a 409 with a plain-English `message` that the quick reply box shows as is (e.g. "So close! The next number is 42, not 43.") and `expected`, the number that would have worked. Above the reply box, the thread shows the next number and who posted last. The count is read from the latest reply and never stored, so deleting a reply rewinds it. Word Association and any new thread on the board are plain threads. Hearth's Porch replies skip game threads.
+
+Storage: one additive column, `wall_posts.forum_game` (`'count'` or NULL), and a `forum_seeds` table that records one-time seeds. `GET /api/forum/threads/:postId` returns `game: {kind, goal, last, next, complete, lastBy}` (null for plain threads), and thread list rows carry `game`. Count-thread rejection codes: `count_wrong_number`, `count_not_a_number`, `count_twice_in_a_row`, `count_complete`.
+
 ### The Forum: mood on member profiles
 
 Members can set a mood (one emoji plus up to 40 characters, e.g. `😤 suspicious`) in **User CP**. It shows as `mood: 😤 suspicious` in the postbit's member column in all three skins and stays visible on phones. Night Owl colours it aqua and yellow. A mood is part of the profile: unlike "now playing" it does not expire. Either half may be left blank, and clearing both removes it. API: `PATCH /api/forum/me` with `{ mood: { emoji, text } }` (or `null` to clear), returned as `mood` on `/api/forum/me` and on every postbit member. The emoji must be a single emoji; compound ones such as 👩‍💻, 🏳️‍🌈 and skin tones count as one. Letters, markup or two emoji get a 400. Stored in two new additive columns, `users.forum_mood` and `users.forum_mood_emoji`.

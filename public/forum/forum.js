@@ -32,7 +32,7 @@
   var SKIN_KEYS = SKINS.map(function (s) { return s.key; });
   var SKIN_STORE = 'homestead.forumSkin';
   var COLLAPSE_STORE = 'homestead.forumCollapsed';
-  var BOARD_ICONS = { announcements: '📰', household: '🪑', introductions: '👋' };
+  var BOARD_ICONS = { announcements: '📰', household: '🪑', introductions: '👋', 'forum-games': '🎲' };
   var REACTIONS = [
     { key: '+1', emoji: '👍', label: 'Thanks' },
     { key: 'joy', emoji: '😂' },
@@ -63,7 +63,7 @@
       body: body === undefined ? undefined : JSON.stringify(body),
     }).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (j) {
-        if (!r.ok) { var e = new Error(j.error || ('http_' + r.status)); e.status = r.status; throw e; }
+        if (!r.ok) { var e = new Error(j.error || ('http_' + r.status)); e.status = r.status; e.detail = j.message || null; throw e; }
         return j;
       });
     });
@@ -572,7 +572,7 @@
         var icon = t.sticky ? '📌' : (t.hasPoll ? '📊' : (t.replies >= HOT_REPLIES ? '🔥' : '💬'));
         return '<div class="fx-trow' + (t.isNew ? ' unread' : '') + '">' +
           '<div class="ic" aria-hidden="true">' + icon + '</div>' +
-          '<div class="t">' + (t.sticky ? '<span class="fx-sticky">Sticky:</span> ' : '') + (t.hasPoll ? '<span class="fx-pollflag">Poll:</span> ' : '') + link({ post: t.id }, esc(t.title), 'fx-thread') +
+          '<div class="t">' + (t.sticky ? '<span class="fx-sticky">Sticky:</span> ' : '') + (t.hasPoll ? '<span class="fx-pollflag">Poll:</span> ' : '') + (t.game ? '<span class="fx-pollflag">Game:</span> ' : '') + link({ post: t.id }, esc(t.title), 'fx-thread') +
             (t.isNew ? ' <span class="fx-badge">NEW</span>' : '') +
             '<div class="by">' + who(t.author, { plain: true }) + ' · ' + esc(when(t.createdAt)) + '</div></div>' +
           '<div class="lp">' + esc(when(t.lastPost.at)) + '<br>by ' + who(t.lastPost.by, { plain: true }) + '</div>' +
@@ -626,7 +626,8 @@
     var err = form.querySelector('.fx-err') || form.appendChild(Object.assign(document.createElement('p'), { className: 'fx-err', role: 'alert' }));
     err.textContent = '';
     return promise.catch(function (e) {
-      err.textContent = 'Could not post: ' + e.message;
+      // e.detail: a server-written sentence (Forum Games rules), shown as is.
+      err.textContent = e.detail || ('Could not post: ' + e.message);
       btns.forEach(function (b) { b.disabled = false; });
     });
   }
@@ -643,9 +644,10 @@
       var replies = d.replies.map(function (r, i) {
         return postbit({ member: r.member, author: r.author, at: r.createdAt, title: 'Re: ' + t.title, n: i + 1, text: body(r.body), raw: r.body });
       }).join('');
-      var quick = '<form class="fx-quick" id="quickReply">' +
+      var g = d.game;
+      var quick = gameStrip(g) + '<form class="fx-quick" id="quickReply">' +
         '<div class="fx-quick-who"><b>Quick Reply</b>' + smilies('quickReply') + '</div>' +
-        '<div class="fx-quick-msg"><textarea name="text" rows="4" placeholder="Type your reply…" aria-label="Reply" required></textarea>' +
+        '<div class="fx-quick-msg"><textarea name="text" rows="4" placeholder="' + (g && g.next ? esc(String(g.next)) : 'Type your reply…') + '" aria-label="Reply" required></textarea>' +
         '<div class="fx-btns"><button type="submit" class="fx-btn fx-primary">Post Quick Reply</button></div></div></form>';
       var me = state.me.user;
       var mayPoll = !d.poll && (me.isAdmin || (t.author && t.author.username === me.username));
@@ -679,6 +681,17 @@
           .then(function () { var q = root.querySelector('.fx-post:last-of-type'); if (q) q.scrollIntoView({ block: 'center' }); }));
       });
     });
+  }
+  // Count-to-1000 status above the reply box. The server enforces the
+  // rules; this only says what the next reply should be.
+  function gameStrip(g) {
+    if (!g || g.kind !== 'count') return '';
+    var me = state.me.user;
+    var line;
+    if (g.complete) line = '🎉 We made it to ' + num(g.goal) + '!';
+    else if (g.lastBy && g.lastBy.username === me.username) line = 'You posted ' + num(g.last) + '. Wait for someone else to post ' + num(g.next) + '.';
+    else line = 'Next number: <b>' + num(g.next) + '</b> of ' + num(g.goal) + (g.lastBy ? ' · last by ' + who(g.lastBy, { plain: true }) : '');
+    return '<p class="fx-game" role="status">🔢 ' + line + '</p>';
   }
   function threadBody(t) {
     var out = t.text ? body(t.text) : '';

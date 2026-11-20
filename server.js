@@ -68,6 +68,7 @@ const analytics = require('./lib/analytics');
 const invites = require('./lib/invites');
 const wallMembers = require('./lib/wall-members');
 const forum = require('./lib/forum');
+const forumGames = require('./lib/forum-games');
 const porchSweep = require('./lib/porch/sweep');
 const porchContract = require('./lib/porch/participation-contract');
 const porchComprehension = require('./lib/porch/comprehension');
@@ -172,7 +173,10 @@ hearthCharacters.migrate(db);
 // characters. Idempotent; runs after walls.migrate() so there's
 // something to back-fill, and self-heals walls created since the last
 // boot on every restart.
-hearthCharacters.ensureBuiltinAgentUser(db);
+const hearthUserId = hearthCharacters.ensureBuiltinAgentUser(db);
+// Fun Zone → Forum Games (PHA-4423): once per install, threads by Hearth.
+// A brand-new board gets the same Hearth membership backfill as the rest.
+if (forumGames.seedFunZone(db, hearthUserId).created) hearthCharacters.ensureBuiltinAgentUser(db);
 // shouts table; live events ride wall-events under a reserved channel.
 shoutbox.migrate(db, { publish: (event, data) => wallEvents.publish(shoutbox.CHANNEL, event, data) });
 // media_queue, the table behind Hearth's enqueue_media action.
@@ -2792,7 +2796,9 @@ app.get('/api/media-frames/:mediaId/:filename', auth, (req, res) => {
 // any row. Wall-not-found and not-a-member both surface as 404 — wall
 // existence is private to its members.
 function wallsErr(res, e) {
-  if (e && e.status) return res.status(e.status).json({ error: e.code || 'error' });
+  // e.payload: extra fields for the client, e.g. lib/forum-games.js's
+  // friendly rejection message.
+  if (e && e.status) return res.status(e.status).json({ ...(e.payload || {}), error: e.code || 'error' });
   return res.status(500).json({ error: 'internal_error', detail: e && e.message });
 }
 app.get('/api/walls', auth, (req, res) => {
@@ -4606,6 +4612,11 @@ async function porchOnDecision(decision, log) {
   const post = db.prepare('SELECT * FROM wall_posts WHERE id = ?').get(decision.postId);
   if (!post) {
     log(`decision skipped, post gone: wall=${decision.wallId} post=${decision.postId} agent=${decision.agentUserId}`);
+    return;
+  }
+  // Rule-bound game threads (count to 1000) would reject agent chatter.
+  if (post.forum_game) {
+    log(`decision skipped, game thread: wall=${decision.wallId} post=${decision.postId} agent=${decision.agentUserId}`);
     return;
   }
 

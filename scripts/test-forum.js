@@ -89,8 +89,8 @@ const getJson = async (user, urlPath) => (await call(user, 'GET', urlPath)).json
   {
     const idx = await getJson('brandon', '/api/forum/index');
     const boards = idx.categories.flatMap((c) => c.boards);
-    assertEq(boards.map((b) => b.slug), ['announcements', 'household', 'introductions'], 'exactly the three starter boards, in order');
-    assertEq(idx.categories.map((c) => c.name), ['Homestead', 'Community'], 'grouped into two categories');
+    assertEq(boards.map((b) => b.slug), ['announcements', 'household', 'introductions', 'forum-games'], 'the three starter boards plus Forum Games, in order');
+    assertEq(idx.categories.map((c) => c.name), ['Homestead', 'Community', 'Fun Zone'], 'grouped into three categories');
     assertEq(boards.find((b) => b.slug === 'household').name, 'General Chit-Chat', 'existing Porch wall is General Chit-Chat');
     const wallCount = db.prepare('SELECT COUNT(*) c FROM walls').get().c;
     require('../lib/forum').seed(db);
@@ -199,8 +199,9 @@ const getJson = async (user, urlPath) => (await call(user, 'GET', urlPath)).json
     const md = `${String(today.getUTCMonth() + 1).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
     db.prepare("UPDATE users SET birthday = ? WHERE username='emily'").run(md);
     const st = await getJson('brandon', '/api/forum/stats');
-    assertEq(st.threads, 2, 'stats.threads');
-    assertEq(st.posts, 4, 'stats.posts');
+    // + the two seeded Forum Games threads (lib/forum-games.js)
+    assertEq(st.threads, 4, 'stats.threads');
+    assertEq(st.posts, 6, 'stats.posts');
     assert(st.members >= 3, 'stats.members');
     assertEq(st.birthdaysToday.map((b) => b.username), ['emily'], 'birthdays today');
     assert(st.newestMember && st.newestMember.username, 'newest member present');
