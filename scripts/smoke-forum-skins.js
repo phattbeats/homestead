@@ -100,7 +100,10 @@ async function seed() {
   for (const u of ['tyler', 'emily']) await as(u, 'GET', '/api/me');
   const mmdd = new Date().toISOString().slice(5, 10);
   await as('emily', 'PATCH', '/api/forum/me', { birthday: mmdd, signature: 'grocery run captain' });
-  await as('tyler', 'PATCH', '/api/forum/me', { signature: "If it's not on the forum, it didn't happen." });
+  await as('tyler', 'PATCH', '/api/forum/me', {
+    signature: "If it's not on the forum, it didn't happen.",
+    now_playing: { kind: 'listening', text: 'Daft Punk — Discovery' },
+  });
   const post = (user, slug, title, text) => as(user, 'POST', `/api/walls/${slug}/posts`, { kind: 'text', title, text_body: text });
   const reply = (user, id, body) => as(user, 'POST', `/api/walls/posts/${id}/comments`, { body });
 
@@ -202,6 +205,8 @@ async function seed() {
     const wgo = await page.textContent('.fx-wgo');
     assert(/Currently Active Users/.test(wgo) && /Today's Birthdays/.test(wgo) && /Homestead Statistics/.test(wgo),
       "What's Going On? shows Who's Online, birthdays and stats");
+    assert(/Tyler is listening to: Daft Punk — Discovery/i.test(await page.textContent('.fx-wgo-online')),
+      "Who's Online shows tyler's now-playing status", await page.textContent('.fx-wgo-online'));
     await shot(page, 'index-woodgrain-desktop');
 
     // ---- the sidebar poll: vote in place ----
@@ -304,10 +309,12 @@ async function seed() {
       posts: document.querySelectorAll('.fx-post').length,
       quote: !!document.querySelector('.fx-post .fx-quote'),
       sig: !!document.querySelector('.fx-sig'),
+      np: (document.querySelector('.fx-post .fx-sig .fx-np') || {}).textContent || null,
       rank: document.querySelector('.fx-rank') && document.querySelector('.fx-rank').textContent,
       crumbs: document.querySelector('.fx-crumb').textContent,
     }));
     assertEq(thread.posts, 3, 'thread shows the opener + 2 replies');
+    assert(/Listening to: Daft Punk/.test(thread.np || ''), "postbit signature shows the author's now-playing", thread.np);
     assert(thread.quote && thread.sig && thread.rank, 'postbit shows quote block, signature and rank', JSON.stringify(thread));
     assert(/The Forum.*General Chit-Chat.*porch light/.test(thread.crumbs), 'breadcrumbs: Forum › board › thread', thread.crumbs);
     await shot(page, 'thread-woodgrain-desktop');

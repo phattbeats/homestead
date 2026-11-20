@@ -127,6 +127,8 @@ a:hover{color:var(--pink)}
 .fx-pbody{font-size:13px;line-height:1.55}
 .fx-quote{border:1px dashed var(--violet);background:var(--deeper);color:var(--lilac)}
 .fx-sig{border-top:1px dashed var(--rule);font-size:10px;color:var(--lilac);text-align:center}
+.fx-np{color:var(--aqua)}
+.fx-np i{color:var(--yellow);text-shadow:0 0 4px var(--pink)}
 .fx-emo{background:#000;border:1px solid var(--rule);color:#e8e8ff;font-size:11px}
 .fx-emo.on{border-color:var(--pink);color:var(--pink)}
 .fx-linkcard{border:1px dashed var(--violet);background:var(--deeper)}
