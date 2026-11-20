@@ -244,6 +244,50 @@ const getJson = async (user, urlPath) => (await call(user, 'GET', urlPath)).json
     assertEq(intro && intro.description, 'New here? Say hello.', 'seeded boards carry their description');
   }
 
+  console.log('\nTest 10: "now playing" status (PHA-4420)');
+  {
+    const me0 = await getJson('emily', '/api/forum/me');
+    assertEq(me0.nowPlaying, null, 'no status by default (nothing is auto-filled)');
+    const set = await call('emily', 'PATCH', '/api/forum/me', { now_playing: { kind: 'listening', text: '  Boards of\n Canada  ' } });
+    assertEq(set.status, 200, 'set now_playing');
+    const np = (await set.json()).nowPlaying;
+    assertEq([np.kind, np.text], ['listening', 'Boards of Canada'], 'text whitespace-collapsed + trimmed');
+    assert(np.setAt, 'setAt stamped');
+    const on = await getJson('brandon', '/api/forum/online');
+    const em = on.members.find((m) => m.username === 'emily');
+    assertEq(em && em.nowPlaying && em.nowPlaying.text, 'Boards of Canada', '/api/forum/online carries nowPlaying');
+    const v = await getJson('brandon', `/api/forum/threads/${t1}`);
+    const emReply = v.replies.find((r) => r.member && r.member.username === 'emily');
+    assert(emReply, 'emily has a reply in t1');
+    if (emReply) assertEq(emReply.member.nowPlaying.text, 'Boards of Canada', 'postbit member carries nowPlaying');
+    assertEq((await getJson('emily', '/api/forum/me')).nowPlaying.kind, 'listening', '/api/forum/me carries nowPlaying');
+
+    for (const [body, label] of [
+      [{ now_playing: { kind: 'dancing', text: 'x' } }, 'unknown kind'],
+      [{ now_playing: { text: 'x'.repeat(121) } }, 'over-long text'],
+      [{ now_playing: 'just a string' }, 'non-object'],
+      [{ now_playing: ['x'] }, 'array'],
+      [{ now_playing: { text: 42 } }, 'non-string text'],
+    ]) assertEq((await call('emily', 'PATCH', '/api/forum/me', body)).status, 400, `rejects ${label}`);
+    assertEq((await getJson('emily', '/api/forum/me')).nowPlaying.text, 'Boards of Canada', 'rejected PATCH left status intact');
+
+    await call('emily', 'PATCH', '/api/forum/me', { signature: 'sig only' });
+    assertEq((await getJson('emily', '/api/forum/me')).nowPlaying.text, 'Boards of Canada', 'unrelated PATCH keeps status');
+
+    // Day-one break: a forgotten status must not haunt the postbit forever.
+    const forum = require('../lib/forum');
+    db.prepare(`UPDATE users SET now_playing_at = datetime('now', '-${forum.NOW_PLAYING_TTL_HOURS} hours', '-1 minute') WHERE username = 'emily'`).run();
+    assertEq((await getJson('emily', '/api/forum/me')).nowPlaying, null, 'status expires after the TTL');
+    assertEq((await getJson('brandon', '/api/forum/online')).members.find((m) => m.username === 'emily').nowPlaying, null, 'expired status hidden from online');
+    const reset = await call('emily', 'PATCH', '/api/forum/me', { now_playing: { kind: 'watching', text: 'Twin Peaks' } });
+    assertEq((await reset.json()).nowPlaying.kind, 'watching', 're-setting restarts the clock');
+    const cleared = await call('emily', 'PATCH', '/api/forum/me', { now_playing: null });
+    assertEq((await cleared.json()).nowPlaying, null, 'null clears');
+    await call('emily', 'PATCH', '/api/forum/me', { now_playing: { text: 'x' } });
+    assertEq((await (await call('emily', 'PATCH', '/api/forum/me', { now_playing: { text: '   ' } })).json()).nowPlaying, null, 'blank text clears');
+    assertEq(db.prepare("SELECT now_playing_kind k FROM users WHERE username='emily'").get().k, null, 'clear nulls every column');
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

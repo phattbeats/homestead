@@ -124,6 +124,17 @@
     var n = RANK_STARS[rank] || 1;
     return '<span class="fx-stars" aria-label="' + n + ' of 5 stars">' + '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n) + '</span>';
   }
+  // "Now playing" status (PHA-4420). Server already drops expired ones.
+  var NP_ICONS = { listening: '🎵', watching: '📺', reading: '📖', playing: '🎮' };
+  var NP_KINDS = ['listening', 'watching', 'reading', 'playing'];
+  function npVerb(kind) { return kind === 'listening' ? 'listening to' : kind; }
+  function nowPlaying(np, name) {
+    if (!np || !np.text) return '';
+    var kind = NP_ICONS[np.kind] ? np.kind : 'listening';
+    var verb = npVerb(kind);
+    return '<div class="fx-np fx-np-' + kind + '"><span aria-hidden="true">' + NP_ICONS[kind] + '</span> ' +
+      (name ? esc(name) + ' is ' + verb : verb.charAt(0).toUpperCase() + verb.slice(1)) + ': <i>' + esc(np.text) + '</i></div>';
+  }
   function avatar(m) {
     var name = (m && (m.display || m.username)) || '?';
     var color = (m && m.color) || '#6D7B59';
@@ -297,9 +308,12 @@
     var s = state.stats || {}, o = state.online || { members: [], count: 0 };
     var agents = o.members.filter(function (m) { return /Agent/.test(m.rank); }).length;
     var names = o.members.map(function (m) { return who({ username: m.username, display: m.display, rank: m.rank, isAgent: /Agent/.test(m.rank) }); }).join(', ');
+    var playing = o.members.filter(function (m) { return m.nowPlaying; }).map(function (m) {
+      return nowPlaying(m.nowPlaying, m.display || m.username);
+    }).join('');
     var rows = [
       wgo('👥', 'Currently Active Users: ' + o.count + (agents ? ' (' + (o.count - agents) + ' members, ' + agents + ' house agent' + (agents > 1 ? 's' : '') + ')' : ''),
-        (names || '<span class="fx-muted">Nobody but you.</span>') + '<br><span class="fx-muted">Active in the last ' + o.windowMinutes + ' minutes.</span>', 'online'),
+        (names || '<span class="fx-muted">Nobody but you.</span>') + '<br><span class="fx-muted">Active in the last ' + o.windowMinutes + ' minutes.</span>' + playing, 'online'),
     ];
     if ((s.birthdaysToday || []).length) {
       rows.push(wgo('🎂', "Today's Birthdays", s.birthdaysToday.map(function (b) { return esc(b.display || b.username) + ' 🎉'; }).join(', '), 'birthdays'));
@@ -691,7 +705,7 @@
         '<div class="fx-ptop"><span class="fx-ptitle">' + esc(p.title) + '</span><span class="fx-pdate">' + esc(when(p.at)) +
           ' <a href="#post-' + p.n + '" class="fx-pnum">#' + (p.n + 1) + '</a></span></div>' +
         '<div class="fx-pbody">' + p.text + '</div>' + (p.reactions || '') +
-        (m.signature ? '<div class="fx-sig">' + esc(m.signature) + '</div>' : '') +
+        (m.signature || m.nowPlaying ? '<div class="fx-sig">' + (m.signature ? esc(m.signature) : '') + nowPlaying(m.nowPlaying) + '</div>' : '') +
         '<div class="fx-btns"><button type="button" class="fx-btn" data-action="quote" data-name="' + esc(name) + '" data-n="' + p.n + '">Quote</button>' +
         '<button type="button" class="fx-btn" data-action="reply">Reply</button></div>' +
         (p.raw != null ? '<template class="fx-raw">' + esc(p.raw) + '</template>' : '') +
@@ -719,6 +733,7 @@
 
   function openUserCp() {
     var p = state.profile || {};
+    var np = p.nowPlaying || {};
     var dlg = document.createElement('dialog');
     dlg.className = 'fx-sheet';
     dlg.setAttribute('aria-labelledby', 'ucpTitle');
@@ -726,6 +741,12 @@
       '<label>Forum style ' + chooser('skinChooserCp') + '</label>' +
       '<label>Signature <textarea name="signature" maxlength="200" rows="3">' + esc(p.signature || '') + '</textarea></label>' +
       '<label>Birthday (MM-DD) <input name="birthday" pattern="(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])" placeholder="10-23" value="' + esc(p.birthday || '') + '"></label>' +
+      '<fieldset class="fx-np-edit"><legend>Now playing <span class="fx-muted">(clears itself after 12 hours)</span></legend>' +
+        '<select name="npKind" aria-label="Activity">' + NP_KINDS.map(function (k) {
+          var v = npVerb(k);
+          return '<option value="' + k + '"' + ((np.kind || 'listening') === k ? ' selected' : '') + '>' + NP_ICONS[k] + ' ' + v.charAt(0).toUpperCase() + v.slice(1) + '</option>';
+        }).join('') + '</select> ' +
+        '<input name="npText" maxlength="120" placeholder="Leave blank to clear" aria-label="What" value="' + esc(np.text || '') + '"></fieldset>' +
       '<p class="fx-err" role="alert"></p>' +
       '<div class="fx-btns"><button value="cancel" class="fx-btn">Close</button><button value="save" class="fx-btn fx-primary" data-action="save-ucp">Save</button></div>' +
       '</div></form>';
@@ -734,7 +755,14 @@
     dlg.querySelector('[data-action=save-ucp]').addEventListener('click', function (ev) {
       ev.preventDefault();
       var f = dlg.querySelector('form');
-      api('PATCH', '/api/forum/me', { signature: f.signature.value, birthday: f.birthday.value.trim() || null })
+      var npText = f.npText.value.trim();
+      var patch = { signature: f.signature.value, birthday: f.birthday.value.trim() || null };
+      // Only send now_playing when it changed, so re-saving the signature
+      // doesn't restart the status's expiry clock.
+      if (npText !== (np.text || '') || (npText && f.npKind.value !== (np.kind || 'listening'))) {
+        patch.now_playing = npText ? { kind: f.npKind.value, text: npText } : null;
+      }
+      api('PATCH', '/api/forum/me', patch)
         .then(function (prof) { state.profile = Object.assign(state.profile || {}, prof); dlg.close(); })
         .catch(function (e) { dlg.querySelector('.fx-err').textContent = 'Could not save: ' + e.message; });
     });
