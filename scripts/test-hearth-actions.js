@@ -68,6 +68,16 @@ function eq(actual, expected, label) {
 // test are the real ones with the real middleware chain, not a
 // re-implementation.
 
+// The "no model key" drawer case below needs a process with no model key.
+// lib/agent-runtime.js also reads the generic provider vars, and agent
+// containers export LITELLM_API_KEY, so with any of these set the drawer
+// calls a real provider and answers 502 instead of the no-key fallback.
+const MODEL_KEY_VARS = [
+  'HEARTH_ANTHROPIC_PROXY_KEY', 'HEARTH_ANTHROPIC_KEY', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN',
+  'HEARTH_OPENAI_KEY', 'OPENAI_API_KEY', 'HEARTH_LITELLM_KEY', 'LITELLM_API_KEY',
+];
+for (const name of MODEL_KEY_VARS) delete process.env[name];
+
 function bootServer() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hearth-actions-'));
   process.env.DATA_DIR = tmpDir;
