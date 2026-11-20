@@ -114,7 +114,7 @@ try {
   const port = server.address().port;
   const base = { hostname: '127.0.0.1', port };
   const jsonHeaders = (cookie) => ({ 'Content-Type': 'application/json', Cookie: cookie });
-  const pass_ = process.env.BRANDON_PASSWORD || process.env.ADMIN_PASSWORD || 'changeme';
+  const pass_ = process.env.BRANDON_PASSWORD || process.env.ADMIN_PASSWORD;
 
   // "Fresh test user": brandon is the seeded profile the household
   // actually uses, but membership is

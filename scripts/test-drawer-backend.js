@@ -155,7 +155,7 @@ async function login(request, base, username) {
   const r = await request({
     ...base, path: '/api/login', method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-  }, { username, password: process.env.BRANDON_PASSWORD || process.env.ADMIN_PASSWORD || 'changeme' });
+  }, { username, password: process.env.BRANDON_PASSWORD || process.env.ADMIN_PASSWORD });
   if (r.status !== 200) throw new Error(`login failed for ${username}: ${JSON.stringify(r.body)}`);
   return (r.headers['set-cookie'] || [])[0];
 }

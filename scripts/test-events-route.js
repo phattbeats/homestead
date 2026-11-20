@@ -104,7 +104,7 @@ async function main() {
     const login = await httpRequest(base, {
       path: '/api/login', method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-    }, JSON.stringify({ username: 'brandon', password: process.env.BRANDON_PASSWORD || 'changeme' }));
+    }, JSON.stringify({ username: 'brandon', password: process.env.BRANDON_PASSWORD || process.env.ADMIN_PASSWORD }));
     assertEq(login.status, 200, 'login as brandon succeeds');
     const cookie = (login.headers['set-cookie'] || [])[0];
     assert(!!cookie, 'login returns a session cookie');

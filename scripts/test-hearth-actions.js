@@ -117,7 +117,7 @@ function startServer(server) {
 async function login(request, username) {
   const r = await request(
     { path: '/api/login', method: 'POST', headers: { 'Content-Type': 'application/json' } },
-    { username, password: process.env.BRANDON_PASSWORD || process.env.ADMIN_PASSWORD || 'changeme' }
+    { username, password: process.env.BRANDON_PASSWORD || process.env.ADMIN_PASSWORD }
   );
   if (r.status !== 200) throw new Error(`login failed for ${username}: ${r.raw}`);
   return (r.headers['set-cookie'] || [])[0];

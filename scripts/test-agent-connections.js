@@ -272,7 +272,7 @@ console.log('agent-connections tests\n');
     const loginRes = await request({
       ...base, path: '/api/login', method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-    }, { username: 'brandon', password: process.env.BRANDON_PASSWORD || process.env.ADMIN_PASSWORD || 'changeme' });
+    }, { username: 'brandon', password: process.env.BRANDON_PASSWORD || process.env.ADMIN_PASSWORD });
     const cookie = (loginRes.headers['set-cookie'] || [])[0];
     assert(loginRes.status === 200, 'login as brandon succeeds', JSON.stringify(loginRes.body));
 

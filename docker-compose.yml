@@ -44,7 +44,9 @@ services:
       # and create real household users via Settings → Users. Later env
       # changes have no effect — use the in-app password change to rotate
       # for real.
-      - ADMIN_PASSWORD=changeme
+      # Required on first run: Homestead refuses to start without it (or with
+      # a placeholder such as "changeme"). Set it in .env or your shell.
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
 
 networks:
   phattvip:

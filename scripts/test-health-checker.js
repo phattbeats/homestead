@@ -222,9 +222,11 @@ console.log('\nTest 11: end-to-end — start checker + tick + persistence');
     { status: 500 }, { status: 500 }, { status: 200 },
   ]);
   let transitions = [];
+  const logLines = [];
   const checker = healthChecker.start(db, {
     onDownTransition: ({ service, state }) => transitions.push({ kind: 'down', id: service.id, status: state.status }),
-    log: () => {},
+    onUpTransition: ({ service, state }) => transitions.push({ kind: 'up', id: service.id, status: state.status }),
+    log: (...args) => logLines.push(args.join(' ')),
   }, { fetchImpl });
 
   try {
@@ -249,6 +251,11 @@ console.log('\nTest 11: end-to-end — start checker + tick + persistence');
     assertEq(row.consecutive_fails, 0, 'tick 3: fails reset');
     assertEq(row.down_since, null, 'tick 3: down_since cleared');
     assertEq(row.last_status_code, 200, 'tick 3: last_status_code=200');
+    // PHA-4328: recovery used to fire onDownTransition a second time
+    // ("X is down / Down since null") and the analytics call threw
+    // "prev_status is not defined".
+    assertEq(transitions.map(t => t.kind), ['down', 'up'], 'recovery fires onUpTransition, not a second onDownTransition');
+    assert(!logLines.some(l => /threw|not defined/.test(l)), 'no check threw during the cycle', logLines.join(' | '));
   } finally {
     checker.stop();
     fs.rmSync(tmpDir, { recursive: true, force: true });

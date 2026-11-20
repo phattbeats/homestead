@@ -132,7 +132,7 @@ function req(method, p, { body, headers, cookies } = {}) {
 
 async function loginAsBrandon() {
   const r = await req('POST', '/api/login', {
-    body: JSON.stringify({ username: 'brandon', password: 'changeme' }),
+    body: JSON.stringify({ username: 'brandon', password: process.env.BRANDON_PASSWORD || process.env.ADMIN_PASSWORD }),
     headers: { 'Content-Type': 'application/json' },
   });
   if (r.status !== 200 && r.status !== 302) fatal(`login status ${r.status}: ${r.body.toString()}`);

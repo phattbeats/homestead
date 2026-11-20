@@ -93,7 +93,7 @@ async function main() {
   const base = { hostname: '127.0.0.1', port };
   const baseUrl = `http://127.0.0.1:${port}`;
 
-  const password = process.env.BRANDON_PASSWORD || process.env.ADMIN_PASSWORD || 'changeme';
+  const password = process.env.BRANDON_PASSWORD || process.env.ADMIN_PASSWORD;
 
   // Browser session mints a pairing code for the claude_code tile.
   const loginRes = await request(base, {

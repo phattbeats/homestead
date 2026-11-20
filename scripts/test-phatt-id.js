@@ -337,7 +337,7 @@ async function httpTest() {
     noCookie(off, 'feature off');
     const plain = await request('GET', '/api/tasks');
     assertEq(plain.status, 401, 'no auth at all still 401');
-    const login = await request('POST', '/api/login', { body: { username: 'brandon', password: process.env.BRANDON_PASSWORD || process.env.ADMIN_PASSWORD || 'changeme' } });
+    const login = await request('POST', '/api/login', { body: { username: 'brandon', password: process.env.BRANDON_PASSWORD || process.env.ADMIN_PASSWORD } });
     assertEq(login.status, 200, 'password login unaffected');
   } catch (err) {
     ng('HTTP integration test crashed', err.stack || err.message);
