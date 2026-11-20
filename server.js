@@ -27,7 +27,7 @@ const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const Database = require('better-sqlite3');
 const path = require('path');
-const { scopeForApiRoute } = require('./lib/scope-display');
+const { scopesForApiRoute } = require('./lib/scope-display');
 const fs = require('fs');
 const webpush = require('web-push');
 const crypto = require('crypto');
@@ -342,12 +342,16 @@ function recordSessionStart(req, user, device) {
 //   4. Unauthenticated → 401.
 // Ahead of all of these, `Authorization: PhattId <assertion>` is handled
 // by authenticatePhattId() below and never falls through.
+// enforceAppTokenScope: an app-scoped token reaches only the routes in
+// lib/scope-display.js's API_SCOPE_RULES, and only with a scope that rule
+// accepts. Any route not listed there — including every route added later —
+// is 403 for app tokens. Session users and legacy `user` PATs are untouched.
 function enforceAppTokenScope(req, res, next) {
   const scopes = tokenScopes(req);
   if (scopes === null) return next();
-  const required = scopeForApiRoute(req.method, req.originalUrl);
-  if (required && scopes.includes(required)) return next();
-  return res.status(403).json({ error: 'insufficient_scope', required });
+  const accepted = scopesForApiRoute(req.method, req.originalUrl);
+  if (accepted && accepted.some((s) => scopes.includes(s))) return next();
+  return res.status(403).json({ error: 'insufficient_scope', required: accepted ? accepted[0] : undefined });
 }
 
 function authenticate(req, res, next) {
@@ -380,7 +384,9 @@ function authenticate(req, res, next) {
           appApiLog.log(db, {
             userId: u.id,
             appId: tokenRow.app_id,
-            route: `${req.method} ${req.path}`,
+            // originalUrl, not req.path: by 'finish' a mounted router has
+            // left req.path relative to its mount ('/lists', not '/api/lists').
+            route: `${req.method} ${req.originalUrl.split('?')[0]}`,
             scopesUsed: tokenRow.scopes,
             status: res.statusCode,
           });
@@ -487,11 +493,13 @@ const auth = authenticate;
 function tokenScopes(req) {
   const detail = req.session.user && req.session.user.authProviderDetail;
   if (!detail || detail.scopes === undefined || detail.scopes === 'user') return null;
+  // Anything other than the literal 'user' is a scoped token. A scope
+  // value that is not a JSON array grants nothing, never full access.
   try {
     const arr = JSON.parse(detail.scopes);
-    return Array.isArray(arr) ? arr : null;
+    return Array.isArray(arr) ? arr : [];
   } catch (_) {
-    return null;
+    return [];
   }
 }
 // requireScope(scope): the token must carry this exact scope string.
@@ -666,7 +674,10 @@ async function notify(userId, payload, opts = {}) {
   return { delivered, skipped: 0, errors };
 }
 
-const PKG_VERSION = require('./package.json').version;
+// APP_VERSION is baked from the release tag by release.yml, so a tagged
+// image reports the tag even if package.json was not bumped with it.
+// package.json is the fallback for local runs.
+const PKG_VERSION = process.env.APP_VERSION || require('./package.json').version;
 const COMMIT_SHA = process.env.COMMIT_SHA || null;
 
 // ---- public probes (no auth) ----

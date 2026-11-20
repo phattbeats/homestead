@@ -170,12 +170,12 @@ console.log('app-api-log tests\n');
                    VALUES ('dune-tracker', 'Dune Tracker', 'https://example.test/manifest.json', ?)`)
       .run(brandon.id);
     const issued = agentTokens.issue(rawDb, brandon.id, { label: 'app-scoped' });
-    rawDb.prepare(`UPDATE agent_tokens SET app_id = 'dune-tracker', scopes = 'read:lists' WHERE id = ?`)
+    rawDb.prepare(`UPDATE agent_tokens SET app_id = 'dune-tracker', scopes = '["read:lists"]' WHERE id = ?`)
       .run(issued.id);
     rawDb.close();
 
     const appRes = await request({
-      ...base, path: '/api/users', method: 'GET',
+      ...base, path: '/api/lists', method: 'GET',
       headers: { Authorization: `Bearer ${issued.token_plaintext}` },
     });
     assertEq(appRes.status, 200, 'app-scoped PAT authenticates');
@@ -190,9 +190,9 @@ console.log('app-api-log tests\n');
     });
     assertEq(activityRes.status, 200, 'GET /api/apps/:key/activity succeeds for the owning user');
     assertEq(activityRes.body.total, 1, 'only the app-scoped call is logged — the user-level PAT call is absent');
-    assertEq(activityRes.body.items[0].route, 'GET /api/users', 'route recorded');
+    assertEq(activityRes.body.items[0].route, 'GET /api/lists', 'route recorded');
     assertEq(activityRes.body.items[0].status, 200, 'status recorded');
-    assertEq(activityRes.body.items[0].scopes_used, 'read:lists', 'scopes_used recorded from the token');
+    assertEq(activityRes.body.items[0].scopes_used, '["read:lists"]', 'scopes_used recorded from the token');
 
     // Unknown app key -> 404.
     const missingRes = await request({
