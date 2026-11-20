@@ -62,6 +62,10 @@ a:hover{color:var(--orange)}
 .fx-shout-at{color:var(--soft);font-size:10px}
 .fx-shouts .fx-empty{color:var(--soft);font-size:11px}
 
+.fx-poll{background:var(--row1)}
+.fx-poll-bar{background:#fff;border:1px solid #a9b8c2}
+.fx-poll-bar span{background:linear-gradient(#ffb66b,var(--orange))}
+.fx-poll-res.mine .fx-poll-label,.fx-pollflag{color:var(--navy)}
 .fx-btn{border:1px solid #6b8eb0;background:linear-gradient(#fff,#dbe4ec);font:bold 10px Verdana;padding:2px 8px;color:var(--navy);text-transform:uppercase}
 .fx-primary{font-size:11px;padding:4px 10px}
 .fx-newthread{margin:0 2px 8px}

@@ -83,6 +83,26 @@ button,input,select,textarea{font:inherit;color:inherit}
 .fx-shout-body{grid-column:1/-1;overflow-wrap:anywhere;white-space:pre-wrap}
 .fx-shout-me .fx-shout-body{font-style:italic}
 
+/* Polls — sidebar box on the index, and above the first post of a thread */
+.fx-poll{padding:8px 10px;font-size:12px;line-height:1.5}
+.fx-poll-thread{padding:8px 10px 0;font-size:11px}
+.fx-poll-q{font-weight:bold;margin-bottom:6px;overflow-wrap:anywhere}
+.fx-poll-form{display:grid;gap:4px}
+.fx-poll-opt{display:flex;gap:6px;align-items:baseline;cursor:pointer;overflow-wrap:anywhere}
+.fx-poll-res{margin-bottom:6px}
+.fx-poll-label{overflow-wrap:anywhere}
+.fx-poll-bar{height:8px;margin-top:2px;background:rgba(0,0,0,.08)}
+.fx-poll-bar span{display:block;height:100%;min-width:2px;background:currentColor}
+.fx-poll-res.mine .fx-poll-label{font-weight:bold}
+.fx-poll-you{font-size:10px;font-weight:normal;opacity:.8}
+.fx-poll-meta{font-size:10px;opacity:.75;margin-top:4px}
+.fx-pollbox-thread .fx-poll{max-width:520px}
+.fx-pollopt{margin-top:4px}
+.fx-pollopt summary{cursor:pointer;font-weight:bold}
+.fx-pollopt[open]{display:grid;gap:8px}
+.fx-addpoll{margin:0 0 8px}
+.fx-pollflag{font-weight:bold}
+
 /* Postbit: author column | message */
 .fx-post{display:grid;grid-template-columns:160px 1fr}
 .fx-who{padding:10px;min-width:0;overflow-wrap:anywhere}

@@ -15,6 +15,11 @@
  *   /forum?wall=<slug>     board (thread list), &page=N
  *   /forum?post=<id>       thread
  *   /forum?view=members    member list
+ *
+ * Polls (lib/forum-polls.js) render the same widget in two places: the
+ * sidebar "Poll" box on the index (newest open poll) and above the first
+ * post of the thread that owns it. Both are [data-poll] nodes, so a vote
+ * in either repaints every copy from the server's answer.
  */
 (function () {
   'use strict';
@@ -40,7 +45,7 @@
   var HOT_REPLIES = 10;
 
   var root = document.getElementById('forum');
-  var state = { me: null, profile: null, stats: null, online: null, shouts: [], smilies: {}, shoutError: null, shoutStream: null };
+  var state = { me: null, profile: null, stats: null, online: null, poll: null, polls: {}, pollEditing: {}, shouts: [], smilies: {}, shoutError: null, shoutStream: null };
   var SHOUT_LIMIT = 50;
 
   // ---------- helpers ----------
@@ -281,8 +286,11 @@
     });
   }
   function refreshSidebar() {
-    return Promise.all([api('GET', '/api/forum/stats'), api('GET', '/api/forum/online')]).then(function (r) {
-      state.stats = r[0]; state.online = r[1];
+    return Promise.all([
+      api('GET', '/api/forum/stats'), api('GET', '/api/forum/online'),
+      api('GET', '/api/forum/polls/current').catch(function () { return { poll: null }; }),
+    ]).then(function (r) {
+      state.stats = r[0]; state.online = r[1]; state.poll = r[2].poll;
     });
   }
   function sidebar() {
@@ -304,6 +312,7 @@
       }).join('') + '</ol>', 'top'));
     }
     return box("What's Going On?", rows.join(''), { id: 'wgo', label: "What's Going On", cls: 'fx-wgo' }) +
+      sidePoll() +
       box(esc('📣 Shoutbox'), shoutboxInner(), { id: 'shoutbox', label: 'Shoutbox', cls: 'fx-shoutbox' });
   }
   function wgo(icon, title, inner, key) {
@@ -439,6 +448,99 @@
     openShoutStream();
   }
 
+  // ---------- polls ----------
+
+  function sidePoll() {
+    var p = state.poll;
+    if (!p) return '';
+    return box('📊 Poll', '<div class="fx-poll-thread">' + link({ post: p.threadId }, esc(p.threadTitle)) + '</div>' + pollNode(p, 'side'),
+      { id: 'poll', label: 'Poll', cls: 'fx-pollbox' });
+  }
+  function pollNode(p, where) {
+    state.polls[p.id] = p;
+    return '<div class="fx-poll" data-poll="' + esc(p.id) + '" data-where="' + where + '">' + pollInner(p) + '</div>';
+  }
+  function pollInner(p) {
+    var voting = !p.closed && (p.myVote == null || state.pollEditing[p.id]);
+    var status = p.closed ? 'Poll closed' + (p.closesAt ? ' ' + esc(when(p.closesAt)) : '')
+      : (p.closesAt ? 'Closes ' + esc(when(p.closesAt)) : 'Open');
+    var head = '<div class="fx-poll-q">' + esc(p.question) + '</div>';
+    var foot = '<div class="fx-poll-meta">' + num(p.totalVotes) + (p.totalVotes === 1 ? ' vote' : ' votes') + ' · ' + status + '</div>';
+    var manage = p.canManage
+      ? '<button type="button" class="fx-btn" data-action="poll-close" data-closed="' + !p.closed + '">' + (p.closed ? 'Reopen poll' : 'Close poll') + '</button>'
+      : '';
+    if (voting) {
+      return head + '<form class="fx-poll-form">' + p.options.map(function (o) {
+        return '<label class="fx-poll-opt"><input type="radio" name="opt" value="' + o.id + '"' + (o.id === p.myVote ? ' checked' : '') + '> ' + esc(o.label) + '</label>';
+      }).join('') + '<p class="fx-err" role="alert"></p>' +
+        '<div class="fx-btns">' + (p.myVote != null ? '<button type="button" class="fx-btn" data-action="poll-cancel">Cancel</button>' : '') +
+        '<button type="submit" class="fx-btn fx-primary">Vote!</button></div></form>' + foot;
+    }
+    return head + p.options.map(function (o) {
+      var mine = o.id === p.myVote;
+      return '<div class="fx-poll-res' + (mine ? ' mine' : '') + '">' +
+        '<div class="fx-poll-label">' + esc(o.label) + ' <span class="fx-poll-n">(' + num(o.votes) + ')</span>' + (mine ? ' <span class="fx-poll-you">✓ your vote</span>' : '') + '</div>' +
+        '<div class="fx-poll-bar" role="img" aria-label="' + o.percent + ' percent"><span style="width:' + Number(o.percent) + '%"></span></div></div>';
+    }).join('') + foot +
+      '<p class="fx-err" role="alert"></p>' +
+      ((!p.closed || manage) ? '<div class="fx-btns">' + (!p.closed ? '<button type="button" class="fx-btn" data-action="poll-change">Change vote</button>' : '') + manage + '</div>' : '');
+  }
+  function paintPoll(p) {
+    state.polls[p.id] = p;
+    if (state.poll && state.poll.id === p.id) state.poll = Object.assign({}, state.poll, p);
+    root.querySelectorAll('[data-poll="' + p.id + '"]').forEach(function (el) { el.innerHTML = pollInner(p); });
+  }
+  function pollErrorText(e) {
+    var code = (e && e.message) || 'error';
+    var map = {
+      poll_closed: 'This poll is closed.', invalid_option: 'Pick an option first.',
+      question_required: 'The poll needs a question.', too_few_options: 'A poll needs at least two options.',
+      too_many_options: 'Ten options at most.', duplicate_option: 'Each option has to be different.',
+      option_too_long: 'Keep each option under 80 characters.', question_too_long: 'Keep the question under 140 characters.',
+      closes_at_in_past: 'The closing time has to be in the future.', poll_exists: 'This thread already has a poll.',
+      forbidden: 'Only the thread starter or an admin can do that.',
+    };
+    return map[code] || 'Could not save the poll: ' + code;
+  }
+  function pollAct(el, method, path, body) {
+    var node = el.closest('[data-poll]');
+    var id = node.getAttribute('data-poll');
+    var err = node.querySelector('.fx-err');
+    node.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+    return api(method, '/api/forum/polls/' + encodeURIComponent(id) + path, body).then(function (p) {
+      delete state.pollEditing[id];
+      paintPoll(p);
+    }).catch(function (e) {
+      if (err) err.textContent = pollErrorText(e);
+      node.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
+    });
+  }
+  // The poll fields shared by New Thread and "Add a poll" on a thread.
+  function pollFields() {
+    return '<label>Poll question<input name="pollQuestion" maxlength="140" autocomplete="off" placeholder="friday movie?"></label>' +
+      '<label>Options, one per line (2–10)<textarea name="pollOptions" rows="4" placeholder="horror&#10;comedy&#10;sci-fi"></textarea></label>' +
+      '<label>Closes (optional)<input type="datetime-local" name="pollCloses"></label>';
+  }
+  // Reads the poll fields. null = no poll asked for; throws a readable
+  // message when half-filled, so a thread is never posted with a bad poll.
+  function readPoll(f) {
+    var q = (f.pollQuestion.value || '').trim();
+    var opts = (f.pollOptions.value || '').split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+    if (!q && !opts.length) return null;
+    if (!q) throw new Error('The poll needs a question.');
+    if (opts.length < 2) throw new Error('A poll needs at least two options.');
+    if (opts.length > 10) throw new Error('Ten options at most.');
+    var seen = {};
+    opts.forEach(function (o) { var k = o.toLowerCase(); if (seen[k]) throw new Error('Each option has to be different.'); seen[k] = 1; });
+    var closes = f.pollCloses.value ? new Date(f.pollCloses.value) : null;
+    if (closes && (isNaN(closes) || closes <= new Date())) throw new Error('The closing time has to be in the future.');
+    return { question: q, options: opts, closesAt: closes ? closes.toISOString() : null };
+  }
+  function formError(f, msg) {
+    var err = f.querySelector('.fx-err') || f.appendChild(Object.assign(document.createElement('p'), { className: 'fx-err', role: 'alert' }));
+    err.textContent = msg;
+  }
+
   // ---------- board ----------
 
   function renderBoard(slug, pageNo) {
@@ -446,10 +548,10 @@
       var from = d.total ? (d.page - 1) * d.limit + 1 : 0;
       var to = Math.min(d.page * d.limit, d.total);
       var rows = d.threads.map(function (t) {
-        var icon = t.sticky ? '📌' : (t.replies >= HOT_REPLIES ? '🔥' : '💬');
+        var icon = t.sticky ? '📌' : (t.hasPoll ? '📊' : (t.replies >= HOT_REPLIES ? '🔥' : '💬'));
         return '<div class="fx-trow' + (t.isNew ? ' unread' : '') + '">' +
           '<div class="ic" aria-hidden="true">' + icon + '</div>' +
-          '<div class="t">' + (t.sticky ? '<span class="fx-sticky">Sticky:</span> ' : '') + link({ post: t.id }, esc(t.title), 'fx-thread') +
+          '<div class="t">' + (t.sticky ? '<span class="fx-sticky">Sticky:</span> ' : '') + (t.hasPoll ? '<span class="fx-pollflag">Poll:</span> ' : '') + link({ post: t.id }, esc(t.title), 'fx-thread') +
             (t.isNew ? ' <span class="fx-badge">NEW</span>' : '') +
             '<div class="by">' + who(t.author, { plain: true }) + ' · ' + esc(when(t.createdAt)) + '</div></div>' +
           '<div class="lp">' + esc(when(t.lastPost.at)) + '<br>by ' + who(t.lastPost.by, { plain: true }) + '</div>' +
@@ -470,6 +572,7 @@
         '<label>Title<input name="title" maxlength="120" required autocomplete="off"></label>' +
         '<label>Message<textarea name="text" rows="6" required></textarea></label>' +
         smilies('newThread') +
+        '<details class="fx-pollopt"><summary>📊 Add a poll</summary>' + pollFields() + '</details>' +
         '<div class="fx-btns"><button type="button" class="fx-btn" data-action="cancel-thread">Cancel</button><button type="submit" class="fx-btn fx-primary">Submit New Thread</button></div></form>';
       page('forum',
         navbar([link({}, 'The Forum'), link({ wall: slug }, esc(d.board.name))], d.total ? 'Threads ' + from + ' to ' + to + ' of ' + num(d.total) : '') +
@@ -478,9 +581,16 @@
       root.querySelector('#newThread').addEventListener('submit', function (ev) {
         ev.preventDefault();
         var f = ev.target;
+        var poll;
+        try { poll = readPoll(f); } catch (e) { formError(f, e.message); return; }
         submitting(f, api('POST', '/api/walls/' + encodeURIComponent(slug) + '/posts', {
           kind: 'text', title: f.title.value.trim(), text_body: f.text.value,
-        }).then(function (post) { go({ post: post.id }); }));
+        }).then(function (post) {
+          // The thread exists now; a failed poll still lands on it, where
+          // "Add a poll" offers a retry.
+          var attach = poll ? api('POST', '/api/forum/threads/' + encodeURIComponent(post.id) + '/poll', poll).catch(function () {}) : null;
+          return Promise.resolve(attach).then(function () { go({ post: post.id }); });
+        }));
       });
     });
   }
@@ -516,10 +626,30 @@
         '<div class="fx-quick-who"><b>Quick Reply</b>' + smilies('quickReply') + '</div>' +
         '<div class="fx-quick-msg"><textarea name="text" rows="4" placeholder="Type your reply…" aria-label="Reply" required></textarea>' +
         '<div class="fx-btns"><button type="submit" class="fx-btn fx-primary">Post Quick Reply</button></div></div></form>';
+      var me = state.me.user;
+      var mayPoll = !d.poll && (me.isAdmin || (t.author && t.author.username === me.username));
+      var pollBox = d.poll ? box('📊 Poll', pollNode(d.poll, 'thread'), { cls: 'fx-pollbox fx-pollbox-thread' })
+        : (mayPoll ? '<button type="button" class="fx-btn fx-addpoll" data-action="add-poll">📊 Add a poll</button>' +
+          '<form class="fx-compose" id="addPoll" hidden>' + pollFields() +
+          '<p class="fx-err" role="alert"></p><div class="fx-btns"><button type="button" class="fx-btn" data-action="cancel-poll">Cancel</button>' +
+          '<button type="submit" class="fx-btn fx-primary">Post Poll</button></div></form>' : '');
       page('forum',
         navbar([link({}, 'The Forum'), link({ wall: d.board.slug }, esc(d.board.name)), '<span class="fx-here">' + esc(t.title) + '</span>'],
           num(t.views) + (t.views === 1 ? ' view' : ' views')) +
+        pollBox +
         box((t.sticky ? '📌 ' : '') + esc(t.title), first + replies + quick, { cls: 'fx-thread-box' }));
+      var addPoll = root.querySelector('#addPoll');
+      if (addPoll) addPoll.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var poll;
+        try { poll = readPoll(addPoll); } catch (e) { formError(addPoll, e.message); return; }
+        if (!poll) { formError(addPoll, 'The poll needs a question.'); return; }
+        var btn = addPoll.querySelector('button[type=submit]');
+        btn.disabled = true;
+        api('POST', '/api/forum/threads/' + encodeURIComponent(t.id) + '/poll', poll)
+          .then(function () { return renderThread(t.id); })
+          .catch(function (e) { formError(addPoll, pollErrorText(e)); btn.disabled = false; });
+      });
       root.dataset.thread = t.id;
       root.querySelector('#quickReply').addEventListener('submit', function (ev) {
         ev.preventDefault();
@@ -681,12 +811,32 @@
         { emoji: el.getAttribute('data-emoji') })
         .then(function () { return renderThread(bar.dataset.post); })
         .catch(function () { el.disabled = false; });
+    } else if (action === 'poll-change' || action === 'poll-cancel') {
+      var pid = el.closest('[data-poll]').getAttribute('data-poll');
+      if (action === 'poll-change') state.pollEditing[pid] = true; else delete state.pollEditing[pid];
+      if (state.polls[pid]) paintPoll(state.polls[pid]);
+    } else if (action === 'poll-close') {
+      pollAct(el, 'PATCH', '', { closed: el.getAttribute('data-closed') === 'true' });
+    } else if (action === 'add-poll') {
+      el.hidden = true;
+      var ap = root.querySelector('#addPoll');
+      ap.hidden = false; ap.pollQuestion.focus();
+    } else if (action === 'cancel-poll') {
+      root.querySelector('#addPoll').hidden = true;
+      root.querySelector('[data-action=add-poll]').hidden = false;
     } else if (action === 'usercp') {
       ev.preventDefault(); openUserCp();
     } else if (action === 'logout') {
       ev.preventDefault();
       api('POST', '/api/logout').catch(function () {}).then(function () { location.href = '/'; });
     }
+  });
+  document.addEventListener('submit', function (ev) {
+    if (!ev.target.matches('.fx-poll-form')) return;
+    ev.preventDefault();
+    var picked = ev.target.querySelector('input[name=opt]:checked');
+    if (!picked) { ev.target.querySelector('.fx-err').textContent = 'Pick an option first.'; return; }
+    pollAct(ev.target, 'POST', '/vote', { optionId: Number(picked.value) });
   });
   document.addEventListener('change', function (ev) {
     if (ev.target.matches('select[data-skin-chooser]')) setSkin(ev.target.value);

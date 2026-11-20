@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### The Forum: polls
+
+A thread can carry a poll: a question, 2–10 options, an optional closing time, and one vote per member. Voting again moves your vote, and you can take it back while the poll is open. Start one from **📊 Add a poll** in the New Thread form, or later from the thread (thread starter or an admin). The poll shows above the first post. The index sidebar gets a **📊 Poll** box with the newest open poll, and you can vote right there. In Night Owl it sits under the Shoutbox with aqua vote bars, as in the mockup. Poll threads show `Poll:` and a 📊 icon in the thread list. The thread starter or an admin can close or reopen a poll.
+
+Polls live in three new tables (`forum_polls`, `forum_poll_options`, `forum_poll_votes`) and are deleted with their thread. Popcorn Vote was checked first: it is a third-party app that keeps its votes in its own service and only posts to the media-club wall, so Homestead had no vote store to reuse. A poll is visible exactly when its thread is; anyone else gets a 404. API: `GET /api/forum/polls/current`, `POST /api/forum/threads/:postId/poll`, `POST|DELETE /api/forum/polls/:pollId/vote`, `PATCH /api/forum/polls/:pollId` (`{closed}`). App tokens need `read:walls` to read, `write:walls:react` to vote, and `write:walls:post` to create or close.
+
 ### Security: `X-authentik-username` only counts from a listed proxy
 
 Homestead signed in as whoever `X-authentik-username` named, from any client that could reach it, including as `admin`. It now believes that header (and `X-authentik-groups`) only when the TCP peer is in the new `HOMESTEAD_TRUSTED_PROXIES` (IPs or CIDRs, `loopback` as shorthand). When unset, which is the default, proxy sign-in is off, the headers are ignored, and the first one from an untrusted peer is logged once. The peer is the socket address, so a forged `X-Forwarded-For` doesn't help. This covers all three places that read the header: every authenticated route, `/api/me`, and invite redemption.
