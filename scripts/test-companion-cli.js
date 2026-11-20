@@ -33,19 +33,29 @@ function assertEq(actual, expected, label) {
 
 const CLI = path.join(__dirname, '..', 'companion-cli', 'homestead-companion.js');
 
+// Per-invocation watchdog: a stuck CLI fails this one step with its
+// output instead of stalling the whole run until run-tests.js kills it.
+const CLI_TIMEOUT_MS = 15000;
+
 function runCli(args, env) {
-  // switched from execFileSync to spawn (wrapped in Promise)
-  // because execFileSync hangs indefinitely on this harness when the
-  // companion CLI's http.request completes successfully — the sync
-  // wait-for-exit path doesn't reap the child cleanly in some Node 24
-  // sandbox configurations. spawn + 'close' event is reliable.
-  // Returns { status, out } exactly like the old execFileSync version
-  // so the rest of the test doesn't change.
+  // HANG ROOT CAUSE (PHA-3317) — start any future hang investigation here.
+  // The Homestead server under test runs *inside this process* (server.js
+  // is required above and listens on 127.0.0.1). The old runCli used
+  // execFileSync, which blocks this process's event loop until the child
+  // exits. The child (`login`) makes an HTTP request to that in-process
+  // server, which can never accept or answer while the loop is blocked:
+  // the child waits on the server, and the server waits on the child.
+  // That is a deadlock, not a Node, sandbox or socket-reaping bug.
+  //
+  // Rule: never wait synchronously (execFileSync/spawnSync) on a
+  // subprocess that talks to a server living in this process. Use async
+  // spawn, as here, so the event loop keeps serving requests while the
+  // child runs.
   return new Promise((resolve) => {
     const child = spawn(
       process.execPath,
       [CLI, ...args],
-      { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] },
+      { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'], timeout: CLI_TIMEOUT_MS },
     );
     let stdout = '';
     let stderr = '';
@@ -187,6 +197,23 @@ async function main() {
   assert(!!received, 'receiver got the relayed event');
   assert(received && received.okSig === true, 'receiver verified the relayed event signature');
   assertEq(received && received.body, eventBody, 'receiver got the exact raw body (byte-for-byte HMAC input)');
+
+  // PHA-3317: a server that accepts the connection but never answers must
+  // make the CLI fail fast, not hang.
+  const blackHole = http.createServer(() => { /* never respond */ });
+  await new Promise(resolve => blackHole.listen(0, '127.0.0.1', resolve));
+  const bhHome = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-companion-bh-'));
+  const t0 = Date.now();
+  const bhCli = await runCli(
+    ['login', '--base-url', `http://127.0.0.1:${blackHole.address().port}`, '--username', 'brandon', '--password', 'x'],
+    { HOMESTEAD_COMPANION_HOME: bhHome, HOMESTEAD_COMPANION_TIMEOUT_MS: '500' },
+  );
+  const bhElapsed = Date.now() - t0;
+  assert(bhCli.status !== 0 && bhCli.status < 128, '`login` against a silent server exits non-zero on its own', bhCli.out);
+  assert(bhElapsed < 5000, '`login` against a silent server gives up quickly', `${bhElapsed}ms`);
+  assert(/no response/.test(bhCli.out), 'timeout error names the cause', bhCli.out);
+  blackHole.closeAllConnections();
+  blackHole.close();
 
   receiver.close();
   server.close();
