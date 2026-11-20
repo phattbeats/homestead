@@ -305,6 +305,21 @@ async function seed() {
     assertEq(await page.$$eval('.fx-pollbox-thread .fx-poll-n', (els) => els.map((e) => e.textContent)), ['(1)', '(1)', '(1)'], 'one vote per member: tally unchanged in total');
     await shot(page, 'thread-poll-woodgrain-desktop');
 
+    // Forum Games: count-to-1000 shows the next number and a friendly rejection
+    const countId = (await as('brandon', 'GET', '/api/forum/boards/forum-games/threads')).threads.find((t) => t.game === 'count').id;
+    await page.goto(`${BASE}/forum?post=${countId}`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.fx-game', { timeout: 10000 });
+    assert(/Next number: 1 of 1,000/.test(await page.textContent('.fx-game')), 'count thread shows the next number', await page.textContent('.fx-game'));
+    await page.fill('#quickReply textarea', '5');
+    await page.click('#quickReply button[type=submit]');
+    await page.waitForFunction(() => /next number is 1/.test((document.querySelector('#quickReply .fx-err') || {}).textContent || ''), null, { timeout: 10000 });
+    ok('a wrong number gets the friendly server message, not an error code');
+    await page.fill('#quickReply textarea', '1');
+    await page.click('#quickReply button[type=submit]');
+    await page.waitForFunction(() => /You posted 1\. Wait for someone else/.test((document.querySelector('.fx-game') || {}).textContent || ''), null, { timeout: 10000 });
+    ok('posting 1 advances the count and asks me to wait my turn');
+    await shot(page, 'thread-count-woodgrain-desktop');
+
     // thread view
     await page.goto(`${BASE}/forum?post=${lightId}`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.fx-post', { timeout: 10000 });
