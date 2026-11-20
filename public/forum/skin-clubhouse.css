@@ -77,7 +77,19 @@ a:hover{color:var(--pink)}
    "What's Going On?" boxes — the sidebar is a flex column so the panel
    can lead without touching the DOM order the other skins rely on. */
 .fx-side{display:flex;flex-direction:column}
-.fx-shoutbox{order:-1}
+.fx-shoutbox{order:-2}
+/* Poll box sits right under the Shoutbox, as in the Night Owl mockup:
+   aqua bars with a white rim. */
+.fx-pollbox{order:-1}
+.fx-poll{font-size:11px;line-height:1.6}
+.fx-poll-q{color:#fff}
+.fx-poll-thread a{color:var(--yellow)}
+.fx-poll-bar{background:none;border:1px solid #fff;margin:2px 0 6px}
+.fx-poll-bar span{background:var(--aqua)}
+.fx-poll-res.mine .fx-poll-label{color:var(--pink)}
+.fx-poll-meta{color:#888}
+.fx-pollflag{color:var(--aqua)}
+.fx-pollopt summary{color:var(--yellow)}
 .fx-shout-form textarea{background:#000;border:1px inset #555;color:#0f;font:12px monospace}
 .fx-shouts{gap:0;max-height:220px}
 .fx-shout{border-bottom:1px dotted var(--rule);padding:5px 8px;font-size:11px}

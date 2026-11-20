@@ -10,7 +10,10 @@
 //      pill, no bottom tab bar.
 //   6. The Shoutbox panel: it posts, it renders, another member's
 //      shout arrives live, and it sits in the right place per skin.
-//   7. Screenshots: index in all three skins at desktop and 390×844,
+//   7. Polls: the sidebar Poll box votes in place, the thread list flags
+//      poll threads, New Thread can attach a poll, the thread view shows
+//      results + Change vote, and Night Owl stacks Poll under Shoutbox.
+//   8. Screenshots: index in all three skins at desktop and 390×844,
 //      board + thread in the default skin at both sizes.
 //
 // Seeding uses header-trust requests from Node, the same path the
@@ -114,7 +117,14 @@ async function seed() {
   await post('emily', 'household', 'grocery run tonight, need anything', 'Leaving at 6.');
   await post('admin', 'announcements', 'Welcome to The Forum', 'The Porch is a forum now. Pick a style in the footer.');
   await post('emily', 'introductions', "hi it's emily!!", 'hello hello');
-  return { lightId: light.id };
+  const movie = await post('tyler', 'household', 'friday: horror or comedy?', 'poll is up, vote by thursday');
+  const poll = await as('tyler', 'POST', `/api/forum/threads/${movie.id}/poll`, {
+    question: 'friday movie?', options: ['👻 horror', '😂 comedy', '🚀 sci-fi'],
+    closesAt: new Date(Date.now() + 3 * 86400000).toISOString(),
+  });
+  await as('emily', 'POST', `/api/forum/polls/${poll.id}/vote`, { optionId: poll.options[0].id });
+  await as('tyler', 'POST', `/api/forum/polls/${poll.id}/vote`, { optionId: poll.options[1].id });
+  return { lightId: light.id, movieId: movie.id };
 }
 
 (async () => {
@@ -166,8 +176,8 @@ async function seed() {
   }
 
   try {
-    const { lightId } = await seed();
-    ok('seeded threads, replies, reactions, birthday, signatures via the API');
+    const { lightId, movieId } = await seed();
+    ok('seeded threads, replies, reactions, birthday, signatures, a poll via the API');
 
     browser = REMOTE
       ? await chromium.connectOverCDP(REMOTE, { timeout: 180000 })
@@ -193,6 +203,20 @@ async function seed() {
     assert(/Currently Active Users/.test(wgo) && /Today's Birthdays/.test(wgo) && /Homestead Statistics/.test(wgo),
       "What's Going On? shows Who's Online, birthdays and stats");
     await shot(page, 'index-woodgrain-desktop');
+
+    // ---- the sidebar poll: vote in place ----
+    const sidePoll = await page.evaluate(() => ({
+      box: !!document.querySelector('.fx-side .fx-pollbox'),
+      q: (document.querySelector('.fx-pollbox .fx-poll-q') || {}).textContent,
+      radios: document.querySelectorAll('.fx-pollbox .fx-poll-opt input[type=radio]').length,
+    }));
+    assertEq(sidePoll, { box: true, q: 'friday movie?', radios: 3 }, 'sidebar Poll box offers the open poll as a vote form');
+    await page.click('.fx-pollbox .fx-poll-opt:nth-of-type(1) input');
+    await page.click('.fx-pollbox .fx-poll-form button[type=submit]');
+    await page.waitForSelector('.fx-pollbox .fx-poll-res.mine', { timeout: 10000 });
+    const tally = await page.$$eval('.fx-pollbox .fx-poll-res', (els) => els.map((e) => e.querySelector('.fx-poll-n').textContent));
+    assertEq(tally, ['(2)', '(1)', '(0)'], 'vote lands in place: results bars with the new tally');
+    assert(/3 votes/.test(await page.textContent('.fx-pollbox .fx-poll-meta')), 'poll footer shows the vote count');
 
     // ---- the shoutbox panel ----
     const panel = await page.evaluate(() => {
@@ -237,16 +261,41 @@ async function seed() {
     const rows = await page.$$eval('.fx-trow .t', (els) => els.map((e) => e.textContent));
     assert(/^Sticky:/.test(rows[0]), 'sticky thread is listed first', rows[0]);
     assertEq(page.url(), `${BASE}/forum?wall=household`, 'board URL is /forum?wall=household');
+    assert(rows.some((t) => /^Poll: friday: horror or comedy\?/.test(t)), 'thread list flags the poll thread', rows.join(' | '));
     await shot(page, 'board-woodgrain-desktop');
 
     // new thread from the board
     await page.click('[data-action=new-thread]');
     await page.fill('#newThread input[name=title]', 'Smoke test thread');
-    await page.fill('#newThread textarea', 'posted from the board view');
+    await page.fill('#newThread textarea[name=text]', 'posted from the board view');
+    await page.click('#newThread .fx-pollopt summary');
+    await page.fill('#newThread input[name=pollQuestion]', 'smoke poll?');
+    await page.fill('#newThread textarea[name=pollOptions]', 'only one');
+    await page.click('#newThread button[type=submit]');
+    assert(/at least two options/.test(await page.textContent('#newThread .fx-err')), 'half-filled poll is caught before the thread posts');
+    await page.fill('#newThread textarea[name=pollOptions]', 'yes\nno');
     await page.click('#newThread button[type=submit]');
     await page.waitForURL(/\?post=/, { timeout: 10000 });
     await page.waitForSelector('.fx-post', { timeout: 10000 });
     assertEq(await page.textContent('.fx-thread-box .fx-thead span'), 'Smoke test thread', 'New Thread lands on the new thread');
+    assertEq(await page.$$eval('.fx-pollbox-thread .fx-poll-opt', (els) => els.map((e) => e.textContent.trim())), ['yes', 'no'],
+      'New Thread with a poll: the thread opens with its poll');
+    // Close it so the seeded movie poll stays the sidebar's newest open poll.
+    const smokeThread = new URL(page.url()).searchParams.get('post');
+    const smokePoll = (await as('brandon', 'GET', `/api/forum/threads/${smokeThread}`)).poll;
+    await as('brandon', 'PATCH', `/api/forum/polls/${smokePoll.id}`, { closed: true });
+
+    // thread view of the seeded poll: results, my vote, Change vote
+    await page.goto(`${BASE}/forum?post=${movieId}`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.fx-pollbox-thread .fx-poll-res.mine', { timeout: 10000 });
+    ok('poll thread shows results with my vote marked');
+    await page.click('.fx-pollbox-thread [data-action=poll-change]');
+    await page.click('.fx-pollbox-thread .fx-poll-opt:nth-of-type(3) input');
+    await page.click('.fx-pollbox-thread .fx-poll-form button[type=submit]');
+    await page.waitForFunction(() => /sci-fi/.test((document.querySelector('.fx-pollbox-thread .fx-poll-res.mine') || {}).textContent || ''), null, { timeout: 10000 });
+    ok('Change vote moves my vote');
+    assertEq(await page.$$eval('.fx-pollbox-thread .fx-poll-n', (els) => els.map((e) => e.textContent)), ['(1)', '(1)', '(1)'], 'one vote per member: tally unchanged in total');
+    await shot(page, 'thread-poll-woodgrain-desktop');
 
     // thread view
     await page.goto(`${BASE}/forum?post=${lightId}`, { waitUntil: 'domcontentloaded' });
@@ -329,8 +378,29 @@ async function seed() {
           : `${skin}: the Shoutbox sits after What's Going On?`,
         JSON.stringify(shoutbox));
       assert(/smoke test shout from the forum/.test(shoutbox.text), `${skin}: the Shoutbox shows the household's shouts`);
+      const pollBox = await fresh.evaluate(() => {
+        const top = (s) => { const el = document.querySelector(s); return el ? el.getBoundingClientRect().top : null; };
+        const bar = document.querySelector('.fx-pollbox .fx-poll-bar span');
+        return {
+          poll: top('.fx-pollbox'), shout: top('.fx-shoutbox'), online: top('.fx-wgo-online'),
+          bars: document.querySelectorAll('.fx-pollbox .fx-poll-bar').length,
+          barColor: bar ? getComputedStyle(bar).backgroundColor : null,
+        };
+      });
+      assertEq(pollBox.bars, 3, `${skin}: sidebar poll renders three vote bars`);
+      if (skin === 'clubhouse') {
+        assert(pollBox.shout < pollBox.poll && pollBox.poll < pollBox.online, 'Night Owl: Poll sits under the Shoutbox, above Who\'s Online', JSON.stringify(pollBox));
+        assertEq(pollBox.barColor, 'rgb(127, 255, 212)', 'Night Owl: aqua vote bars');
+      } else {
+        assert(pollBox.poll !== null && pollBox.poll > pollBox.online, `${skin}: Poll box follows What's Going On?`, JSON.stringify(pollBox));
+      }
       await shot(fresh, `index-${skin}-desktop`);
     }
+    await fresh.selectOption('#skinChooser', 'clubhouse');
+    await waitSkin(fresh, 'clubhouse');
+    await fresh.goto(`${BASE}/forum?post=${movieId}`, { waitUntil: 'domcontentloaded' });
+    await fresh.waitForSelector('.fx-pollbox-thread .fx-poll-res', { timeout: 10000 });
+    await shot(fresh, 'thread-poll-clubhouse-desktop');
     await ctxB.close();
 
     // ---- mobile 390×844 ----

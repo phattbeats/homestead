@@ -16,6 +16,7 @@
 
 const path = require('path');
 const { Router } = require('express');
+const polls = require('../lib/forum-polls');
 
 module.exports = function forumRouter({
   db,
@@ -59,6 +60,31 @@ module.exports = function forumRouter({
     try {
       if (typeof (req.body || {}).sticky !== 'boolean') return res.status(400).json({ error: 'sticky_boolean_required' });
       res.json(forum.setSticky(req.params.postId, req.body.sticky));
+    } catch (e) { wallsErr(res, e); }
+  });
+  // Thread polls (lib/forum-polls.js). Create/close: thread author or an
+  // admin. Vote: any member who can see the thread, one vote each.
+  router.get('/api/forum/polls/current', auth, requireForumReadScope, (req, res) => {
+    const me = forumCaller(req, res); if (!me) return;
+    try { res.json({ poll: polls.current(me.id) }); } catch (e) { wallsErr(res, e); }
+  });
+  router.post('/api/forum/threads/:postId/poll', auth, (req, res) => {
+    const me = forumCaller(req, res); if (!me) return;
+    try { res.status(201).json(polls.create(req.params.postId, me.id, req.body)); } catch (e) { wallsErr(res, e); }
+  });
+  router.post('/api/forum/polls/:pollId/vote', auth, (req, res) => {
+    const me = forumCaller(req, res); if (!me) return;
+    try { res.json(polls.vote(req.params.pollId, me.id, (req.body || {}).optionId)); } catch (e) { wallsErr(res, e); }
+  });
+  router.delete('/api/forum/polls/:pollId/vote', auth, (req, res) => {
+    const me = forumCaller(req, res); if (!me) return;
+    try { res.json(polls.retract(req.params.pollId, me.id)); } catch (e) { wallsErr(res, e); }
+  });
+  router.patch('/api/forum/polls/:pollId', auth, (req, res) => {
+    const me = forumCaller(req, res); if (!me) return;
+    try {
+      if (typeof (req.body || {}).closed !== 'boolean') return res.status(400).json({ error: 'closed_boolean_required' });
+      res.json(polls.setClosed(req.params.pollId, me.id, req.body.closed));
     } catch (e) { wallsErr(res, e); }
   });
   router.get('/api/forum/online', auth, requireForumReadScope, (req, res) => {
