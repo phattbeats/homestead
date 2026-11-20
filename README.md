@@ -99,6 +99,7 @@ Changing it later does nothing; rotate passwords in-app. (Deleting
 | `PHATTID_HUB_URL` / `PHATTID_HUB_KEY` | no | Enables `Authorization: PhattId` assertions (see [PHATT ID assertions](#phatt-id-assertions)). |
 | `PHATTID_AUD`, `PHATTID_SCOPES` | no | Expected assertion audience and scope list for PhattId requests. |
 | `PHATTID_GROUP`, `PHATTID_PROVISION` | no | The PHATT ID group a PhattId request needs (default `household`); `0` turns off stand-in users for unlinked members. |
+| `HOMESTEAD_TRUSTED_PROXIES` | for proxy sign-in | IPs/CIDRs allowed to sign users in with `X-authentik-username`. Unset = off. See [Proxy sign-in](#proxy-sign-in-x-authentik-username). |
 
 ## Data
 
@@ -141,6 +142,29 @@ location / {
 
 If a service still refuses to render in the frame, edit its tile and switch
 "Open mode" to **New tab**.
+
+### Proxy sign-in (`X-authentik-username`)
+
+A proxy that has already authenticated the user (nginx `auth_request` with
+an Authentik outpost, for example) can sign them in by sending
+`X-authentik-username` and `X-authentik-groups`. Homestead believes those
+headers only when the TCP peer is listed in `HOMESTEAD_TRUSTED_PROXIES`:
+
+```
+HOMESTEAD_TRUSTED_PROXIES=172.30.0.32          # the proxy container's IP
+HOMESTEAD_TRUSTED_PROXIES=172.30.0.0/24,::1    # CIDR ranges also work
+```
+
+Unset (the default), proxy sign-in is off and the headers are ignored, so
+use OIDC or local login. The peer is the socket address, not
+`X-Forwarded-For`. Pin the proxy container's IP, or give it a network of
+its own, so the allowlist doesn't cover unrelated containers.
+
+The proxy must also replace or strip any `X-authentik-*` headers the
+client sent. nginx: `proxy_set_header X-authentik-username $authentik_username;`
+(set from `auth_request_set`), never `$http_x_authentik_username`. Caddy
+passes client headers through by default, so add
+`header_up -X-authentik-*` unless `forward_auth` copies them.
 
 ## Modules
 

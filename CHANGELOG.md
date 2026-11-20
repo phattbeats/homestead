@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Security: `X-authentik-username` only counts from a listed proxy
+
+Homestead signed in as whoever `X-authentik-username` named, from any client that could reach it, including as `admin`. It now believes that header (and `X-authentik-groups`) only when the TCP peer is in the new `HOMESTEAD_TRUSTED_PROXIES` (IPs or CIDRs, `loopback` as shorthand). When unset, which is the default, proxy sign-in is off, the headers are ignored, and the first one from an untrusted peer is logged once. The peer is the socket address, so a forged `X-Forwarded-For` doesn't help. This covers all three places that read the header: every authenticated route, `/api/me`, and invite redemption.
+
+**Upgrading:** if you sign in through SWAG or nginx + an Authentik outpost, set `HOMESTEAD_TRUSTED_PROXIES` to the proxy's IP before upgrading, and make sure the proxy overwrites client-sent `X-authentik-*` headers (README, "Proxy sign-in"). OIDC and local login are unaffected. `scripts/test-header-trust-gate.js` sends the spoof and checks for 401, no session cookie and no user claimed.
+
 ### Security: no default admin password, no Plex token in entity data
 
 - **First boot needs a real `ADMIN_PASSWORD`.** The seeded `admin` (and `brandon` / `emily` when their own variables are unset) used to fall back to `changeme`. Creating a new database now refuses to start if `ADMIN_PASSWORD` is unset, shorter than 8 characters, or a placeholder such as `changeme`. `BRANDON_PASSWORD` / `EMILY_PASSWORD`, when set, get the same check. Existing databases are unaffected: the seed runs only when the users table is empty. `docker-compose.yml` and the Unraid template no longer ship `changeme`.
