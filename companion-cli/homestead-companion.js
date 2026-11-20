@@ -154,6 +154,13 @@ function httpRequest(urlString, { method = 'GET', headers = {}, body = null } = 
       });
     });
     req.on('error', reject);
+    // Without this, a server that accepts the connection but never answers
+    // leaves the CLI waiting forever (PHA-3317). Override with
+    // HOMESTEAD_COMPANION_TIMEOUT_MS.
+    const timeoutMs = Number(process.env.HOMESTEAD_COMPANION_TIMEOUT_MS) || 30000;
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error(`no response from ${url.origin} within ${timeoutMs}ms`));
+    });
     if (body != null) req.write(body);
     req.end();
   });
