@@ -42,7 +42,7 @@ webpush.sendNotification = async function(sub, payload, opts) {
 // Load server.js
 process.env.DATA_DIR = '/tmp/hs-smoke';
 process.env.PORT = '3099';
-process.env.ADMIN_PASSWORD = 'test';
+process.env.ADMIN_PASSWORD = 'smoke-push-admin-pw';
 const app = require('../server.js');
 
 (async () => {
@@ -69,7 +69,7 @@ const app = require('../server.js');
   // Login
   const loginRes = await fetch('http://localhost:3099/api/login', {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ username: 'admin', password: 'test' })
+    body: JSON.stringify({ username: 'admin', password: 'smoke-push-admin-pw' })
   });
   const cookie = loginRes.headers.get('set-cookie').split(';')[0];
   console.log('[smoke] logged in');

@@ -3132,15 +3132,6 @@ app.post('/api/walls/:slug/agents/:username/opt-in', auth, requireAdmin, (req, r
   }
 });
 
-// GET /api/groups — admin-only list of group names so the wall-create UI
-// can populate its visibility='group' picker without a hardcoded list.
-// Returns the same set lib/user-model.js seeds (household / family /
-// media-club / admins) plus any future authentik-synced groups.
-app.get('/api/groups', auth, requireAdmin, (req, res) => {
-  const rows = db.prepare('SELECT name, display_name FROM groups ORDER BY name ASC').all();
-  res.json({ groups: rows });
-});
-
 // GET /api/me/notifications: the badge/activity-feed list backing the
 // clearable-badge promise. ?unseen=1 filters to seen_at IS NULL. Distinct
 // from /api/me/snapshot's activity_recent (the morning-brief dashboard
@@ -3206,6 +3197,8 @@ app.get('/api/link-preview', auth, async (req, res) => {
 });
 
 // ---- groups ----
+// GET /api/groups: every signed-in user (Connectors page, wall-create
+// group picker). Do not add an admin-only copy: it shadowed this one.
 // Read-only view (authentik owns the group lifecycle). The
 // `?mine=1` query param returns just the authenticated user's groups so
 // the frontend can ask "what groups am I in?" without scanning /api/users.
@@ -3986,7 +3979,7 @@ app.post('/api/calendar-sources/:id/events', auth, (req, res) => {
   if (!src) return;
   const vevent = veventFromBody(req.body || {});
   if (!vevent) return res.status(400).json({ error: 'start is required' });
-  const adapter = calendarSources.createAdapter(src);
+  const adapter = calendarSources.createAdapter(src, { db });
   adapter.createEvent({
     calendarHref: src.calendar_id,
     vevent,
@@ -4004,7 +3997,7 @@ app.put('/api/calendar-sources/:id/events/:externalId', auth, (req, res) => {
   if (!src) return;
   const vevent = veventFromBody(req.body || {});
   if (!vevent) return res.status(400).json({ error: 'start is required' });
-  const adapter = calendarSources.createAdapter(src);
+  const adapter = calendarSources.createAdapter(src, { db });
   adapter.updateEvent({
     calendarHref: src.calendar_id,
     externalId: req.params.externalId,
@@ -4021,7 +4014,7 @@ app.put('/api/calendar-sources/:id/events/:externalId', auth, (req, res) => {
 app.delete('/api/calendar-sources/:id/events/:externalId', auth, (req, res) => {
   const src = readSourceForWrite(req, res);
   if (!src) return;
-  const adapter = calendarSources.createAdapter(src);
+  const adapter = calendarSources.createAdapter(src, { db });
   adapter.deleteEvent({
     calendarHref: src.calendar_id,
     externalId: req.params.externalId,
@@ -4105,6 +4098,7 @@ app.get('/api/events/merged', auth, (req, res) => {
     owner: null,
     origin: `provider:${e.provider}`,
     source_id: e.source_id,
+    display_name: e.display_name || null,
     color: e.color,
     stale: !e.last_synced_at || (Date.now() - new Date(e.last_synced_at + 'Z').getTime()) > calendarSources.FRESHNESS_MS,
     last_error: e.last_error,
@@ -4591,6 +4585,8 @@ function startHealthChecker() {
         }
       }
     },
+    // Recovery is logged only; admins are not pushed when a tile comes back.
+    onUpTransition: async ({ service }) => console.log(`[health] ${service.name} (id=${service.id}) back UP`),
   });
 }
 
@@ -4827,6 +4823,8 @@ if (require.main === module) {
   }
   startScheduler();
   startHealthChecker();
+  // Re-sync calendar sources whose cache is older than FRESHNESS_MS (5 min).
+  calendarSources.startBackgroundSync(db, { log: (...a) => console.log('[calendar]', ...a) });
   startPorchSweep();
   shoutbox.startHearth({ agentRuntime });
   app.listen(PORT, () => console.log(`Homestead on :${PORT}`));

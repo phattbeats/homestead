@@ -101,11 +101,11 @@ console.log('identity foundation tests\n');
     assert(r.password_hash && r.password_hash.startsWith('$2'), `user ${r.user_id} password_hash is a bcrypt hash`, r.password_hash);
   }
 
-  // Verify the existing plaintext 'changeme' (default LAN seed) works
+  // Verify the existing seed password (ADMIN_PASSWORD from the test bootstrap) works
   // against the migrated credentials — the backfill must preserve
   // password material, not re-hash plaintext.
   for (const r of lcRows) {
-    assert(identity.verifyLocalPassword(db, r.user_id, 'changeme'), `user ${r.user_id} accepts the legacy 'changeme' password`);
+    assert(identity.verifyLocalPassword(db, r.user_id, process.env.ADMIN_PASSWORD), `user ${r.user_id} accepts the seed password`);
   }
 
   fs.rmSync(tmpDir, { recursive: true, force: true });

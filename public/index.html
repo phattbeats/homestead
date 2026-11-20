@@ -345,6 +345,8 @@ label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin:12p
 .seg button .pd{width:8px;height:8px;border-radius:50%;background:var(--pd,#999);flex-shrink:0}
 .seg button.sel{background:var(--pd,var(--ink));color:#fff}
 .seg button.sel .pd{box-shadow:0 0 0 1.5px rgba(255,255,255,.85)}
+/* Long option labels (calendar provider picker): two per row, wrapped, never ellipsised. */
+.seg.seg-wide button{flex:1 1 calc(50% - 4px);white-space:normal;overflow:visible;text-align:center;line-height:1.25}
 
 .link{color:var(--accent);font-weight:700;font-size:14px}
 .link.danger{color:#b3453a}
@@ -719,7 +721,8 @@ let MERGED=[]; // native + cached provider events for the current month
 let calY,calM,selDate=today();
 
 function today(){const d=new Date();return d.toISOString().slice(0,10)}
-function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+// String() first: ids and counts arrive as numbers, and (0||'') used to drop zeros.
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function fmtDate(s){const d=new Date(s+'T00:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}
 
 /* ---- user helpers (generic N-user) ---- */
@@ -2376,7 +2379,7 @@ function openCalendarSourceEditSheet(src, kinds, afterSave){
     const kindHint = kind.comingSoon ? `<p style="font-size:12px;color:var(--muted);margin-top:6px">${esc(kind.comingSoon)}</p>` : '';
 
     openSheet(`<h2>${isEdit ? 'Edit calendar source' : 'Add calendar source'}</h2>
-      ${isEdit ? '' : `<label>Provider</label><div class="seg" id="prov-seg">${providerOpts}${disabledOpts}</div>${kindHint}`}
+      ${isEdit ? '' : `<label>Provider</label><div class="seg seg-wide" id="prov-seg">${providerOpts}${disabledOpts}</div>${kindHint}`}
       <label>${esc(kind.accountIdLabel || 'Account ID')}</label>
       <input class="field" id="f-acct" value="${esc(state.account_id)}" placeholder="${esc(kind.accountIdPlaceholder || '')}" ${isEdit ? 'readonly style="opacity:.6;cursor:not-allowed"' : ''}>
       <label>${esc(kind.calendarIdLabel || 'Calendar ID')}</label>

@@ -398,7 +398,7 @@ console.log('install-coach tests\n');
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'homestead-funnel-test-'));
   process.env.DATA_DIR = tmpDir;
   process.env.PORT = '0';
-  process.env.ADMIN_PASSWORD = 'test';
+  process.env.ADMIN_PASSWORD = 'install-coach-admin-pw';
   process.env.SESSION_SECRET = 'test-secret-padding-to-meet-min-32-chars';
   const app = require('../server.js');
 
@@ -410,7 +410,7 @@ console.log('install-coach tests\n');
   // Login as admin
   const loginRes = await fetch(`http://127.0.0.1:${port}/api/login`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ username: 'admin', password: 'test' }),
+    body: JSON.stringify({ username: 'admin', password: 'install-coach-admin-pw' }),
   });
   const cookie = loginRes.headers.get('set-cookie').split(';')[0];
 

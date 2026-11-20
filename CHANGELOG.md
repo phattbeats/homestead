@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Security: no default admin password, no Plex token in entity data
+
+- **First boot needs a real `ADMIN_PASSWORD`.** The seeded `admin` (and `brandon` / `emily` when their own variables are unset) used to fall back to `changeme`. Creating a new database now refuses to start if `ADMIN_PASSWORD` is unset, shorter than 8 characters, or a placeholder such as `changeme`. `BRANDON_PASSWORD` / `EMILY_PASSWORD`, when set, get the same check. Existing databases are unaffected: the seed runs only when the users table is empty. `docker-compose.yml` and the Unraid template no longer ship `changeme`.
+- **Plex sync no longer stores the server's `X-Plex-Token`.** Plex `work` entities carried `thumb_url` / `art_url` with the token in the query string, and `/api/entities/*` returns `meta` to every signed-in user (the search index held it too). The sync now stores only the image paths (`thumb`, `art`), and the entity-graph boot migration removes the token from rows already stored. Rotate the Plex token if the instance had members who should not have it.
+
+### Fixes
+
+- Health checks: a service coming back up no longer sends admins a second "X is down / Down since null" push, and the checker no longer logs `prev_status is not defined` on every transition. Recovery calls `onUpTransition` (logged only).
+- The Connected agents (tokens) and Calendar sources sheets no longer crash as soon as they have a row (`esc()` now accepts numbers).
+- `GET /api/groups` works for every signed-in user again. An admin-only copy of the route shadowed it, so non-admins got a 403 and an empty Connectors page.
+- Calendar sources now really re-sync in the background once their cache is more than 5 minutes old, as the README said. A source that just failed waits one window before the next try.
+- Microsoft 365 calendar sources keep refreshed tokens. The refreshed token was used for one sync and then discarded.
+- `/api/events/merged` returns each provider event's source `display_name`, so calendar pip labels show "Work" instead of the provider kind.
+- The provider buttons on Add calendar source no longer clip at 390px; they wrap two per row.
+
 ### Security: app tokens reach only the routes their scopes name
 
 An installed app's token used to work like a full login on any `/api` route that had no scope check of its own (for example `/api/users`, `/api/apps`, `/api/agent-tokens`). App tokens are now deny-by-default: they reach only the routes listed in `API_SCOPE_RULES` in `lib/scope-display.js`, and only with a scope that route accepts. Every other route, including routes added later, answers 403 `insufficient_scope`. A per-wall grant (`read:walls:media_club`) reaches only that wall; `read:walls` also covers the forum. A token whose scopes are not a JSON array now gets nothing instead of full access. Signed-in members and personal access tokens (`user` scope) are unchanged. `scripts/test-app-token-scope-guard.js` walks every authenticated route on the live router, mounted routers included, and fails if any is reachable without its scope.

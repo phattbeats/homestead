@@ -54,6 +54,13 @@ if (!process.env.HMAC_CRED_KEY && !process.env.CALENDAR_CRED_KEY) {
   process.env.HMAC_CRED_KEY = require('crypto').randomBytes(32).toString('hex');
 }
 
+// First-boot seeding is fail-closed on a missing or placeholder
+// ADMIN_PASSWORD (lib/user-model.js), so give every test DB a real one.
+// Tests that log in read it back from process.env.ADMIN_PASSWORD.
+if (!process.env.ADMIN_PASSWORD) {
+  process.env.ADMIN_PASSWORD = 'homestead-test-admin-pw';
+}
+
 if (!process.env.HOMESTEAD_INSECURE_TEST_COOKIES) {
   process.env.HOMESTEAD_INSECURE_TEST_COOKIES = '1';
 }

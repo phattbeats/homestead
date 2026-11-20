@@ -138,7 +138,7 @@ async function withServer(fn) {
   walls.seed(db);
   invites.migrate(db);
   // userModel.migrate() auto-seeded the 'brandon' profile with the
-  // default 'changeme' password. Override that with a known bcrypt
+  // ADMIN_PASSWORD seed. Override that with a known bcrypt
   // password for the signin tests so we don't have to chase the env
   // var. UPDATE rather than INSERT because the row is already there.
   const seedHash = bcrypt.hashSync('correct-horse-battery-staple', 10);

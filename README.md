@@ -89,7 +89,7 @@ Changing it later does nothing; rotate passwords in-app. (Deleting
 | Env var             | Required       | Purpose                                                              |
 |---------------------|----------------|----------------------------------------------------------------------|
 | `SESSION_SECRET`    | yes            | Random string (32+ chars) used to sign session cookies. The server refuses to boot without a real value. |
-| `ADMIN_PASSWORD`    | first run only | Seed password for the `admin` user on first DB creation.             |
+| `ADMIN_PASSWORD`    | first run only | Seed password for the `admin` user on first DB creation. On first run the server refuses to boot if it is unset, shorter than 8 characters, or a placeholder such as `changeme`. |
 | `DATA_DIR`          | no             | Where the SQLite file lives. Defaults to `/data`.                    |
 | `PORT`              | no             | In-container listen port. Defaults to `3080`.                        |
 | `CALENDAR_CRED_KEY` | for calendar sources | 32-byte hex key used to encrypt calendar credentials at rest (`openssl rand -hex 32`). |
