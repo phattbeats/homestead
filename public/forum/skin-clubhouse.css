@@ -127,6 +127,8 @@ a:hover{color:var(--pink)}
 .fx-kerr:empty{display:none}
 .fx-ava{width:90px;height:90px;margin:6px auto;border:3px double var(--aqua);background:#000;font-size:48px}
 .fx-rank{color:var(--yellow);font-style:italic}
+.fx-mood{color:var(--aqua)}
+.fx-mood-t{color:var(--yellow);font-style:italic}
 .fx-rank::before,.fx-rank::after{content:" ~ "}
 .fx-stars{display:block;color:var(--lilac)}
 .fx-ptop{font-size:10px;color:#888;border-bottom:1px dotted var(--rule)}

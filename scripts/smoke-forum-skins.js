@@ -103,6 +103,7 @@ async function seed() {
   await as('tyler', 'PATCH', '/api/forum/me', {
     signature: "If it's not on the forum, it didn't happen.",
     now_playing: { kind: 'listening', text: 'Daft Punk — Discovery' },
+    mood: { emoji: '😤', text: 'suspicious' },
   });
   const post = (user, slug, title, text) => as(user, 'POST', `/api/walls/${slug}/posts`, { kind: 'text', title, text_body: text });
   const reply = (user, id, body) => as(user, 'POST', `/api/walls/posts/${id}/comments`, { body });
@@ -312,11 +313,13 @@ async function seed() {
       quote: !!document.querySelector('.fx-post .fx-quote'),
       sig: !!document.querySelector('.fx-sig'),
       np: (document.querySelector('.fx-post .fx-sig .fx-np') || {}).textContent || null,
+      mood: [...document.querySelectorAll('.fx-post .fx-who .fx-mood')].map((e) => e.textContent),
       rank: document.querySelector('.fx-rank') && document.querySelector('.fx-rank').textContent,
       crumbs: document.querySelector('.fx-crumb').textContent,
     }));
     assertEq(thread.posts, 3, 'thread shows the opener + 2 replies');
     assert(/Listening to: Daft Punk/.test(thread.np || ''), "postbit signature shows the author's now-playing", thread.np);
+    assert(thread.mood.includes('mood: 😤 suspicious'), "postbit member column shows the author's mood", JSON.stringify(thread.mood));
     assert(thread.quote && thread.sig && thread.rank, 'postbit shows quote block, signature and rank', JSON.stringify(thread));
     assert(/The Forum.*General Chit-Chat.*porch light/.test(thread.crumbs), 'breadcrumbs: Forum › board › thread', thread.crumbs);
     assertEq(await page.$$eval('.fx-karma', (els) => els.filter((e) => e.offsetParent !== null).length), 0, 'Woodgrain: karma stays hidden (Night Owl only)');
@@ -425,6 +428,33 @@ async function seed() {
     await fresh.click('.fx-post:first-of-type .fx-kbtn[data-value="1"]');
     await fresh.waitForFunction(() => /karma: \+1 \/ -1/.test(document.querySelector('.fx-post:first-of-type .fx-karma').textContent), null, { timeout: 10000 });
     ok('pressing + again takes the vote back');
+    // mood in the postbit member column, painted in every skin (PHA-4422)
+    await fresh.goto(`${BASE}/forum?post=${lightId}`, { waitUntil: 'domcontentloaded' });
+    await fresh.waitForSelector('.fx-post .fx-mood', { timeout: 10000 });
+    for (const skin of SKINS) {
+      await fresh.selectOption('#skinChooser', skin);
+      await waitSkin(fresh, skin);
+      const m = await fresh.evaluate(() => {
+        const el = document.querySelector('.fx-post .fx-who .fx-mood');
+        return el ? { text: el.textContent, shown: getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().height > 0 } : null;
+      });
+      assert(m && m.shown && m.text === 'mood: 😤 suspicious', `${skin}: postbit shows "mood: 😤 suspicious"`, JSON.stringify(m));
+      await shot(fresh, `thread-mood-${skin}-desktop`);
+    }
+    // ...and it is editable in User CP: set brandon's mood, save, see it land
+    await fresh.click('[data-action=usercp]');
+    await fresh.fill('dialog.fx-sheet input[name=moodEmoji]', '🦉');
+    await fresh.fill('dialog.fx-sheet input[name=moodText]', 'nocturnal');
+    await fresh.click('dialog.fx-sheet [data-action=save-ucp]');
+    await fresh.waitForFunction(() => !document.querySelector('dialog.fx-sheet[open]'), null, { timeout: 10000 });
+    assertEq((await as('brandon', 'GET', '/api/forum/me')).mood, { emoji: '🦉', text: 'nocturnal' }, 'User CP saves mood via PATCH /api/forum/me');
+    await fresh.reload({ waitUntil: 'domcontentloaded' });
+    await fresh.waitForSelector('.fx-post .fx-mood', { timeout: 10000 });
+    assert((await fresh.$$eval('.fx-post .fx-who .fx-mood', (els) => els.map((e) => e.textContent))).includes('mood: 🦉 nocturnal'),
+      "brandon's postbit shows the mood set in User CP");
+    await fresh.click('[data-action=usercp]');
+    assertEq(await fresh.inputValue('dialog.fx-sheet input[name=moodText]'), 'nocturnal', 'User CP pre-fills the saved mood');
+    await fresh.click('dialog.fx-sheet button[value=cancel]');
     await ctxB.close();
 
     // ---- mobile 390×844 ----
@@ -444,6 +474,8 @@ async function seed() {
     await shot(mob, 'board-woodgrain-mobile');
     await mob.goto(`${BASE}/forum?post=${lightId}`, { waitUntil: 'domcontentloaded' });
     await mob.waitForSelector('.fx-post', { timeout: 10000 });
+    assert(await mob.evaluate(() => { const el = document.querySelector('.fx-post .fx-mood'); return !!el && el.getBoundingClientRect().height > 0; }),
+      'mood stays visible in the mobile postbit');
     await shot(mob, 'thread-woodgrain-mobile');
     await ctxM.close();
 

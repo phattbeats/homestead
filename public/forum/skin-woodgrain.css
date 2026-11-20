@@ -79,6 +79,7 @@ a{color:var(--hearth);font-weight:bold}
 .fx-who-name{font-size:13px}
 .fx-ava{border:2px solid var(--brass);border-radius:6px;overflow:hidden;background:var(--olive)}
 .fx-rank{color:var(--olive);font-weight:bold}
+.fx-mood{color:var(--olive)}
 .fx-stars{display:block;color:var(--brass);font-size:11px}
 .fx-ptop{border-bottom:1px solid var(--rule);font-size:11px;color:var(--soft)}
 .fx-ptitle{font-weight:bold;color:var(--wood)}

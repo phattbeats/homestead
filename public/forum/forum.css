@@ -123,6 +123,10 @@ button,input,select,textarea{font:inherit;color:inherit}
 .fx-np-edit{display:flex;flex-wrap:wrap;gap:6px;align-items:center;border:0;padding:0;margin:0}
 .fx-np-edit legend{font-weight:bold;padding:0;margin-bottom:4px}
 .fx-np-edit input{flex:1;min-width:10em}
+/* mood (PHA-4422): postbit member column; stays visible on phones */
+.fx-mood{margin-top:4px;font-size:11px;overflow-wrap:anywhere}
+.fx-mood-k{font-weight:bold}
+.fx-mood-edit input.fx-mood-emoji{flex:0 0 3.5em;min-width:0;text-align:center}
 .fx-react{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .fx-emo{cursor:pointer;padding:2px 8px}
 .fx-btns{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;margin-top:8px}

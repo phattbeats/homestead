@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### The Forum: mood on member profiles
+
+Members can set a mood (one emoji plus up to 40 characters, e.g. `😤 suspicious`) in **User CP**. It shows as `mood: 😤 suspicious` in the postbit's member column in all three skins and stays visible on phones. Night Owl colours it aqua and yellow. A mood is part of the profile: unlike "now playing" it does not expire. Either half may be left blank, and clearing both removes it. API: `PATCH /api/forum/me` with `{ mood: { emoji, text } }` (or `null` to clear), returned as `mood` on `/api/forum/me` and on every postbit member. The emoji must be a single emoji; compound ones such as 👩‍💻, 🏳️‍🌈 and skin tones count as one. Letters, markup or two emoji get a 400. Stored in two new additive columns, `users.forum_mood` and `users.forum_mood_emoji`.
+
 ### The Forum: member karma
 
 In the Night Owl skin, each postbit now shows the poster's karma, e.g. `karma: +2 / -1`, with **+** and **−** buttons. Every member gets one vote on every other member. Pressing the other button switches your vote, and pressing your current one takes it back. Your own postbit has no buttons, since you can't vote on yourself. Each member can make 10 karma changes in any 24 hours (giving, switching or taking back). Re-sending the vote you already have doesn't count. Past the limit you get a 429 with `Retry-After`. You can only vote on people you share at least one board with. Anyone else, including an unknown username, gets a 404. Woodgrain and Classic hide karma. The data is still in the thread payload, so another skin can show it with one CSS rule.

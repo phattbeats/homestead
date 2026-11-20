@@ -135,6 +135,13 @@
     return '<div class="fx-np fx-np-' + kind + '"><span aria-hidden="true">' + NP_ICONS[kind] + '</span> ' +
       (name ? esc(name) + ' is ' + verb : verb.charAt(0).toUpperCase() + verb.slice(1)) + ': <i>' + esc(np.text) + '</i></div>';
   }
+  // Mood (PHA-4422): "mood: 😤 suspicious" in the postbit's member column.
+  function mood(md) {
+    if (!md || !(md.emoji || md.text)) return '';
+    return '<div class="fx-mood"><span class="fx-mood-k">mood:</span> ' +
+      (md.emoji ? '<span class="fx-mood-e">' + esc(md.emoji) + '</span> ' : '') +
+      (md.text ? '<span class="fx-mood-t">' + esc(md.text) + '</span>' : '') + '</div>';
+  }
   function avatar(m) {
     var name = (m && (m.display || m.username)) || '?';
     var color = (m && m.color) || '#6D7B59';
@@ -717,7 +724,7 @@
     return '<article class="fx-post" id="post-' + p.n + '">' +
       '<div class="fx-who">' + avatar({ display: name, color: m.color, isAgent: u.isAgent }) +
         '<div class="fx-who-text"><div class="fx-who-name">' + who(u, { plain: true }) + '</div>' +
-        '<div class="fx-rank">' + esc(m.rank || '') + '</div>' + stars(m.rank, u.isAgent) +
+        '<div class="fx-rank">' + esc(m.rank || '') + '</div>' + stars(m.rank, u.isAgent) + mood(m.mood) +
         '<div class="fx-meta">' + (m.joinedAt ? 'Join Date: ' + esc(joined(m.joinedAt)) + '<br>' : '') + 'Posts: ' + num(m.postCount) + karmaLine(m) + '</div></div></div>' +
       '<div class="fx-msg">' +
         '<div class="fx-ptop"><span class="fx-ptitle">' + esc(p.title) + '</span><span class="fx-pdate">' + esc(when(p.at)) +
@@ -752,6 +759,7 @@
   function openUserCp() {
     var p = state.profile || {};
     var np = p.nowPlaying || {};
+    var md = p.mood || {};
     var dlg = document.createElement('dialog');
     dlg.className = 'fx-sheet';
     dlg.setAttribute('aria-labelledby', 'ucpTitle');
@@ -759,6 +767,9 @@
       '<label>Forum style ' + chooser('skinChooserCp') + '</label>' +
       '<label>Signature <textarea name="signature" maxlength="200" rows="3">' + esc(p.signature || '') + '</textarea></label>' +
       '<label>Birthday (MM-DD) <input name="birthday" pattern="(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])" placeholder="10-23" value="' + esc(p.birthday || '') + '"></label>' +
+      '<fieldset class="fx-np-edit fx-mood-edit"><legend>Mood</legend>' +
+        '<input name="moodEmoji" class="fx-mood-emoji" maxlength="16" placeholder="😤" aria-label="Mood emoji (one)" value="' + esc(md.emoji || '') + '"> ' +
+        '<input name="moodText" maxlength="40" placeholder="suspicious" aria-label="Mood (up to 40 characters)" value="' + esc(md.text || '') + '"></fieldset>' +
       '<fieldset class="fx-np-edit"><legend>Now playing <span class="fx-muted">(clears itself after 12 hours)</span></legend>' +
         '<select name="npKind" aria-label="Activity">' + NP_KINDS.map(function (k) {
           var v = npVerb(k);
@@ -779,6 +790,10 @@
       // doesn't restart the status's expiry clock.
       if (npText !== (np.text || '') || (npText && f.npKind.value !== (np.kind || 'listening'))) {
         patch.now_playing = npText ? { kind: f.npKind.value, text: npText } : null;
+      }
+      var moodEmoji = f.moodEmoji.value.trim(), moodText = f.moodText.value.trim();
+      if (moodEmoji !== (md.emoji || '') || moodText !== (md.text || '')) {
+        patch.mood = moodEmoji || moodText ? { emoji: moodEmoji || null, text: moodText || null } : null;
       }
       api('PATCH', '/api/forum/me', patch)
         .then(function (prof) { state.profile = Object.assign(state.profile || {}, prof); dlg.close(); })
