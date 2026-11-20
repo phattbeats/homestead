@@ -60,15 +60,15 @@ function request(base, method, requestPath, token) {
   return requestFull(base, method, requestPath, token).then((r) => r.status);
 }
 
-function requestFull(base, method, requestPath, token) {
+function requestFull(base, method, requestPath, token, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     const req = http.request({
       ...base, method, path: requestPath,
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json', ...extraHeaders },
     }, (res) => {
       let body = '';
       res.on('data', (c) => { body += c; });
-      res.on('end', () => resolve({ status: res.statusCode, body }));
+      res.on('end', () => resolve({ status: res.statusCode, body, setCookie: res.headers['set-cookie'] || null }));
     });
     req.on('error', reject);
     if (['POST', 'PUT', 'PATCH'].includes(method)) req.end('{}');
@@ -148,7 +148,14 @@ function requestFull(base, method, requestPath, token) {
     const garbled = issueToken('not-json');
     assert(await request(base, 'GET', '/api/lists', garbled) === 403,
       'a token whose scopes are not a JSON array gets nothing, not full access');
+    // A token request must not mint a session: replaying that cookie
+    // without the Bearer would skip this guard and outlive revocation.
+    const minted = await requestFull(base, 'GET', '/api/lists', token);
+    assert(minted.status === 200 && !minted.setCookie, 'an app-token request sets no session cookie',
+      String(minted.setCookie));
     const userPat = issueToken('user');
+    const userMinted = await requestFull(base, 'GET', '/api/agent-tokens', userPat);
+    assert(!userMinted.setCookie, 'a user PAT request sets no session cookie', String(userMinted.setCookie));
     assert(await request(base, 'GET', '/api/agent-tokens', userPat) === 200,
       "legacy 'user' PAT keeps full access");
   } catch (err) {

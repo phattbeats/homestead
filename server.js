@@ -365,6 +365,12 @@ function authenticate(req, res, next) {
     if (!tokenRow) return res.status(401).json({ error: 'invalid_token' });
     const u = db.prepare('SELECT * FROM users WHERE id = ?').get(tokenRow.user_id);
     if (!u) return res.status(401).json({ error: 'invalid_token' });
+    // Detach from the session store, as the PhattId layer does: without
+    // this express-session saves the synthesized user and sends a 14-day
+    // connect.sid, and replaying that cookie without the Bearer skips the
+    // app-token scope guard and outlives the token's revocation. It would
+    // also overwrite a member's own session when both are sent.
+    req.sessionID = undefined;
     req.session.user = {
       username: u.username,
       display: u.display,
@@ -427,7 +433,16 @@ function authenticate(req, res, next) {
     recordSessionStart(req, u, 'header_trust');
     return next();
   }
-  if (req.session.user) return next();
+  if (req.session.user) {
+    // Token-derived users are per-request only. A stored one is a session
+    // minted before PAT requests were detached from the store: drop it.
+    const provider = req.session.user.authProvider;
+    if (provider === 'pat' || provider === 'phatt_id') {
+      delete req.session.user;
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+    return next();
+  }
   return res.status(401).json({ error: 'unauthorized' });
 }
 

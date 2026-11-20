@@ -6,6 +6,7 @@
 
 An installed app's token used to work like a full login on any `/api` route that had no scope check of its own (for example `/api/users`, `/api/apps`, `/api/agent-tokens`). App tokens are now deny-by-default: they reach only the routes listed in `API_SCOPE_RULES` in `lib/scope-display.js`, and only with a scope that route accepts. Every other route, including routes added later, answers 403 `insufficient_scope`. A per-wall grant (`read:walls:media_club`) reaches only that wall; `read:walls` also covers the forum. A token whose scopes are not a JSON array now gets nothing instead of full access. Signed-in members and personal access tokens (`user` scope) are unchanged. `scripts/test-app-token-scope-guard.js` walks every authenticated route on the live router, mounted routers included, and fails if any is reachable without its scope.
 
+- A request made with a token (app or personal) no longer gets a session cookie. It did: the cookie lasted 14 days, survived revoking the token, and, replayed without the token, skipped the scope check entirely. Stored sessions created that way are refused.
 - The app API activity log now records the full path (`GET /api/lists`) for routes served by a mounted router; it recorded `GET /lists`.
 
 ### `/api/version` reports the release tag
