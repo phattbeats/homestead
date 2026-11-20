@@ -17,6 +17,7 @@
 const path = require('path');
 const { Router } = require('express');
 const polls = require('../lib/forum-polls');
+const karma = require('../lib/forum-karma');
 
 module.exports = function forumRouter({
   db,
@@ -86,6 +87,27 @@ module.exports = function forumRouter({
       if (typeof (req.body || {}).closed !== 'boolean') return res.status(400).json({ error: 'closed_boolean_required' });
       res.json(polls.setClosed(req.params.pollId, me.id, req.body.closed));
     } catch (e) { wallsErr(res, e); }
+  });
+  // Member karma (lib/forum-karma.js): one +1/-1 per giver per member,
+  // never on yourself, rate-limited per giver.
+  function karmaErr(res, e) {
+    if (e && e.status === 429) {
+      res.set('Retry-After', String(e.retryAfter));
+      return res.status(429).json({ error: e.code, retryAfter: e.retryAfter, limit: karma.KARMA_DAILY_LIMIT });
+    }
+    return wallsErr(res, e);
+  }
+  router.get('/api/forum/members/:username/karma', auth, requireForumReadScope, (req, res) => {
+    const me = forumCaller(req, res); if (!me) return;
+    try { res.json(karma.get(req.params.username, me.id)); } catch (e) { karmaErr(res, e); }
+  });
+  router.put('/api/forum/members/:username/karma', auth, (req, res) => {
+    const me = forumCaller(req, res); if (!me) return;
+    try { res.json(karma.give(req.params.username, me.id, (req.body || {}).value)); } catch (e) { karmaErr(res, e); }
+  });
+  router.delete('/api/forum/members/:username/karma', auth, (req, res) => {
+    const me = forumCaller(req, res); if (!me) return;
+    try { res.json(karma.retract(req.params.username, me.id)); } catch (e) { karmaErr(res, e); }
   });
   router.get('/api/forum/online', auth, requireForumReadScope, (req, res) => {
     const me = forumCaller(req, res); if (!me) return;

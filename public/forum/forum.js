@@ -691,6 +691,24 @@
         r.emoji + (r.label ? ' ' + r.label : '') + (sum[r.key] ? ' <b>' + sum[r.key] + '</b>' : '') + '</button>';
     }).join('') + '</div>';
   }
+  // "karma: +88 / -3" with +/- buttons. Always in the DOM, shown only by
+  // the Night Owl skin (skin-clubhouse.css), so switching skins needs no
+  // re-render. No buttons on your own postbit.
+  function karmaLine(m) {
+    var k = m.karma;
+    if (!k || !m.username) return '';
+    var btns = '';
+    if (k.canVote) {
+      btns = ['1', '-1'].map(function (v) {
+        var on = String(k.mine) === v;
+        return '<button type="button" class="fx-kbtn' + (on ? ' on' : '') + '" data-action="karma" data-user="' + esc(m.username) +
+          '" data-value="' + v + '" aria-pressed="' + on + '" title="' + (on ? 'Take back your ' : 'Give ') + (v === '1' ? '+' : '-') + ' karma">' +
+          (v === '1' ? '+' : '&minus;') + '</button>';
+      }).join('');
+    }
+    return '<span class="fx-karma"><br>karma: <b class="fx-kplus">+' + num(k.plus) + '</b> / <b class="fx-kminus">-' + num(k.minus) + '</b>' +
+      (btns ? ' <span class="fx-kbtns">' + btns + '</span>' : '') + '<span class="fx-kerr" role="alert"></span></span>';
+  }
   function postbit(p) {
     var m = p.member || {};
     var a = p.author || {};
@@ -700,7 +718,7 @@
       '<div class="fx-who">' + avatar({ display: name, color: m.color, isAgent: u.isAgent }) +
         '<div class="fx-who-text"><div class="fx-who-name">' + who(u, { plain: true }) + '</div>' +
         '<div class="fx-rank">' + esc(m.rank || '') + '</div>' + stars(m.rank, u.isAgent) +
-        '<div class="fx-meta">' + (m.joinedAt ? 'Join Date: ' + esc(joined(m.joinedAt)) + '<br>' : '') + 'Posts: ' + num(m.postCount) + '</div></div></div>' +
+        '<div class="fx-meta">' + (m.joinedAt ? 'Join Date: ' + esc(joined(m.joinedAt)) + '<br>' : '') + 'Posts: ' + num(m.postCount) + karmaLine(m) + '</div></div></div>' +
       '<div class="fx-msg">' +
         '<div class="fx-ptop"><span class="fx-ptitle">' + esc(p.title) + '</span><span class="fx-pdate">' + esc(when(p.at)) +
           ' <a href="#post-' + p.n + '" class="fx-pnum">#' + (p.n + 1) + '</a></span></div>' +
@@ -839,6 +857,18 @@
         { emoji: el.getAttribute('data-emoji') })
         .then(function () { return renderThread(bar.dataset.post); })
         .catch(function () { el.disabled = false; });
+    } else if (action === 'karma') {
+      var kuser = el.getAttribute('data-user');
+      var undo = el.getAttribute('aria-pressed') === 'true';
+      var kerr = el.closest('.fx-karma').querySelector('.fx-kerr');
+      el.disabled = true;
+      api(undo ? 'DELETE' : 'PUT', '/api/forum/members/' + encodeURIComponent(kuser) + '/karma',
+        undo ? undefined : { value: Number(el.getAttribute('data-value')) })
+        .then(function () { return renderThread(root.dataset.thread); })
+        .catch(function (e) {
+          el.disabled = false;
+          kerr.textContent = /rate_limited/.test(e.message) ? ' Karma limit reached for today.' : ' Could not save karma.';
+        });
     } else if (action === 'poll-change' || action === 'poll-cancel') {
       var pid = el.closest('[data-poll]').getAttribute('data-poll');
       if (action === 'poll-change') state.pollEditing[pid] = true; else delete state.pollEditing[pid];

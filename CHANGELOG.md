@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### The Forum: member karma
+
+In the Night Owl skin, each postbit now shows the poster's karma, e.g. `karma: +2 / -1`, with **+** and **−** buttons. Every member gets one vote on every other member. Pressing the other button switches your vote, and pressing your current one takes it back. Your own postbit has no buttons, since you can't vote on yourself. Each member can make 10 karma changes in any 24 hours (giving, switching or taking back). Re-sending the vote you already have doesn't count. Past the limit you get a 429 with `Retry-After`. You can only vote on people you share at least one board with. Anyone else, including an unknown username, gets a 404. Woodgrain and Classic hide karma. The data is still in the thread payload, so another skin can show it with one CSS rule.
+
+Thread reactions were checked first. They are emoji on a single post and can't add up to a score for a person, so karma has its own two tables: `forum_karma` (one row per giver and target, value ±1, self-votes blocked in the schema) and `forum_karma_log` (rate-limit window). Both are deleted along with the user. API: `GET|PUT|DELETE /api/forum/members/:username/karma` (`PUT {value: 1|-1}`). Forum thread postbits (`member.karma`) carry `{plus, minus, mine, canVote}`. App tokens need `read:walls` to read and `write:walls:react` to vote.
+
 ### The Forum: polls
 
 A thread can carry a poll: a question, 2–10 options, an optional closing time, and one vote per member. Voting again moves your vote, and you can take it back while the poll is open. Start one from **📊 Add a poll** in the New Thread form, or later from the thread (thread starter or an admin). The poll shows above the first post. The index sidebar gets a **📊 Poll** box with the newest open poll, and you can vote right there. In Night Owl it sits under the Shoutbox with aqua vote bars, as in the mockup. Poll threads show `Poll:` and a 📊 icon in the thread list. The thread starter or an admin can close or reopen a poll.

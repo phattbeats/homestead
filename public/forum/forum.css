@@ -14,7 +14,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .fx-wrap[aria-busy=true]{min-height:100vh}
 
 /* Decorative slots: off unless a skin turns them on. */
-.fx-v,.fx-marquee,.fx-counter,.fx-badges,.fx-stars,.fx-door,.fx-mono,.fx-tabicon{display:none}
+.fx-v,.fx-marquee,.fx-counter,.fx-badges,.fx-stars,.fx-door,.fx-mono,.fx-tabicon,.fx-karma{display:none}
 
 /* Header */
 .fx-header{display:flex;align-items:center;gap:16px;position:relative}
