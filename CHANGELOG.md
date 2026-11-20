@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Security: app tokens reach only the routes their scopes name
+
+An installed app's token used to work like a full login on any `/api` route that had no scope check of its own (for example `/api/users`, `/api/apps`, `/api/agent-tokens`). App tokens are now deny-by-default: they reach only the routes listed in `API_SCOPE_RULES` in `lib/scope-display.js`, and only with a scope that route accepts. Every other route, including routes added later, answers 403 `insufficient_scope`. A per-wall grant (`read:walls:media_club`) reaches only that wall; `read:walls` also covers the forum. A token whose scopes are not a JSON array now gets nothing instead of full access. Signed-in members and personal access tokens (`user` scope) are unchanged. `scripts/test-app-token-scope-guard.js` walks every authenticated route on the live router, mounted routers included, and fails if any is reachable without its scope.
+
+- A request made with a token (app or personal) no longer gets a session cookie. It did: the cookie lasted 14 days, survived revoking the token, and, replayed without the token, skipped the scope check entirely. Stored sessions created that way are refused.
+- The app API activity log now records the full path (`GET /api/lists`) for routes served by a mounted router; it recorded `GET /lists`.
+
+### `/api/version` reports the release tag
+
+Release images are built with `APP_VERSION` set from the git tag, and `/api/version` and `/api/health` report that ahead of `package.json`. Until now they said `0.6.0` on every v0.6.x release. `package.json` is now 0.6.7.
+
 ### PHATT ID assertions
 
 Homestead accepts `Authorization: PhattId <assertion>`: a short-lived, Ed25519-signed PHATT ID assertion forwarded by a trusted PHATT server (The Lodge) on behalf of the signed-in member. Off unless `PHATTID_HUB_URL` or `PHATTID_HUB_KEY` is set; `PHATTID_AUD` (default `life.phatt.vip`, Homestead's own host) and `PHATTID_SCOPES` (default `read:me read:lists write:lists read:tasks write:tasks read:events`) tune it. The member is matched only through the `identity_links` row they made with Link PHATT ID (provider `authentik`), never by username. v0.6.4 also matched by equal username; v0.6.5 drops that, because PHATT ID usernames are member-chosen. Since v0.6.6 household membership comes from PHATT ID: a request needs `household` in the hub-signed `groups` (else 403 `not_household`), Homestead's own household membership follows that claim, and a household member with no Homestead user gets a password-less stand-in keyed on their PHATT ID uuid, which Link PHATT ID later hands over to their own account. PhattId requests reach only a fixed route table (snapshot, lists, tasks, events reads) and never get a session cookie. Everything else answers 403. See README, "PHATT ID assertions".

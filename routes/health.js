@@ -29,7 +29,7 @@
 //                  and sessionSecret readiness; these are
 //                  reported back in the JSON so operators can spot a
 //                  misconfigured box without dumping secrets.
-//   - `version`:   the package.json version (string). Reported on both
+//   - `version`:   APP_VERSION (the release tag) or package.json's version. Reported on both
 //                  endpoints so operators can confirm the roll landed.
 //   - `commit`:    process.env.COMMIT_SHA at boot. Reported on both
 //                  endpoints; null when the env var wasn't set at boot

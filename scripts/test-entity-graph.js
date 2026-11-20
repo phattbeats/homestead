@@ -62,7 +62,10 @@ function bootServer(dataDir) {
   delete require.cache[require.resolve('../lib/health-checker')];
   delete require.cache[require.resolve('../lib/sync/_schema')];
   const app = require('../server.js');
-  process.env.DATA_DIR = prevDataDir;
+  // Assigning undefined to process.env stores the string 'undefined', and the
+  // next boot then creates ./undefined/ as its data dir.
+  if (prevDataDir === undefined) delete process.env.DATA_DIR;
+  else process.env.DATA_DIR = prevDataDir;
   return app;
 }
 function listen(app) {

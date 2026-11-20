@@ -29,6 +29,8 @@ jobs:
         run: |
           echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           echo "short_sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          tag="${{ github.ref_name }}"
+          echo "app_version=${tag#v}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -46,6 +48,7 @@ jobs:
           # GitHub release body for human cross-checking.
           build-args: |
             COMMIT_SHA=${{ steps.meta.outputs.short_sha }}
+            APP_VERSION=${{ steps.meta.outputs.app_version }}
           tags: |
             ghcr.io/phattbeats/homestead:${{ steps.meta.outputs.tag }}
             ghcr.io/phattbeats/homestead:latest
