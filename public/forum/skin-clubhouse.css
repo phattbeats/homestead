@@ -117,6 +117,14 @@ a:hover{color:var(--pink)}
 .fx-who-name{font:bold 13px "Comic Sans MS","Chalkboard SE",cursive}
 .fx-who-name .fx-user{color:var(--pink)}
 .fx-who-name .fx-bot{color:#ffa94d}
+.fx-karma{display:inline}
+.fx-kplus{color:var(--aqua)}
+.fx-kminus{color:var(--pink)}
+.fx-kbtn{font:bold 10px Verdana,sans-serif;min-width:18px;padding:0 4px;margin-left:2px;border:2px outset var(--violet);background:var(--deep);color:var(--yellow);cursor:pointer}
+.fx-kbtn.on{border-style:inset;background:var(--violet);color:#fff}
+.fx-kbtn:disabled{opacity:.6}
+.fx-kerr{display:block;color:var(--pink)}
+.fx-kerr:empty{display:none}
 .fx-ava{width:90px;height:90px;margin:6px auto;border:3px double var(--aqua);background:#000;font-size:48px}
 .fx-rank{color:var(--yellow);font-style:italic}
 .fx-rank::before,.fx-rank::after{content:" ~ "}

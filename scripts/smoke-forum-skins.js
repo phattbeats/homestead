@@ -127,6 +127,8 @@ async function seed() {
   });
   await as('emily', 'POST', `/api/forum/polls/${poll.id}/vote`, { optionId: poll.options[0].id });
   await as('tyler', 'POST', `/api/forum/polls/${poll.id}/vote`, { optionId: poll.options[1].id });
+  await as('emily', 'PUT', '/api/forum/members/tyler/karma', { value: 1 });
+  await as('admin', 'PUT', '/api/forum/members/tyler/karma', { value: -1 });
   return { lightId: light.id, movieId: movie.id };
 }
 
@@ -317,6 +319,7 @@ async function seed() {
     assert(/Listening to: Daft Punk/.test(thread.np || ''), "postbit signature shows the author's now-playing", thread.np);
     assert(thread.quote && thread.sig && thread.rank, 'postbit shows quote block, signature and rank', JSON.stringify(thread));
     assert(/The Forum.*General Chit-Chat.*porch light/.test(thread.crumbs), 'breadcrumbs: Forum › board › thread', thread.crumbs);
+    assertEq(await page.$$eval('.fx-karma', (els) => els.filter((e) => e.offsetParent !== null).length), 0, 'Woodgrain: karma stays hidden (Night Owl only)');
     await shot(page, 'thread-woodgrain-desktop');
 
     await page.click('.fx-post:nth-of-type(3) [data-action=quote]');
@@ -408,6 +411,20 @@ async function seed() {
     await fresh.goto(`${BASE}/forum?post=${movieId}`, { waitUntil: 'domcontentloaded' });
     await fresh.waitForSelector('.fx-pollbox-thread .fx-poll-res', { timeout: 10000 });
     await shot(fresh, 'thread-poll-clubhouse-desktop');
+    // karma in the Night Owl postbit: "karma: +1 / -1" on tyler's opener,
+    // + gives brandon's vote, no buttons on brandon's own reply.
+    await fresh.goto(`${BASE}/forum?post=${lightId}`, { waitUntil: 'domcontentloaded' });
+    await fresh.waitForSelector('.fx-post .fx-karma', { state: 'visible', timeout: 10000 });
+    const karmaText = () => fresh.$eval('.fx-post:first-of-type .fx-karma', (e) => e.textContent.replace(/\s+/g, ' ').trim());
+    assert(/^karma: \+1 \/ -1/.test(await karmaText()), 'Night Owl postbit shows karma: +1 / -1', await karmaText());
+    assertEq(await fresh.$$eval('.fx-post:nth-of-type(2) .fx-kbtn', (els) => els.length), 0, 'no karma buttons on your own postbit');
+    await fresh.click('.fx-post:first-of-type .fx-kbtn[data-value="1"]');
+    await fresh.waitForFunction(() => /karma: \+2 \/ -1/.test(document.querySelector('.fx-post:first-of-type .fx-karma').textContent), null, { timeout: 10000 });
+    assertEq(await fresh.getAttribute('.fx-post:first-of-type .fx-kbtn[data-value="1"]', 'aria-pressed'), 'true', '+ gives karma and marks my vote');
+    await shot(fresh, 'thread-karma-clubhouse-desktop');
+    await fresh.click('.fx-post:first-of-type .fx-kbtn[data-value="1"]');
+    await fresh.waitForFunction(() => /karma: \+1 \/ -1/.test(document.querySelector('.fx-post:first-of-type .fx-karma').textContent), null, { timeout: 10000 });
+    ok('pressing + again takes the vote back');
     await ctxB.close();
 
     // ---- mobile 390×844 ----
