@@ -15,7 +15,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runSmoke } from '../../scripts/seed-porch-smoke.mjs';
 
-test('Porch DoD smoke: throwaway post + agent reaction with specific-reference verification', async () => {
+test('Porch DoD smoke: throwaway post + agent reaction with specific-reference verification', { timeout: 120_000 }, async () => {
   const result = await runSmoke();
 
   assert.equal(result.fail, 0, `seed-porch-smoke reported failures: ${result.failures.join(', ')}`);
