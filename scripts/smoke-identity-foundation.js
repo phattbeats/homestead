@@ -18,6 +18,8 @@
 //     orphan the last link when the user has no local credential.
 
 'use strict';
+// This smoke drives auth via X-authentik-* from 127.0.0.1 (PHA-3207 gate).
+process.env.HOMESTEAD_TRUSTED_PROXIES = process.env.HOMESTEAD_TRUSTED_PROXIES || 'loopback';
 
 const fs = require('fs');
 const os = require('os');

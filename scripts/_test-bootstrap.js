@@ -68,3 +68,10 @@ if (!process.env.NODE_ENV) {
 // themselves after this shim runs.
 process.env.GAZETTE_EXTERNAL_EDITION_DIR = '';
 process.env.GAZETTE_EXTERNAL_OWNER_ID = '';
+
+// Header-trust is off unless HOMESTEAD_TRUSTED_PROXIES names the peer
+// (PHA-3207). Many tests drive auth with X-authentik-* from 127.0.0.1, so
+// trust loopback by default here. test-header-trust-gate.js sets its own.
+if (process.env.HOMESTEAD_TRUSTED_PROXIES === undefined) {
+  process.env.HOMESTEAD_TRUSTED_PROXIES = 'loopback';
+}

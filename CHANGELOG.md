@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Security: `X-authentik-username` only counts from a listed proxy
+
+Homestead signed in as whoever `X-authentik-username` named, from any client that could reach it, including as `admin`. It now believes that header (and `X-authentik-groups`) only when the TCP peer is in the new `HOMESTEAD_TRUSTED_PROXIES` (IPs or CIDRs, `loopback` as shorthand). When unset, which is the default, proxy sign-in is off, the headers are ignored, and the first one from an untrusted peer is logged once. The peer is the socket address, so a forged `X-Forwarded-For` doesn't help. This covers all three places that read the header: every authenticated route, `/api/me`, and invite redemption.
+
+**Upgrading:** if you sign in through SWAG or nginx + an Authentik outpost, set `HOMESTEAD_TRUSTED_PROXIES` to the proxy's IP before upgrading, and make sure the proxy overwrites client-sent `X-authentik-*` headers (README, "Proxy sign-in"). OIDC and local login are unaffected. `scripts/test-header-trust-gate.js` sends the spoof and checks for 401, no session cookie and no user claimed.
+
 ### Security: app tokens reach only the routes their scopes name
 
 An installed app's token used to work like a full login on any `/api` route that had no scope check of its own (for example `/api/users`, `/api/apps`, `/api/agent-tokens`). App tokens are now deny-by-default: they reach only the routes listed in `API_SCOPE_RULES` in `lib/scope-display.js`, and only with a scope that route accepts. Every other route, including routes added later, answers 403 `insufficient_scope`. A per-wall grant (`read:walls:media_club`) reaches only that wall; `read:walls` also covers the forum. A token whose scopes are not a JSON array now gets nothing instead of full access. Signed-in members and personal access tokens (`user` scope) are unchanged. `scripts/test-app-token-scope-guard.js` walks every authenticated route on the live router, mounted routers included, and fails if any is reachable without its scope.

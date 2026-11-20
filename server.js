@@ -33,6 +33,7 @@ const webpush = require('web-push');
 const crypto = require('crypto');
 
 const userModel = require('./lib/user-model');
+const { createHeaderTrust } = require('./lib/header-trust');
 const identity = require('./lib/identity');
 const modules = require('./lib/modules');
 const plexSync = require('./lib/sync/plex');
@@ -262,6 +263,9 @@ CREATE INDEX IF NOT EXISTS idx_install_funnel_step ON install_funnel_events(step
 
 const app = express();
 app.set('trust proxy', 1);
+// PHA-3207: X-authentik-* identity headers count only when the direct
+// peer is in HOMESTEAD_TRUSTED_PROXIES. Unset = header-trust off.
+const headerTrust = createHeaderTrust(process.env.HOMESTEAD_TRUSTED_PROXIES);
 // capture the raw request body bytes onto req.rawBody so that
 // signed-body routes (POST /api/agent-connections/:id/events) can verify
 // the HMAC over the exact bytes the client signed. The express.json()
@@ -403,15 +407,10 @@ function authenticate(req, res, next) {
     }
     return enforceAppTokenScope(req, res, next);
   }
-  const headerUser = req.get('x-authentik-username');
-  if (headerUser) {
-    const groupsHeader = req.get('x-authentik-groups') || '';
-    let groups = [];
-    if (groupsHeader.startsWith('[')) {
-      try { groups = JSON.parse(groupsHeader); } catch (_) { groups = []; }
-    } else {
-      groups = groupsHeader.split(',').map(s => s.trim()).filter(Boolean);
-    }
+  const claim = headerTrust.identity(req);
+  if (claim) {
+    const headerUser = claim.username;
+    const groups = claim.groups;
     // union in group_names from wall_memberships
     // rows for group-visibility walls so invite-granted group
     // membership survives subsequent header-trust reconciliations.
@@ -785,16 +784,9 @@ app.get('/api/me', (req, res) => {
   //   first_run:        true | false        (first_run_completed_at IS NULL)
   // so the SPA bootstrap can render without a second
   // /api/me/layout fetch.
-  const headerUser = req.get('x-authentik-username');
-  if (headerUser) {
-    const groupsHeader = req.get('x-authentik-groups') || '';
-    let groups = [];
-    if (groupsHeader.startsWith('[')) {
-      try { groups = JSON.parse(groupsHeader); } catch (_) { groups = []; }
-    } else {
-      groups = groupsHeader.split(',').map(s => s.trim()).filter(Boolean);
-    }
-    const u = userModel.provisionOrClaim(db, headerUser, 'header_trust', headerUser, groups);
+  const claim = headerTrust.identity(req);
+  if (claim) {
+    const u = userModel.provisionOrClaim(db, claim.username, 'header_trust', claim.username, claim.groups);
     if (!u) return res.json({ user: null });
     req.session.user = {
       username: u.username,
@@ -1200,15 +1192,10 @@ function _resolveCaller(req, res) {
   if (me) return me;
   // Header-trust fallback (SWAG forwards X-authentik-username when
   // the session cookie hasn't been set yet — first-login-from-invite).
-  const headerUser = req.get('x-authentik-username');
-  if (!headerUser) return null;
-  const groupsHeader = req.get('x-authentik-groups') || '';
-  let groups = [];
-  if (groupsHeader.startsWith('[')) {
-    try { groups = JSON.parse(groupsHeader); } catch (_) { groups = []; }
-  } else {
-    groups = groupsHeader.split(',').map(s => s.trim()).filter(Boolean);
-  }
+  const claim = headerTrust.identity(req);
+  if (!claim) return null;
+  const headerUser = claim.username;
+  const groups = claim.groups;
   // union in any group_names from
   // wall_memberships for group-visibility walls. This makes
   // invite-granted group membership survive subsequent header-trust

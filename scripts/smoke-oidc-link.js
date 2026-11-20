@@ -18,6 +18,8 @@
 // path, and the unlink path end-to-end.
 
 'use strict';
+// This smoke drives auth via X-authentik-* from 127.0.0.1 (PHA-3207 gate).
+process.env.HOMESTEAD_TRUSTED_PROXIES = process.env.HOMESTEAD_TRUSTED_PROXIES || 'loopback';
 
 const fs = require('fs');
 const path = require('path');

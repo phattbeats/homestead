@@ -45,6 +45,10 @@ services:
       # changes have no effect — use the in-app password change to rotate
       # for real.
       - ADMIN_PASSWORD=changeme
+      # Proxy sign-in via X-authentik-username is OFF unless the proxy's IP
+      # (or CIDR) is listed here, e.g. the SWAG container's address. Leave
+      # empty for OIDC / local login. See README, "Proxy sign-in".
+      - HOMESTEAD_TRUSTED_PROXIES=${HOMESTEAD_TRUSTED_PROXIES:-}
 
 networks:
   phattvip:
